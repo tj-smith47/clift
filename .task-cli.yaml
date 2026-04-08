@@ -2,8 +2,11 @@ name: diycli
 version: 0.1.0
 description: Batteries-included framework for building custom CLIs with go-task
 min_task_version: "3.0.0"
+
 dependencies:
   required:
-    - jq
+    - name: jq
+      install: "https://jqlang.github.io/jq/download/"
   optional:
-    - gum
+    - name: gum
+      install: "https://github.com/charmbracelet/gum#installation"

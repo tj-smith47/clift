@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
 # DIYCLI Logging System
-# Provides: log_info, log_warn, log_error, log_success
-# Reads LOG_THEME and LOG_COLOR from environment.
+# Provides: log_info, log_warn, log_error, log_success, log_debug, log_suggest, die
+# Reads LOG_THEME, LOG_COLOR, NO_COLOR, VERBOSE, QUIET from environment.
 # Themes: icons, icons-color, brackets, brackets-color, minimal, minimal-color, custom
+
+# Exit code constants
+export EXIT_OK=0
+export EXIT_ERROR=1
+export EXIT_USAGE=2
+export EXIT_NOT_FOUND=127
 
 # ANSI color codes
 _CLR_RESET='\033[0m'
@@ -10,6 +16,14 @@ _CLR_GREEN='\033[0;32m'
 _CLR_YELLOW='\033[0;33m'
 _CLR_RED='\033[0;31m'
 _CLR_BLUE='\033[0;34m'
+_CLR_CYAN='\033[0;36m'
+_CLR_DIM='\033[2m'
+
+# NO_COLOR standard: https://no-color.org
+if [[ -n "${NO_COLOR:-}" ]]; then
+  _CLR_RESET='' _CLR_GREEN='' _CLR_YELLOW='' _CLR_RED=''
+  _CLR_BLUE='' _CLR_CYAN='' _CLR_DIM=''
+fi
 
 # Resolve theme (default: icons-color)
 _LOG_THEME="${LOG_THEME:-icons-color}"
@@ -29,6 +43,7 @@ _log_format() {
         warn)    prefix="⚠"; color="$_CLR_YELLOW" ;;
         error)   prefix="✗"; color="$_CLR_RED" ;;
         success) prefix="✓"; color="$_CLR_GREEN" ;;
+        debug)   prefix="●"; color="$_CLR_CYAN" ;;
       esac
       if [[ "$_LOG_THEME" == "icons-color" ]]; then
         printf "${color}%s${_CLR_RESET} %s\n" "$prefix" "$msg"
@@ -42,6 +57,7 @@ _log_format() {
         warn)    prefix="[WARN]"; color="$_CLR_YELLOW" ;;
         error)   prefix="[ERROR]"; color="$_CLR_RED" ;;
         success) prefix="[OK]"; color="$_CLR_GREEN" ;;
+        debug)   prefix="[DEBUG]"; color="$_CLR_CYAN" ;;
       esac
       if [[ "$_LOG_THEME" == "brackets-color" ]]; then
         printf "${color}%s${_CLR_RESET} %s\n" "$prefix" "$msg"
@@ -55,6 +71,7 @@ _log_format() {
         warn)    prefix="warn: "; color="$_CLR_YELLOW" ;;
         error)   prefix="error: "; color="$_CLR_RED" ;;
         success) prefix=""; color="$_CLR_GREEN" ;;
+        debug)   prefix="debug: "; color="$_CLR_CYAN" ;;
       esac
       if [[ "$_LOG_THEME" == "minimal-color" ]]; then
         printf "${color}%s%s${_CLR_RESET}\n" "$prefix" "$msg"
@@ -69,6 +86,7 @@ _log_format() {
         warn)    fmt="${LOG_FMT_WARN:-⚠ %s}" ;;
         error)   fmt="${LOG_FMT_ERROR:-✗ %s}" ;;
         success) fmt="${LOG_FMT_SUCCESS:-✓ %s}" ;;
+        debug)   fmt="${LOG_FMT_DEBUG:-● %s}" ;;
       esac
       if [[ "${LOG_COLOR:-true}" == "true" ]]; then
         case "$level" in
@@ -76,6 +94,7 @@ _log_format() {
           warn)    color="$_CLR_YELLOW" ;;
           error)   color="$_CLR_RED" ;;
           success) color="$_CLR_GREEN" ;;
+          debug)   color="$_CLR_CYAN" ;;
         esac
         printf "${color}${fmt}${_CLR_RESET}\n" "$msg"
       else
@@ -89,7 +108,11 @@ _log_format() {
   esac
 }
 
-log_info()    { _log_format info "$@"; }
+log_info()    { [[ "${QUIET:-}" == "true" ]] && return 0; _log_format info "$@"; }
 log_warn()    { _log_format warn "$@" >&2; }
 log_error()   { _log_format error "$@" >&2; }
-log_success() { _log_format success "$@"; }
+log_success() { [[ "${QUIET:-}" == "true" ]] && return 0; _log_format success "$@"; }
+log_debug()   { [[ "${VERBOSE:-}" != "true" ]] && return 0; _log_format debug "$@" >&2; }
+log_suggest() { printf "${_CLR_DIM}  %s${_CLR_RESET}\n" "$*" >&2; }
+
+die() { log_error "$1"; exit "${2:-1}"; }

@@ -30,10 +30,14 @@ if [[ -z "$CLI_NAME" ]]; then
   CLI_NAME="$(basename "$TARGET")"
 fi
 
-# Check for existing installation
+# Check for existing installation — prompt to reconfigure
 if [[ -f "${TARGET}/.env" ]]; then
   log_warn "CLI already exists at ${TARGET}"
-  log_info "Re-running setup will update .env and alias without overwriting cmds/ or Taskfile.yaml"
+  read -rp "Reconfigure? [y/N] " response </dev/tty
+  if [[ ! "$response" =~ ^[Yy] ]]; then
+    log_info "Setup cancelled"
+    exit 0
+  fi
 fi
 
 # Create directory structure
@@ -54,8 +58,20 @@ else
   sed -i \
     -e "s|^FRAMEWORK_DIR=.*|FRAMEWORK_DIR=${FRAMEWORK_DIR}|" \
     -e "s|^CLI_DIR=.*|CLI_DIR=${TARGET}|" \
+    -e "s|^CLI_NAME=.*|CLI_NAME=${CLI_NAME}|" \
+    -e "s|^CLI_VERSION=.*|CLI_VERSION=${CLI_VERSION}|" \
+    -e "s|^LOG_THEME=.*|LOG_THEME=${LOG_THEME}|" \
     "$ENV_FILE"
-  log_info "Updated FRAMEWORK_DIR and CLI_DIR in existing .env"
+  log_info "Updated configuration in existing .env"
+fi
+
+# Render .task-cli.yaml (only if not exists)
+METADATA="${TARGET}/.task-cli.yaml"
+if [[ ! -f "$METADATA" ]]; then
+  sed \
+    -e "s|%%CLI_NAME%%|${CLI_NAME}|g" \
+    -e "s|%%CLI_VERSION%%|${CLI_VERSION}|g" \
+    "${FRAMEWORK_DIR}/templates/cli/.task-cli.yaml.tmpl" > "$METADATA"
 fi
 
 # Render Taskfile.yaml (only if not exists)
@@ -67,8 +83,8 @@ if [[ ! -f "$TASKFILE" ]]; then
     "${FRAMEWORK_DIR}/templates/cli/Taskfile.yaml.tmpl" > "$TASKFILE"
 fi
 
-# Configure shell alias
-ALIAS_LINE="alias ${CLI_NAME}='FRAMEWORK_DIR=${FRAMEWORK_DIR} task --taskfile ${TARGET}/Taskfile.yaml'"
+# Configure shell alias (with proper quoting for paths with spaces)
+ALIAS_LINE="alias ${CLI_NAME}='FRAMEWORK_DIR=\"${FRAMEWORK_DIR}\" task --taskfile \"${TARGET}/Taskfile.yaml\"'"
 
 # Detect shell config file
 SHELL_NAME="$(basename "${SHELL:-/bin/bash}")"
@@ -86,14 +102,12 @@ if ! grep -qF "alias ${CLI_NAME}=" "$RC_FILE" 2>/dev/null; then
 else
   # Update existing alias
   sed -i "s|^alias ${CLI_NAME}=.*|${ALIAS_LINE}|" "$RC_FILE"
-  log_info "Updated existing alias in ${RC_FILE}"
 fi
 
-log_success "Created ${CLI_NAME} at ${TARGET}"
-log_success "Added alias to ${RC_FILE}"
 echo ""
-log_info "Restart your shell or run: source ${RC_FILE}"
+log_success "${CLI_NAME} created at ${TARGET}"
 echo ""
-log_info "Then try:"
-log_info "  ${CLI_NAME}              Show help"
-log_info "  ${CLI_NAME} new:cmd      Create your first command"
+echo "Next steps:"
+echo "  source ${RC_FILE}"
+echo "  ${CLI_NAME}"
+echo "  ${CLI_NAME} new:cmd"

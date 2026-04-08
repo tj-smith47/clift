@@ -1,0 +1,10 @@
+version: '3'
+
+tasks:
+  bash:
+    desc: "Generate bash completions"
+    cmd: "'{{.FRAMEWORK_DIR}}/lib/completion/completion.sh' bash '{{.CLI_DIR}}/Taskfile.yaml' '{{.CLI_NAME}}'"
+
+  zsh:
+    desc: "Generate zsh completions"
+    cmd: "'{{.FRAMEWORK_DIR}}/lib/completion/completion.sh' zsh '{{.CLI_DIR}}/Taskfile.yaml' '{{.CLI_NAME}}'"

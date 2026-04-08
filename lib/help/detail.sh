@@ -22,12 +22,12 @@ json=$(task --list-all --json --taskfile "$TASKFILE_PATH" 2>/dev/null) || {
 
 # Try <command>:default first, then <command>
 task_info=$(echo "$json" | jq -r --arg cmd "${COMMAND}:default" '
-  .tasks[] | select(.name == $cmd) | {desc, summary}
+  .tasks[] | select(.name == $cmd) | {desc, summary, location: .location.taskfile}
 ' 2>/dev/null)
 
 if [[ -z "$task_info" || "$task_info" == "null" ]]; then
   task_info=$(echo "$json" | jq -r --arg cmd "$COMMAND" '
-    .tasks[] | select(.name == $cmd) | {desc, summary}
+    .tasks[] | select(.name == $cmd) | {desc, summary, location: .location.taskfile}
   ' 2>/dev/null)
 fi
 
@@ -38,8 +38,15 @@ fi
 
 desc=$(echo "$task_info" | jq -r '.desc // ""')
 summary=$(echo "$task_info" | jq -r '.summary // ""')
+location=$(echo "$task_info" | jq -r '.location // ""')
 
-echo "${CLI_NAME} ${COMMAND} - ${desc}"
+# Apply colon-to-space display heuristic for user commands (those under /cmds/)
+display_name="$COMMAND"
+if [[ "$location" == *"/cmds/"* ]]; then
+  display_name="${COMMAND//:/ }"
+fi
+
+echo "${CLI_NAME} ${display_name} - ${desc}"
 echo ""
 
 if [[ -n "$summary" && "$summary" != "null" ]]; then

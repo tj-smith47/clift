@@ -12,3 +12,11 @@ tasks:
   edit:
     desc: "Edit configuration in $EDITOR"
     cmd: "'{{.FRAMEWORK_DIR}}/lib/config/edit.sh' '{{.CLI_DIR}}'"
+
+  get:
+    desc: "Get a configuration value"
+    cmd: "'{{.FRAMEWORK_DIR}}/lib/config/get.sh' '{{.CLI_DIR}}' {{.CLI_ARGS}}"
+
+  set:
+    desc: "Set a configuration value"
+    cmd: "'{{.FRAMEWORK_DIR}}/lib/config/set.sh' '{{.CLI_DIR}}' '{{.FRAMEWORK_DIR}}' {{.CLI_ARGS}}"

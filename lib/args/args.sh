@@ -38,26 +38,30 @@ parse_args() {
   local positional_count=0
 
   for arg in "${raw_args[@]}"; do
-    # Strip leading dashes
-    local clean="${arg#--}"
-    clean="${clean#-}"
-
-    if [[ "$clean" == *"="* ]]; then
-      # key=value pair
+    if [[ "$arg" == *"="* ]]; then
+      # key=value pair — strip dashes from key
+      local clean="${arg#--}"
+      clean="${clean#-}"
       local key="${clean%%=*}"
       local val="${clean#*=}"
       local upper_key="${key^^}"
       upper_key="${upper_key//-/_}"
       printf 'declare -x %s=%q\n' "$upper_key" "$val"
-    elif [[ -n "${flag_lookup[${clean,,}]:-}" ]]; then
-      # Known boolean flag
-      local upper_key="${clean^^}"
-      upper_key="${upper_key//-/_}"
-      printf 'declare -x %s=true\n' "$upper_key"
+    elif [[ "$arg" == --* || "$arg" == -* ]]; then
+      # Flag-style arg — check if it's a known boolean
+      local clean="${arg#--}"
+      clean="${clean#-}"
+      if [[ -n "${flag_lookup[${clean,,}]:-}" ]]; then
+        local upper_key="${clean^^}"
+        upper_key="${upper_key//-/_}"
+        printf 'declare -x %s=true\n' "$upper_key"
+      else
+        echo "warn: Unknown flag: $arg" >&2
+      fi
     else
-      # Positional argument
+      # Bare word — positional argument
       ((positional_count++))
-      printf 'declare -x ARG_%d=%q\n' "$positional_count" "$clean"
+      printf 'declare -x ARG_%d=%q\n' "$positional_count" "$arg"
     fi
   done
 

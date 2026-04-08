@@ -1,0 +1,6 @@
+version: '3'
+
+tasks:
+  default:
+    desc: "Update DIYCLI framework"
+    cmd: "'{{.FRAMEWORK_DIR}}/lib/update/update.sh' '{{.FRAMEWORK_DIR}}'"
