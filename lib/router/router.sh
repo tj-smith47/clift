@@ -1,19 +1,20 @@
 #!/usr/bin/env bash
 # DIYCLI Router
 # Called by every command's default task.
-# Usage: router.sh <TASK_NAME> [CLI_ARGS...]
+# Usage: router.sh <TASK_NAME>
+# Reads CLI_ARGS from environment (set by command Taskfile template).
 #
 # Flow:
 #   1. Run deps.sh to validate dependencies
-#   2. Scan for global flags (--no-color, --verbose, --quiet, --help, --version)
-#   3. Source log.sh (with correct env vars from global flags)
-#   4. If first arg is "help", delegate to task <namespace>:help
-#   5. Otherwise, resolve and execute the command's .sh script
+#   2. Parse CLI_ARGS via eval set -- for proper word splitting
+#   3. Scan for global flags (--no-color, --verbose, --quiet, --help, --version)
+#   4. Source log.sh (with correct env vars from global flags)
+#   5. If first arg is "help", delegate to task <namespace>:help
+#   6. Otherwise, resolve and execute the command's .sh script
 
 set -euo pipefail
 
 TASK_NAME="${1:-}"
-shift || true
 
 if [[ -z "$TASK_NAME" ]]; then
   echo "error: router.sh called without a task name" >&2
@@ -28,7 +29,14 @@ fi
 # Step 1: Dependency check
 source "${FRAMEWORK_DIR}/lib/check/deps.sh"
 
-# Step 2: Scan for global flags
+# Step 2: Parse CLI_ARGS with proper word splitting
+if [[ -n "${CLI_ARGS:-}" ]]; then
+  eval set -- ${CLI_ARGS}
+else
+  set --
+fi
+
+# Step 3: Scan for global flags
 args=()
 for arg in "$@"; do
   case "$arg" in
@@ -37,7 +45,6 @@ for arg in "$@"; do
     --quiet|-q)   export QUIET=true ;;
     --help|-h)
       local_namespace="${TASK_NAME%%:*}"
-      # Source log.sh first in case help needs it
       source "${FRAMEWORK_DIR}/lib/log/log.sh"
       task "${local_namespace}:help"
       exit 0
@@ -51,17 +58,17 @@ for arg in "$@"; do
 done
 set -- "${args[@]+"${args[@]}"}"
 
-# Step 3: Source log.sh (now with correct NO_COLOR/VERBOSE/QUIET)
+# Step 4: Source log.sh (now with correct NO_COLOR/VERBOSE/QUIET)
 source "${FRAMEWORK_DIR}/lib/log/log.sh"
 
-# Step 4: Check for help redirect (bare "help" word)
+# Step 5: Check for help redirect (bare "help" word)
 if [[ "${1:-}" == "help" ]]; then
   local_namespace="${TASK_NAME%%:*}"
   task "${local_namespace}:help"
   exit 0
 fi
 
-# Step 5: Resolve and execute command script
+# Step 6: Resolve and execute command script
 local_namespace="${TASK_NAME%%:*}"
 
 if [[ -z "${CLI_DIR:-}" ]]; then
@@ -72,7 +79,6 @@ script_path="${CLI_DIR}/cmds/${local_namespace}/${local_namespace}.sh"
 
 if [[ ! -f "$script_path" ]]; then
   log_error "Unknown command: ${local_namespace}"
-  # Suggest similar commands
   if [[ -d "${CLI_DIR}/cmds" ]]; then
     prefix="${local_namespace:0:3}"
     for cmd_dir in "${CLI_DIR}/cmds"/*/; do

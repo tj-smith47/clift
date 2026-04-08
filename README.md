@@ -178,6 +178,26 @@ eval "$(mycli completion:bash)"
 eval "$(mycli completion:zsh)"
 ```
 
+## Team Setup
+
+When sharing a CLI with your team, include the `.task-cli.yaml` file in your CLI's directory. It documents what dependencies your CLI needs:
+
+```yaml
+name: my-team-cli
+version: 1.0.0
+description: "Internal deployment tools"
+
+dependencies:
+  required:
+    - jq
+    - kubectl
+  optional:
+    - gum
+    - fzf
+```
+
+Teammates can read this file to know what to install before using the CLI. Automated dependency checking via [cfgd](https://github.com/...) is planned for a future release.
+
 ## Updating
 
 ```bash

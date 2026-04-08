@@ -8,7 +8,7 @@ tasks:
 
       Examples:
         %%CLI_NAME%% %%CMD_NAME%% -- <args>
-    cmd: "{{.FRAMEWORK_DIR}}/lib/router/router.sh {{.TASK}} {{.CLI_ARGS}}"
+    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
 
   help:
     desc: "Show help for %%CMD_NAME%%"

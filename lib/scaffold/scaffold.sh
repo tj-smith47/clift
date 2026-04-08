@@ -46,7 +46,7 @@ if [[ "$IS_SUBCOMMAND" == "true" ]]; then
 
       Examples:
         {{.CLI_NAME}} ${CMD_NAME} -- <args>
-    cmd: "{{.FRAMEWORK_DIR}}/lib/router/router.sh {{.TASK}} {{.CLI_ARGS}}"
+    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
 YAML
 
   log_success "Added subcommand '${SUB_CMD}' to ${TOP_CMD}"

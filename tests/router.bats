@@ -19,6 +19,7 @@ echo "hello output"
 echo "VERBOSE=${VERBOSE:-unset}"
 echo "QUIET=${QUIET:-unset}"
 echo "NO_COLOR=${NO_COLOR:-unset}"
+for arg in "$@"; do echo "arg=$arg"; done
 SCRIPT
   chmod +x "$TEST_DIR/cmds/hello/hello.sh"
 }
@@ -28,43 +29,43 @@ teardown() {
 }
 
 @test "--version flag prints version" {
-  run bash "$FRAMEWORK_DIR/lib/router/router.sh" "hello" --version
+  CLI_ARGS="--version" run bash "$FRAMEWORK_DIR/lib/router/router.sh" "hello"
   [ "$status" -eq 0 ]
   [[ "$output" == *"testcli version 1.0.0"* ]]
 }
 
 @test "--version short flag -V prints version" {
-  run bash "$FRAMEWORK_DIR/lib/router/router.sh" "hello" -V
+  CLI_ARGS="-V" run bash "$FRAMEWORK_DIR/lib/router/router.sh" "hello"
   [ "$status" -eq 0 ]
   [[ "$output" == *"testcli version 1.0.0"* ]]
 }
 
 @test "--no-color sets NO_COLOR=1" {
-  run bash "$FRAMEWORK_DIR/lib/router/router.sh" "hello" --no-color
+  CLI_ARGS="--no-color" run bash "$FRAMEWORK_DIR/lib/router/router.sh" "hello"
   [ "$status" -eq 0 ]
   [[ "$output" == *"NO_COLOR=1"* ]]
 }
 
 @test "--verbose sets VERBOSE=true" {
-  run bash "$FRAMEWORK_DIR/lib/router/router.sh" "hello" --verbose
+  CLI_ARGS="--verbose" run bash "$FRAMEWORK_DIR/lib/router/router.sh" "hello"
   [ "$status" -eq 0 ]
   [[ "$output" == *"VERBOSE=true"* ]]
 }
 
 @test "-v sets VERBOSE=true" {
-  run bash "$FRAMEWORK_DIR/lib/router/router.sh" "hello" -v
+  CLI_ARGS="-v" run bash "$FRAMEWORK_DIR/lib/router/router.sh" "hello"
   [ "$status" -eq 0 ]
   [[ "$output" == *"VERBOSE=true"* ]]
 }
 
 @test "--quiet sets QUIET=true" {
-  run bash "$FRAMEWORK_DIR/lib/router/router.sh" "hello" --quiet
+  CLI_ARGS="--quiet" run bash "$FRAMEWORK_DIR/lib/router/router.sh" "hello"
   [ "$status" -eq 0 ]
   [[ "$output" == *"QUIET=true"* ]]
 }
 
 @test "-q sets QUIET=true" {
-  run bash "$FRAMEWORK_DIR/lib/router/router.sh" "hello" -q
+  CLI_ARGS="-q" run bash "$FRAMEWORK_DIR/lib/router/router.sh" "hello"
   [ "$status" -eq 0 ]
   [[ "$output" == *"QUIET=true"* ]]
 }
@@ -87,9 +88,16 @@ teardown() {
 }
 
 @test "global flags are stripped from command args" {
-  run bash "$FRAMEWORK_DIR/lib/router/router.sh" "hello" --verbose --no-color
+  CLI_ARGS="--verbose --no-color" run bash "$FRAMEWORK_DIR/lib/router/router.sh" "hello"
   [ "$status" -eq 0 ]
   [[ "$output" == *"VERBOSE=true"* ]]
   [[ "$output" == *"NO_COLOR=1"* ]]
   [[ "$output" == *"hello output"* ]]
+}
+
+@test "eval set preserves quoted args" {
+  CLI_ARGS="--name=hello\ world positional" run bash "$FRAMEWORK_DIR/lib/router/router.sh" "hello"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"arg=--name=hello world"* ]]
+  [[ "$output" == *"arg=positional"* ]]
 }

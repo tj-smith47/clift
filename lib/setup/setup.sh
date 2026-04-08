@@ -30,7 +30,8 @@ if [[ -z "$CLI_NAME" ]]; then
   CLI_NAME="$(basename "$TARGET")"
 fi
 
-# Check for existing installation — prompt to reconfigure
+# Check for existing installation — offer per-field reconfigure
+RECONFIGURE=false
 if [[ -f "${TARGET}/.env" ]]; then
   log_warn "CLI already exists at ${TARGET}"
   read -rp "Reconfigure? [y/N] " response </dev/tty
@@ -38,6 +39,22 @@ if [[ -f "${TARGET}/.env" ]]; then
     log_info "Setup cancelled"
     exit 0
   fi
+  RECONFIGURE=true
+
+  # Read current values from existing .env as defaults
+  _read_env_val() {
+    grep "^${1}=" "${TARGET}/.env" 2>/dev/null | head -1 | cut -d= -f2-
+  }
+
+  _current_name="$(_read_env_val CLI_NAME)"
+  _current_version="$(_read_env_val CLI_VERSION)"
+  _current_theme="$(_read_env_val LOG_THEME)"
+
+  # Re-prompt with current values as defaults
+  THEMES="icons,icons-color,brackets,brackets-color,minimal,minimal-color,custom"
+  CLI_NAME=$("${FRAMEWORK_DIR}/lib/prompt/prompt.sh" input 'CLI name' --var _RECONFIG_NAME --default "${_current_name:-$CLI_NAME}")
+  CLI_VERSION=$("${FRAMEWORK_DIR}/lib/prompt/prompt.sh" input 'Version' --var _RECONFIG_VERSION --default "${_current_version:-$CLI_VERSION}")
+  LOG_THEME=$("${FRAMEWORK_DIR}/lib/prompt/prompt.sh" choose 'Log theme' --var _RECONFIG_THEME --options "$THEMES" --default "${_current_theme:-$LOG_THEME}")
 fi
 
 # Create directory structure
@@ -45,7 +62,8 @@ mkdir -p "${TARGET}/cmds"
 
 # Render .env
 ENV_FILE="${TARGET}/.env"
-if [[ ! -f "$ENV_FILE" ]] || [[ ! -d "${TARGET}/cmds" ]] || [[ -z "$(ls -A "${TARGET}/cmds" 2>/dev/null)" ]]; then
+if [[ "$RECONFIGURE" == "true" ]] || [[ ! -f "$ENV_FILE" ]]; then
+  # Fresh render (new install or reconfigure)
   sed \
     -e "s|%%FRAMEWORK_DIR%%|${FRAMEWORK_DIR}|g" \
     -e "s|%%CLI_DIR%%|${TARGET}|g" \
@@ -54,15 +72,11 @@ if [[ ! -f "$ENV_FILE" ]] || [[ ! -d "${TARGET}/cmds" ]] || [[ -z "$(ls -A "${TA
     -e "s|%%LOG_THEME%%|${LOG_THEME}|g" \
     "${FRAMEWORK_DIR}/templates/cli/.env.tmpl" > "$ENV_FILE"
 else
-  # Update specific values in existing .env
+  # First install but .env somehow exists without reconfigure — update paths only
   sed -i \
     -e "s|^FRAMEWORK_DIR=.*|FRAMEWORK_DIR=${FRAMEWORK_DIR}|" \
     -e "s|^CLI_DIR=.*|CLI_DIR=${TARGET}|" \
-    -e "s|^CLI_NAME=.*|CLI_NAME=${CLI_NAME}|" \
-    -e "s|^CLI_VERSION=.*|CLI_VERSION=${CLI_VERSION}|" \
-    -e "s|^LOG_THEME=.*|LOG_THEME=${LOG_THEME}|" \
     "$ENV_FILE"
-  log_info "Updated configuration in existing .env"
 fi
 
 # Render .task-cli.yaml (only if not exists)
@@ -105,9 +119,13 @@ else
 fi
 
 echo ""
-log_success "${CLI_NAME} created at ${TARGET}"
-echo ""
-echo "Next steps:"
-echo "  source ${RC_FILE}"
-echo "  ${CLI_NAME}"
-echo "  ${CLI_NAME} new:cmd"
+if [[ "$RECONFIGURE" == "true" ]]; then
+  log_success "${CLI_NAME} reconfigured at ${TARGET}"
+else
+  log_success "${CLI_NAME} created at ${TARGET}"
+  echo ""
+  echo "Next steps:"
+  echo "  source ${RC_FILE}"
+  echo "  ${CLI_NAME}"
+  echo "  ${CLI_NAME} new:cmd"
+fi
