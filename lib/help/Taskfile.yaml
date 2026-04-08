@@ -1,0 +1,12 @@
+version: '3'
+
+tasks:
+  list:
+    desc: "List all commands"
+    cmd: "{{.FRAMEWORK_DIR}}/lib/help/list.sh {{.CLI_DIR}}/Taskfile.yaml"
+
+  detail:
+    desc: "Show detailed help for a command"
+    requires:
+      vars: [COMMAND]
+    cmd: "{{.FRAMEWORK_DIR}}/lib/help/detail.sh {{.COMMAND}} {{.CLI_DIR}}/Taskfile.yaml"
