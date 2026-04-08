@@ -5,22 +5,22 @@ tasks:
     desc: "Log an info message"
     requires:
       vars: [MSG]
-    cmd: "{{.FRAMEWORK_DIR}}/lib/log/log-cmd.sh info {{.MSG}}"
+    cmd: "'{{.FRAMEWORK_DIR}}/lib/log/log-cmd.sh' info '{{.MSG}}'"
 
   warn:
     desc: "Log a warning message"
     requires:
       vars: [MSG]
-    cmd: "{{.FRAMEWORK_DIR}}/lib/log/log-cmd.sh warn {{.MSG}}"
+    cmd: "'{{.FRAMEWORK_DIR}}/lib/log/log-cmd.sh' warn '{{.MSG}}'"
 
   error:
     desc: "Log an error message"
     requires:
       vars: [MSG]
-    cmd: "{{.FRAMEWORK_DIR}}/lib/log/log-cmd.sh error {{.MSG}}"
+    cmd: "'{{.FRAMEWORK_DIR}}/lib/log/log-cmd.sh' error '{{.MSG}}'"
 
   success:
     desc: "Log a success message"
     requires:
       vars: [MSG]
-    cmd: "{{.FRAMEWORK_DIR}}/lib/log/log-cmd.sh success {{.MSG}}"
+    cmd: "'{{.FRAMEWORK_DIR}}/lib/log/log-cmd.sh' success '{{.MSG}}'"

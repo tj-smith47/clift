@@ -3,12 +3,12 @@ version: '3'
 tasks:
   show:
     desc: "Show current configuration"
-    cmd: "{{.FRAMEWORK_DIR}}/lib/config/show.sh {{.CLI_DIR}}"
+    cmd: "'{{.FRAMEWORK_DIR}}/lib/config/show.sh' '{{.CLI_DIR}}'"
 
   log-theme:
     desc: "Change log theme"
-    cmd: "{{.FRAMEWORK_DIR}}/lib/config/log-theme.sh {{.CLI_DIR}} {{.FRAMEWORK_DIR}}"
+    cmd: "'{{.FRAMEWORK_DIR}}/lib/config/log-theme.sh' '{{.CLI_DIR}}' '{{.FRAMEWORK_DIR}}'"
 
   edit:
     desc: "Edit configuration in $EDITOR"
-    cmd: "{{.FRAMEWORK_DIR}}/lib/config/edit.sh {{.CLI_DIR}}"
+    cmd: "'{{.FRAMEWORK_DIR}}/lib/config/edit.sh' '{{.CLI_DIR}}'"

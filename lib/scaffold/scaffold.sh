@@ -45,7 +45,7 @@ if [[ "$IS_SUBCOMMAND" == "true" ]]; then
       ${CMD_DESC}
 
       Examples:
-        \${CLI_NAME} ${CMD_NAME} -- <args>
+        {{.CLI_NAME}} ${CMD_NAME} -- <args>
     cmd: "{{.FRAMEWORK_DIR}}/lib/router/router.sh {{.TASK}} {{.CLI_ARGS}}"
 YAML
 
