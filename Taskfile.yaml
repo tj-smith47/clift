@@ -1,0 +1,13 @@
+version: '3'
+
+silent: true
+output:
+  group:
+    begin: ''
+    end: ''
+set: [errexit, pipefail]
+
+tasks:
+  default:
+    desc: "DIYCLI Framework"
+    cmd: echo "DIYCLI Framework - run 'task setup:cli -- <dir>' to create a CLI"
