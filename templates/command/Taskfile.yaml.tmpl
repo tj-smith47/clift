@@ -12,7 +12,4 @@ tasks:
 
   help:
     desc: "Show help for %%CMD_NAME%%"
-    cmd:
-      task: _help:detail
-      vars:
-        COMMAND: "%%CMD_NAME%%"
+    cmd: "{{.FRAMEWORK_DIR}}/lib/help/detail.sh %%CMD_NAME%% {{.CLI_DIR}}/Taskfile.yaml"
