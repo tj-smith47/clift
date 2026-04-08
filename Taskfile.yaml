@@ -7,7 +7,27 @@ output:
     end: ''
 set: [errexit, pipefail]
 
+vars:
+  FRAMEWORK_DIR:
+    sh: pwd
+
 tasks:
   default:
     desc: "DIYCLI Framework"
     cmd: echo "DIYCLI Framework - run 'task setup:cli -- <dir>' to create a CLI"
+
+  setup:cli:
+    desc: "Bootstrap a new CLI in a target directory"
+    vars:
+      _CLI_DIR:
+        sh: echo "{{.CLI_ARGS}}" | tr -d "'" | xargs echo -n
+      _CLI_NAME:
+        sh: "{{.FRAMEWORK_DIR}}/lib/prompt/prompt.sh input 'CLI name' --var CLI_NAME --default \"$(basename '{{._CLI_DIR}}')\""
+      _CLI_VERSION:
+        sh: "{{.FRAMEWORK_DIR}}/lib/prompt/prompt.sh input 'Version' --var CLI_VERSION --default '0.1.0'"
+      _LOG_THEME:
+        sh: "{{.FRAMEWORK_DIR}}/lib/prompt/prompt.sh choose 'Log theme' --var LOG_THEME --options 'icons,icons-color,brackets,brackets-color,minimal,minimal-color,custom' --default 'icons-color'"
+    preconditions:
+      - sh: '[[ -n "{{.CLI_ARGS}}" ]]'
+        msg: "Usage: task setup:cli -- <directory>"
+    cmd: "{{.FRAMEWORK_DIR}}/lib/setup/setup.sh '{{._CLI_DIR}}' '{{.FRAMEWORK_DIR}}' '{{._CLI_NAME}}' '{{._CLI_VERSION}}' '{{._LOG_THEME}}'"
