@@ -3,10 +3,10 @@ version: 0.1.0
 description: Batteries-included framework for building custom CLIs with go-task
 min_task_version: "3.0.0"
 
+# Dependencies listed here are informational — read by humans and external tools.
+# deps.sh handles framework dep checks directly.
 dependencies:
   required:
-    - name: jq
-      install: "https://jqlang.github.io/jq/download/"
+    - jq
   optional:
-    - name: gum
-      install: "https://github.com/charmbracelet/gum#installation"
+    - gum
