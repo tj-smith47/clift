@@ -1,0 +1,12 @@
+version: '3'
+
+tasks:
+  cmd:
+    desc: "Scaffold a new command"
+    aliases: [':new:command']
+    vars:
+      _NAME:
+        sh: "{{.FRAMEWORK_DIR}}/lib/prompt/prompt.sh input 'Command name' --var NAME"
+      _DESC:
+        sh: "{{.FRAMEWORK_DIR}}/lib/prompt/prompt.sh input 'Short description' --var DESC"
+    cmd: "{{.FRAMEWORK_DIR}}/lib/scaffold/scaffold.sh '{{._NAME}}' '{{._DESC}}' '{{.CLI_DIR}}' '{{.FRAMEWORK_DIR}}'"
