@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# DIYCLI Router
+# task-cli Router
 # Called by every command's default task.
 # Usage: router.sh <TASK_NAME>
 # Reads CLI_ARGS from environment (set by command Taskfile template).
@@ -30,7 +30,10 @@ fi
 source "${FRAMEWORK_DIR}/lib/check/deps.sh"
 
 # Step 2: Parse CLI_ARGS with proper word splitting
+# CLI_ARGS is intentionally unquoted — eval must perform word splitting
+# to reconstruct the original argument array from task's {{.CLI_ARGS}}.
 if [[ -n "${CLI_ARGS:-}" ]]; then
+  # shellcheck disable=SC2086
   eval set -- ${CLI_ARGS}
 else
   set --

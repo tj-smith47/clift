@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Updates the DIYCLI framework to the latest version.
+# Updates the task-cli framework to the latest version.
 # Usage: update.sh <FRAMEWORK_DIR>
 
 set -euo pipefail
@@ -12,6 +12,14 @@ if [[ -z "$FRAMEWORK_DIR" ]]; then
 fi
 
 source "${FRAMEWORK_DIR}/lib/log/log.sh"
+
+# Check if cfgd manages this installation
+if [[ -f "${FRAMEWORK_DIR}/.cfgd-managed" ]]; then
+  log_info "This installation is managed by cfgd."
+  log_info "Update via: cfgd module upgrade task-cli"
+  log_suggest "Then run: cfgd apply"
+  exit 0
+fi
 
 # Check it's a git repo
 if [[ ! -d "${FRAMEWORK_DIR}/.git" ]]; then
@@ -59,7 +67,7 @@ git -C "$FRAMEWORK_DIR" pull --quiet || {
 
 # Check if min_task_version changed
 if [[ -f "${FRAMEWORK_DIR}/.task-cli.yaml" ]]; then
-  min_ver=$(grep 'min_task_version' "${FRAMEWORK_DIR}/.task-cli.yaml" | sed 's/.*"\(.*\)".*/\1/' || true)
+  min_ver=$(yq '.min_task_version // ""' "${FRAMEWORK_DIR}/.task-cli.yaml")
   if [[ -n "$min_ver" ]]; then
     log_info "Minimum task version: ${min_ver}"
   fi

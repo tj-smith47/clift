@@ -14,7 +14,7 @@ jobs:
         uses: ludeeus/action-shellcheck@master
         with:
           scandir: lib
-          severity: warning
+          severity: info
 
   test:
     runs-on: ubuntu-latest
@@ -24,6 +24,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y jq
+          # Install yq
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
           # Install Task
           sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
           # Install BATS

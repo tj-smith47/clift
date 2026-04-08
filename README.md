@@ -1,20 +1,20 @@
-# DIYCLI
+# task-cli
 
 A batteries-included, language-agnostic framework for building custom CLIs using [go-task](https://taskfile.dev).
 
-You write your command logic in any language -- shell, Python, Go, whatever -- and DIYCLI provides the CLI UX: help system, argument parsing, config management, logging, and more.
+You write your command logic in any language -- shell, Python, Go, whatever -- and task-cli provides the CLI UX: help system, argument parsing, config management, logging, and more.
 
 ## Quick Start
 
 ```bash
-# Prerequisites: task (go-task), jq
+# Prerequisites: task (go-task), jq, yq
 # Optional: gum (for pretty prompts)
 
 # Clone the framework
-git clone <repo-url> ~/.diycli
+git clone <repo-url> ~/.task-cli
 
 # Bootstrap a new CLI
-task --taskfile ~/.diycli/Taskfile.yaml setup:cli -- ~/.config/mycli
+task --taskfile ~/.task-cli/Taskfile.yaml setup:cli -- ~/.config/mycli
 
 # Source your shell and start using it
 source ~/.bashrc
@@ -33,6 +33,7 @@ mycli new:cmd            # create your first command
 - Global flags: `--verbose`, `--quiet`, `--no-color`, `--help`, `--version`
 - Shell completions (bash, zsh)
 - Framework self-update
+- Optional versioning via cfgd (upgrade, pin, distribute)
 - `NO_COLOR` standard support
 
 ## Requirements
@@ -41,11 +42,12 @@ mycli new:cmd            # create your first command
 |---|---|---|
 | [Task](https://taskfile.dev) v3.0+ | Yes | Task runner that powers the CLI |
 | [jq](https://jqlang.github.io/jq/) | Yes | JSON processing for help and config |
+| [yq](https://github.com/mikefarah/yq) | Yes | YAML processing for metadata |
 | [gum](https://github.com/charmbracelet/gum) | No | Enhanced interactive prompts (falls back to `read`) |
 
 ## How It Works
 
-DIYCLI is a framework repo that provides shared libraries (`lib/`) for help, logging, routing, argument parsing, config, and more. When you bootstrap a CLI with `setup:cli`, it creates a project directory with:
+task-cli is a framework repo that provides shared libraries (`lib/`) for help, logging, routing, argument parsing, config, and more. When you bootstrap a CLI with `setup:cli`, it creates a project directory with:
 
 ```
 ~/.config/mycli/
@@ -115,7 +117,7 @@ Configuration lives in `.env` at the CLI project root. Key variables:
 |---|---|
 | `CLI_NAME` | Name of your CLI |
 | `CLI_VERSION` | Version string |
-| `FRAMEWORK_DIR` | Path to the DIYCLI framework |
+| `FRAMEWORK_DIR` | Path to the task-cli framework |
 | `CLI_DIR` | Path to your CLI project |
 | `LOG_THEME` | Active logging theme |
 
@@ -196,13 +198,130 @@ dependencies:
     - fzf
 ```
 
-Teammates can read this file to know what to install before using the CLI. Automated dependency checking via [cfgd](https://github.com/...) is planned for a future release.
+Teammates can read this file to know what to install before using the CLI.
 
 ## Updating
 
 ```bash
 mycli update    # pulls latest framework from git
 ```
+
+## Versioning
+
+task-cli CLIs can be versioned and distributed via [cfgd](https://github.com/tj-smith47/cfgd). Versioning is opt-in — enable it during setup or add it later.
+
+### Enable During Setup
+
+```bash
+CFGD_VERSIONING=true task --taskfile ~/.task-cli/Taskfile.yaml setup:cli -- ~/my-cli
+```
+
+This installs cfgd (if missing), configures the CLI as a cfgd module, and adds the `version:*` commands.
+
+### Add to an Existing CLI
+
+From the framework directory:
+
+```bash
+task setup:versioning -- ~/my-cli
+```
+
+Or from within the CLI itself (if version namespace is manually included):
+
+```bash
+mycli version:setup
+```
+
+### Version Commands
+
+Once versioning is enabled, these commands are available:
+
+| Command | Description |
+|---|---|
+| `version` | Show current version and cfgd status |
+| `version:setup` | Set up cfgd versioning (installs cfgd if needed) |
+| `version:upgrade` | Upgrade to the latest version via cfgd |
+| `version:update` | Alias for `version:upgrade` |
+| `version:set -- <ver>` | Pin to a specific version (e.g., `v1.2.3`) |
+
+### Standalone vs Config Repo Mode
+
+By default, `version:setup` treats the CLI as a **standalone module** in its own git repo. To add it to an existing cfgd config repo instead, set these environment variables:
+
+| Variable | Description |
+|---|---|
+| `CFGD_CONFIG_DIR` | Path to your cfgd config repo (e.g., `~/dotfiles`) |
+| `CFGD_PROFILES` | Comma-separated profiles to add the module to (e.g., `dev,work`) |
+
+```bash
+CFGD_CONFIG_DIR=~/dotfiles CFGD_PROFILES=dev mycli version:setup
+```
+
+### Publishing a Version
+
+After versioning is set up, tag releases using cfgd's convention:
+
+```bash
+git tag "mycli/v1.0.0"
+git push origin --tags
+```
+
+Consumers upgrade with `mycli version:upgrade` or pin with `mycli version:set -- v1.0.0`.
+
+## cfgd Integration
+
+[cfgd](https://github.com/...) is a declarative machine configuration tool. When available, task-cli uses it as a backend for dependency management, updates, and drift detection. **cfgd is never required.** Everything works without it.
+
+### Framework Module
+
+To manage the task-cli framework with cfgd, copy `cfgd/task-cli/module.yaml` into your cfgd config's `modules/` directory:
+
+```bash
+cp ~/.task-cli/cfgd/task-cli/module.yaml ~/dotfiles/modules/task-cli/module.yaml
+```
+
+This module declares `go-task`, `jq`, `yq`, and `gum` as packages and clones the framework repo. Add it to your profile:
+
+```yaml
+# profiles/work.yaml
+spec:
+  modules:
+    - task-cli
+```
+
+Then `cfgd apply` installs everything.
+
+### CLI Modules
+
+When you bootstrap a CLI with `setup:cli`, a `module.yaml` is generated alongside it. This module depends on `task-cli`, declares your CLI's dependencies from `.task-cli.yaml`, and configures the shell alias. Copy it to your cfgd config to distribute the CLI to other machines or teammates.
+
+### Update Modes
+
+When cfgd manages your framework installation, `mycli update` detects this and directs you to use cfgd instead. How updates work depends on how you pin the module:
+
+| Pin style | module.yaml source | How to update | What you get |
+|---|---|---|---|
+| **Tag** | `...git@v0.2.0` | `cfgd module upgrade task-cli --ref v0.3.0` | Explicit version bumps |
+| **Latest** | (any) | `cfgd module upgrade task-cli` | Bumps lockfile to repo HEAD |
+
+Both styles lock to a specific commit SHA in `modules.lock`. Between upgrades, the version never changes — even if new commits are pushed upstream.
+
+### Daemon Behavior
+
+If the cfgd daemon is enabled, it periodically verifies that managed installations match their lockfile pin:
+
+- **Dependency healing** — if `jq` or `gum` gets uninstalled, the daemon reinstalls them on the next reconcile cycle
+- **File protection** — if framework files are accidentally modified, the daemon restores them to the pinned state
+- **No surprise updates** — the daemon enforces the current pin, it does not pull new versions. Updates are always explicit via `cfgd module upgrade`
+
+What happens on drift depends on your `driftPolicy` (`Auto`, `NotifyOnly`, or `Prompt`) — see cfgd docs.
+
+### Without cfgd
+
+If cfgd is not installed, nothing changes:
+- `deps.sh` checks for `jq` and `gum` directly
+- `mycli update` uses `git pull` as before
+- `.task-cli.yaml` documents dependencies for humans to install manually
 
 ## License
 

@@ -1,0 +1,32 @@
+apiVersion: cfgd.io/v1alpha1
+kind: Module
+metadata:
+  name: task-cli
+  description: task-cli framework for building custom CLIs with go-task
+
+spec:
+  packages:
+    - name: go-task
+      prefer: [brew, script]
+      aliases:
+        brew: go-task
+      script: |
+        sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b ~/.local/bin
+
+    - name: jq
+
+    - name: yq
+
+    - name: gum
+
+  files:
+    - source: https://github.com/YOUR_ORG/task-cli.git@main
+      target: ~/.local/share/task-cli
+
+  env:
+    - name: TASK_CLI_DIR
+      value: ~/.local/share/task-cli
+
+  scripts:
+    postApply:
+      - touch .cfgd-managed

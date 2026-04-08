@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# DIYCLI Argument Parser
+# task-cli Argument Parser
 # Usage (sourced by command scripts):
 #   source <(parse_args "$@" --flags "name,loud,verbose")
 #

@@ -29,9 +29,18 @@ if [[ ! -f "$ENV_FILE" ]]; then
 fi
 
 if grep -q "^${KEY}=" "$ENV_FILE"; then
-  sed -i "s|^${KEY}=.*|${KEY}=${VALUE}|" "$ENV_FILE"
+  # Use a temp file to avoid sed delimiter issues with special chars in VALUE
+  tmpfile=$(mktemp)
+  while IFS= read -r line; do
+    if [[ "$line" == "${KEY}="* ]]; then
+      printf '%s=%s\n' "$KEY" "$VALUE"
+    else
+      printf '%s\n' "$line"
+    fi
+  done < "$ENV_FILE" > "$tmpfile"
+  mv "$tmpfile" "$ENV_FILE"
 else
-  echo "${KEY}=${VALUE}" >> "$ENV_FILE"
+  printf '%s=%s\n' "$KEY" "$VALUE" >> "$ENV_FILE"
 fi
 
 log_success "Set ${KEY}=${VALUE}"

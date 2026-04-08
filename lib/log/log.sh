@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# DIYCLI Logging System
+# task-cli Logging System
 # Provides: log_info, log_warn, log_error, log_success, log_debug, log_suggest, die
 # Reads LOG_THEME, LOG_COLOR, NO_COLOR, VERBOSE, QUIET from environment.
 # Themes: icons, icons-color, brackets, brackets-color, minimal, minimal-color, custom
@@ -96,6 +96,7 @@ _log_format() {
           success) color="$_CLR_GREEN" ;;
           debug)   color="$_CLR_CYAN" ;;
         esac
+        # shellcheck disable=SC2059
         printf "${color}${fmt}${_CLR_RESET}\n" "$msg"
       else
         # shellcheck disable=SC2059

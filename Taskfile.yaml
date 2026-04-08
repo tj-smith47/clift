@@ -13,8 +13,8 @@ vars:
 
 tasks:
   default:
-    desc: "DIYCLI Framework"
-    cmd: echo "DIYCLI Framework - run 'task setup:cli -- <dir>' to create a CLI"
+    desc: "task-cli Framework"
+    cmd: echo "task-cli Framework - run 'task setup:cli -- <dir>' to create a CLI"
 
   setup:cli:
     desc: "Bootstrap a new CLI in a target directory"
@@ -31,3 +31,15 @@ tasks:
       - sh: '[[ -n "{{.CLI_ARGS}}" ]]'
         msg: "Usage: task setup:cli -- <directory>"
     cmd: "{{.FRAMEWORK_DIR}}/lib/setup/setup.sh '{{._CLI_DIR}}' '{{.FRAMEWORK_DIR}}' '{{._CLI_NAME}}' '{{._CLI_VERSION}}' '{{._LOG_THEME}}'"
+
+  setup:versioning:
+    desc: "Add cfgd versioning to an existing CLI"
+    vars:
+      _CLI_DIR:
+        sh: echo "{{.CLI_ARGS}}" | tr -d "'" | xargs echo -n
+    preconditions:
+      - sh: '[[ -n "{{.CLI_ARGS}}" ]]'
+        msg: "Usage: task setup:versioning -- <cli-directory>"
+      - sh: '[[ -f "{{._CLI_DIR}}/.env" ]]'
+        msg: "Not a task-cli project: {{._CLI_DIR}} (missing .env)"
+    cmd: "'{{.FRAMEWORK_DIR}}/lib/version/setup.sh' '{{._CLI_DIR}}' '{{.FRAMEWORK_DIR}}'"

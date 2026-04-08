@@ -1,4 +1,4 @@
-# Contributing to DIYCLI
+# Contributing to task-cli
 
 ## Development Setup
 
@@ -9,6 +9,7 @@ git clone <repo-url> && cd task-cli
 Requirements:
 - [Task](https://taskfile.dev) v3.0+
 - [jq](https://jqlang.github.io/jq/)
+- [yq](https://github.com/mikefarah/yq)
 - [BATS](https://github.com/bats-core/bats-core) (for running tests)
 - [ShellCheck](https://www.shellcheck.net/) (for linting)
 
@@ -52,5 +53,5 @@ Each `lib/` component has a `Taskfile.yaml` (for Task integration) and one or mo
 
 The following are planned but not yet implemented:
 
-- **cfgd integration** — dependency management via config
+- **cfgd integration** — dependency management via cfgd (module definitions shipped, script integration done)
 - **Version tagging workflow** — assisted release tagging

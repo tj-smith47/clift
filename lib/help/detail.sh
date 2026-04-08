@@ -20,16 +20,13 @@ json=$(task --list-all --json --taskfile "$TASKFILE_PATH" 2>/dev/null) || {
   exit 1
 }
 
-# Try <command>:default first, then <command>
-task_info=$(echo "$json" | jq -r --arg cmd "${COMMAND}:default" '
-  .tasks[] | select(.name == $cmd) | {desc, summary, location: .location.taskfile}
+# Try <command>:default first, then <command> (single jq pass)
+task_info=$(echo "$json" | jq -r --arg cmd "$COMMAND" '
+  [.tasks[] | select(.name == ($cmd + ":default") or .name == $cmd)]
+  | sort_by(if .name | endswith(":default") then 0 else 1 end)
+  | first
+  | {desc, summary, location: .location.taskfile}
 ' 2>/dev/null)
-
-if [[ -z "$task_info" || "$task_info" == "null" ]]; then
-  task_info=$(echo "$json" | jq -r --arg cmd "$COMMAND" '
-    .tasks[] | select(.name == $cmd) | {desc, summary, location: .location.taskfile}
-  ' 2>/dev/null)
-fi
 
 if [[ -z "$task_info" || "$task_info" == "null" ]]; then
   echo "error: unknown command: $COMMAND" >&2

@@ -1,0 +1,20 @@
+apiVersion: cfgd.io/v1alpha1
+kind: Module
+metadata:
+  name: %%CLI_NAME%%
+  description: "%%CLI_NAME%% CLI"
+
+spec:
+  depends:
+    - task-cli
+
+  packages: []
+
+  # Uncomment and set your CLI's git repo URL:
+  # files:
+  #   - source: https://github.com/YOUR_ORG/%%CLI_NAME%%.git@main
+  #     target: ~/.local/share/%%CLI_NAME%%
+
+  aliases:
+    - name: %%CLI_NAME%%
+      command: FRAMEWORK_DIR="~/.local/share/task-cli" task --taskfile "~/.local/share/%%CLI_NAME%%/Taskfile.yaml"

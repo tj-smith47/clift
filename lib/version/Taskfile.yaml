@@ -1,0 +1,19 @@
+version: '3'
+
+tasks:
+  default:
+    desc: "Show version and cfgd status"
+    cmd: "'{{.FRAMEWORK_DIR}}/lib/version/version.sh' '{{.CLI_DIR}}' '{{.FRAMEWORK_DIR}}'"
+
+  setup:
+    desc: "Set up cfgd versioning"
+    cmd: "'{{.FRAMEWORK_DIR}}/lib/version/setup.sh' '{{.CLI_DIR}}' '{{.FRAMEWORK_DIR}}'"
+
+  upgrade:
+    desc: "Upgrade to latest version via cfgd"
+    aliases: [update]
+    cmd: "'{{.FRAMEWORK_DIR}}/lib/version/upgrade.sh' '{{.CLI_DIR}}' '{{.FRAMEWORK_DIR}}'"
+
+  set:
+    desc: "Pin to a specific version"
+    cmd: "'{{.FRAMEWORK_DIR}}/lib/version/set.sh' '{{.CLI_DIR}}' '{{.FRAMEWORK_DIR}}' {{.CLI_ARGS}}"

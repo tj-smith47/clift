@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# DIYCLI Prompt System
+# task-cli Prompt System
 # Usage:
 #   prompt.sh input  'Label' --var VAR_NAME [--default VALUE]
 #   prompt.sh choose 'Label' --var VAR_NAME --options 'a,b,c' [--default VALUE]

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# DIYCLI Setup — bootstraps a new CLI in a target directory.
+# task-cli Setup — bootstraps a new CLI in a target directory.
 # Usage: setup.sh <TARGET_DIR> <FRAMEWORK_DIR> <CLI_NAME> <CLI_VERSION> <LOG_THEME>
 
 set -euo pipefail
@@ -97,6 +97,21 @@ if [[ ! -f "$TASKFILE" ]]; then
     "${FRAMEWORK_DIR}/templates/cli/Taskfile.yaml.tmpl" > "$TASKFILE"
 fi
 
+# Render cfgd module.yaml (only if not exists)
+MODULE_FILE="${TARGET}/module.yaml"
+if [[ ! -f "$MODULE_FILE" ]]; then
+  sed \
+    -e "s|%%CLI_NAME%%|${CLI_NAME}|g" \
+    "${FRAMEWORK_DIR}/templates/cli/module.yaml.tmpl" > "$MODULE_FILE"
+fi
+
+# Copy CI workflow (only if not exists)
+CI_DIR="${TARGET}/.github/workflows"
+if [[ ! -f "${CI_DIR}/ci.yml" ]]; then
+  mkdir -p "$CI_DIR"
+  cp "${FRAMEWORK_DIR}/templates/cli/.github/workflows/ci.yml" "${CI_DIR}/ci.yml"
+fi
+
 # Configure shell alias (with proper quoting for paths with spaces)
 ALIAS_LINE="alias ${CLI_NAME}='FRAMEWORK_DIR=\"${FRAMEWORK_DIR}\" task --taskfile \"${TARGET}/Taskfile.yaml\"'"
 
@@ -111,11 +126,19 @@ esac
 # Add alias if not already present
 if ! grep -qF "alias ${CLI_NAME}=" "$RC_FILE" 2>/dev/null; then
   echo "" >> "$RC_FILE"
-  echo "# DIYCLI: ${CLI_NAME}" >> "$RC_FILE"
+  echo "# task-cli: ${CLI_NAME}" >> "$RC_FILE"
   echo "$ALIAS_LINE" >> "$RC_FILE"
 else
-  # Update existing alias
-  sed -i "s|^alias ${CLI_NAME}=.*|${ALIAS_LINE}|" "$RC_FILE"
+  # Update existing alias (use temp file to avoid sed delimiter issues with paths)
+  tmpfile=$(mktemp)
+  while IFS= read -r line; do
+    if [[ "$line" == "alias ${CLI_NAME}="* ]]; then
+      printf '%s\n' "$ALIAS_LINE"
+    else
+      printf '%s\n' "$line"
+    fi
+  done < "$RC_FILE" > "$tmpfile"
+  mv "$tmpfile" "$RC_FILE"
 fi
 
 echo ""
@@ -128,4 +151,12 @@ else
   echo "  source ${RC_FILE}"
   echo "  ${CLI_NAME}"
   echo "  ${CLI_NAME} new:cmd"
+fi
+
+# Set up cfgd versioning if requested
+if [[ "${CFGD_VERSIONING:-}" == "true" && "$RECONFIGURE" != "true" ]]; then
+  echo ""
+  log_info "Setting up cfgd versioning..."
+  CLI_NAME="$CLI_NAME" CLI_VERSION="$CLI_VERSION" \
+    "${FRAMEWORK_DIR}/lib/version/setup.sh" "$TARGET" "$FRAMEWORK_DIR"
 fi

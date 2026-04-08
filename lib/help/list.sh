@@ -28,78 +28,66 @@ json=$(task --list-all --json --nested --taskfile "$TASKFILE_PATH" 2>/dev/null) 
 # Root tasks → "Commands" group (unless they have a vars.group override).
 # Namespaced tasks → title-cased namespace group.
 # Filter out _-prefixed namespaces (framework internals) and "default" task.
-entries=$(echo "$json" | jq -r '
-  # Process root-level tasks
-  (.tasks // [])[]
-  | select(.name != "default")
-  | select(.name | startswith("_") | not)
-  | {
-      name: .name,
-      desc: (.desc // ""),
-      location: (.location.taskfile // ""),
-      group_var: (
-        if (.vars.group | type) == "object" then (.vars.group.value // "")
-        else (.vars.group // "")
-        end | tostring
+all_entries=$(echo "$json" | jq -r '
+  # Root tasks
+  (
+    (.tasks // [])[]
+    | select(.name != "default")
+    | select(.name | startswith("_") | not)
+    | {
+        name: .name,
+        desc: (.desc // ""),
+        location: (.location.taskfile // ""),
+        group_var: (
+          if (.vars.group | type) == "object" then (.vars.group.value // "")
+          else (.vars.group // "")
+          end | tostring
+        )
+      }
+    | .display_name = (.name | gsub(":default$"; ""))
+    | select(.display_name != "")
+    | .group = (
+        if (.group_var != "" and .group_var != "null") then .group_var
+        else "Commands"
+        end
       )
-    }
-  | .display_name = (.name | gsub(":default$"; ""))
-  | select(.display_name != "")
-  | .group = (
-      if (.group_var != "" and .group_var != "null") then .group_var
-      else "Commands"
-      end
-    )
-  | "\(.group)\t\(.display_name)\t\(.desc)"
-')
-
-# Process namespaced tasks
-ns_entries=$(echo "$json" | jq -r '
-  (.namespaces // {}) | to_entries[]
-  | select(.key | startswith("_") | not)
-  | .key as $ns
-  | (.value.tasks // [])[]
-  | select(.name | test(":[_]") | not)
-  | select(.name != ($ns + ":default"))
-  | {
-      name: .name,
-      desc: (.desc // ""),
-      location: (.location.taskfile // ""),
-      ns: $ns,
-      group_var: (
-        if (.vars.group | type) == "object" then (.vars.group.value // "")
-        else (.vars.group // "")
-        end | tostring
+    | "\(.group)\t\(.display_name)\t\(.desc)"
+  ),
+  # Namespaced tasks
+  (
+    (.namespaces // {}) | to_entries[]
+    | select(.key | startswith("_") | not)
+    | .key as $ns
+    | (.value.tasks // [])[]
+    | select(.name | test(":[_]") | not)
+    | select(.name != ($ns + ":default"))
+    | {
+        name: .name,
+        desc: (.desc // ""),
+        location: (.location.taskfile // ""),
+        ns: $ns,
+        group_var: (
+          if (.vars.group | type) == "object" then (.vars.group.value // "")
+          else (.vars.group // "")
+          end | tostring
+        )
+      }
+    | .display_name = (
+        if (.location | contains("/cmds/")) then
+          (.name | gsub(":default$"; "") | gsub(":"; " "))
+        else
+          (.name | gsub(":default$"; ""))
+        end
       )
-    }
-  | .display_name = (
-      if (.location | contains("/cmds/")) then
-        (.name | gsub(":default$"; "") | gsub(":"; " "))
-      else
-        (.name | gsub(":default$"; ""))
-      end
-    )
-  | select(.display_name != "")
-  | .group = (
-      if (.group_var != "" and .group_var != "null") then .group_var
-      else (.ns | sub("^."; (.[:1] | ascii_upcase)))
-      end
-    )
-  | "\(.group)\t\(.display_name)\t\(.desc)"
+    | select(.display_name != "")
+    | .group = (
+        if (.group_var != "" and .group_var != "null") then .group_var
+        else (.ns | sub("^."; (.[:1] | ascii_upcase)))
+        end
+      )
+    | "\(.group)\t\(.display_name)\t\(.desc)"
+  )
 ')
-
-# Combine root and namespace entries
-all_entries=""
-if [[ -n "$entries" ]]; then
-  all_entries="$entries"
-fi
-if [[ -n "$ns_entries" ]]; then
-  if [[ -n "$all_entries" ]]; then
-    all_entries="${all_entries}"$'\n'"${ns_entries}"
-  else
-    all_entries="$ns_entries"
-  fi
-fi
 
 if [[ -z "$all_entries" ]]; then
   echo ""

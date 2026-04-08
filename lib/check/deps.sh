@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Validates hard and soft dependencies for DIYCLI.
-# Hard deps (jq): exit 1 if missing.
+# Validates hard and soft dependencies for task-cli.
+# Hard deps (jq, yq): exit 1 if missing.
 # Soft deps (gum): warn but continue, export GUM_AVAILABLE=true/false.
 # Also validates task version and exports framework version from .task-cli.yaml.
 
@@ -16,6 +16,12 @@ if ! _check_cmd jq; then
   exit 1
 fi
 
+# Hard dependency: yq
+if ! _check_cmd yq; then
+  echo "error: yq is required but not installed. See https://github.com/mikefarah/yq" >&2
+  exit 1
+fi
+
 # Soft dependency: gum
 if _check_cmd gum; then
   export GUM_AVAILABLE=true
@@ -26,12 +32,19 @@ else
   fi
 fi
 
+# cfgd availability (optional backend for deps/updates)
+if _check_cmd cfgd; then
+  export CFGD_AVAILABLE=true
+else
+  export CFGD_AVAILABLE=false
+fi
+
 # Framework metadata: version export + task version validation
 if [[ -n "${FRAMEWORK_DIR:-}" ]] && [[ -f "$FRAMEWORK_DIR/.task-cli.yaml" ]]; then
-  DIYCLI_VERSION="$(grep '^version:' "$FRAMEWORK_DIR/.task-cli.yaml" | sed 's/version:[[:space:]]*//')"
-  export DIYCLI_VERSION
+  TASK_CLI_VERSION="$(yq '.version' "$FRAMEWORK_DIR/.task-cli.yaml")"
+  export TASK_CLI_VERSION
 
-  _min_task_version="$(grep 'min_task_version' "$FRAMEWORK_DIR/.task-cli.yaml" | sed 's/.*"\(.*\)".*/\1/' || true)"
+  _min_task_version="$(yq '.min_task_version // ""' "$FRAMEWORK_DIR/.task-cli.yaml")"
 
   if [[ -n "$_min_task_version" ]] && _check_cmd task; then
     _current_task_version="$(task --version | sed 's/.*v\([0-9][0-9.]*\).*/\1/')"
