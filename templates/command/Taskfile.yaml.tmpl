@@ -1,0 +1,18 @@
+version: '3'
+
+tasks:
+  default:
+    desc: "%%CMD_DESC%%"
+    summary: |
+      %%CMD_DESC%%
+
+      Examples:
+        %%CLI_NAME%% %%CMD_NAME%% -- <args>
+    cmd: "{{.FRAMEWORK_DIR}}/lib/router/router.sh {{.TASK}} {{.CLI_ARGS}}"
+
+  help:
+    desc: "Show help for %%CMD_NAME%%"
+    cmd:
+      task: _help:detail
+      vars:
+        COMMAND: "%%CMD_NAME%%"

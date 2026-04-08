@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+source "${FRAMEWORK_DIR}/lib/log/log.sh"
+source "${FRAMEWORK_DIR}/lib/args/args.sh"
+
+# Parse arguments
+source <(parse_args "$@" --flags "")
+
+# Command logic here
+log_info "Hello from %%CMD_NAME%%"

@@ -1,0 +1,34 @@
+version: '3'
+
+silent: true
+output:
+  group:
+    begin: ''
+    end: ''
+set: [errexit, pipefail]
+dotenv: ['.env']
+
+includes:
+  # Framework libs (underscore prefix = hidden from help)
+  _help:
+    taskfile: '{{.FRAMEWORK_DIR}}/lib/help'
+  _log:
+    taskfile: '{{.FRAMEWORK_DIR}}/lib/log'
+
+  # Framework tools (visible)
+  new:
+    taskfile: '{{.FRAMEWORK_DIR}}/lib/scaffold'
+  config:
+    taskfile: '{{.FRAMEWORK_DIR}}/lib/config'
+
+  # User commands (added by scaffolder)
+
+tasks:
+  default:
+    desc: "Show help"
+    cmd:
+      task: _help:list
+
+  version:
+    desc: "Print version"
+    cmd: echo "%%CLI_NAME%% version %%CLI_VERSION%%"
