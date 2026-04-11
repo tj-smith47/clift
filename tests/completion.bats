@@ -7,7 +7,8 @@ setup() {
     skip "task not installed"
   fi
   TEST_DIR="$(mktemp -d)"
-  export FRAMEWORK_DIR="/opt/repos/clift"
+  export HOME="$TEST_DIR"
+  export FRAMEWORK_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
   export CLI_DIR="$TEST_DIR"
   export CLI_NAME="testcli"
   export CLI_VERSION="1.0.0"

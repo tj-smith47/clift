@@ -11,13 +11,13 @@ load test_helper
 }
 
 @test "CLIFT_VERSION is exported when FRAMEWORK_DIR is set" {
-  run bash -c 'export FRAMEWORK_DIR="/opt/repos/clift"; source "$FRAMEWORK_DIR/lib/check/deps.sh"; echo "CLIFT_VERSION=$CLIFT_VERSION"'
+  run bash -c "export FRAMEWORK_DIR='$FRAMEWORK_DIR'; source \"\$FRAMEWORK_DIR/lib/check/deps.sh\"; echo \"CLIFT_VERSION=\$CLIFT_VERSION\""
   [ "$status" -eq 0 ]
   [[ "$output" == *"CLIFT_VERSION=0.1.0"* ]]
 }
 
 @test "does not fail if .clift.yaml is missing" {
-  run bash -c 'export FRAMEWORK_DIR="$TEST_DIR"; source "/opt/repos/clift/lib/check/deps.sh"'
+  run bash -c "export FRAMEWORK_DIR='$TEST_DIR'; source '$FRAMEWORK_DIR/lib/check/deps.sh'"
   [ "$status" -eq 0 ]
 }
 
