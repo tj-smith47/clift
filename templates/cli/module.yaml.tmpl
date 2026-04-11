@@ -6,7 +6,7 @@ metadata:
 
 spec:
   depends:
-    - task-cli
+    - clift
 
   packages: []
 
@@ -17,4 +17,4 @@ spec:
 
   aliases:
     - name: %%CLI_NAME%%
-      command: FRAMEWORK_DIR="~/.local/share/task-cli" task --taskfile "~/.local/share/%%CLI_NAME%%/Taskfile.yaml"
+      command: FRAMEWORK_DIR="~/.local/share/clift" task --taskfile "~/.local/share/%%CLI_NAME%%/Taskfile.yaml"

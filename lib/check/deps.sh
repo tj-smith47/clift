@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Validates hard and soft dependencies for task-cli.
+# Validates hard and soft dependencies for clift.
 # Hard deps (jq, yq): exit 1 if missing.
 # Soft deps (gum): warn but continue, export GUM_AVAILABLE=true/false.
-# Also validates task version and exports framework version from .task-cli.yaml.
+# Also validates task version and exports framework version from .clift.yaml.
 
 set -euo pipefail
 
@@ -40,11 +40,11 @@ else
 fi
 
 # Framework metadata: version export + task version validation
-if [[ -n "${FRAMEWORK_DIR:-}" ]] && [[ -f "$FRAMEWORK_DIR/.task-cli.yaml" ]]; then
-  TASK_CLI_VERSION="$(yq '.version' "$FRAMEWORK_DIR/.task-cli.yaml")"
-  export TASK_CLI_VERSION
+if [[ -n "${FRAMEWORK_DIR:-}" ]] && [[ -f "$FRAMEWORK_DIR/.clift.yaml" ]]; then
+  CLIFT_VERSION="$(yq '.version' "$FRAMEWORK_DIR/.clift.yaml")"
+  export CLIFT_VERSION
 
-  _min_task_version="$(yq '.min_task_version // ""' "$FRAMEWORK_DIR/.task-cli.yaml")"
+  _min_task_version="$(yq '.min_task_version // ""' "$FRAMEWORK_DIR/.clift.yaml")"
 
   if [[ -n "$_min_task_version" ]] && _check_cmd task; then
     _current_task_version="$(task --version | sed 's/.*v\([0-9][0-9.]*\).*/\1/')"

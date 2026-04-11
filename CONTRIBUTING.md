@@ -1,9 +1,9 @@
-# Contributing to task-cli
+# Contributing to clift
 
 ## Development Setup
 
 ```bash
-git clone <repo-url> && cd task-cli
+git clone <repo-url> && cd clift
 ```
 
 Requirements:

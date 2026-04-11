@@ -14,7 +14,7 @@ fi
 
 source "${FRAMEWORK_DIR}/lib/log/log.sh"
 
-cli_name="${CLI_NAME:-$(yq '.name' "${CLI_DIR}/.task-cli.yaml" 2>/dev/null)}"
+cli_name="${CLI_NAME:-$(yq '.name' "${CLI_DIR}/.clift.yaml" 2>/dev/null)}"
 
 if [[ "${CFGD_VERSIONING:-}" != "true" ]]; then
   die "Versioning is not set up. Run '${cli_name} version:setup' first."

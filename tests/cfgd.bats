@@ -8,7 +8,7 @@ load test_helper
   rm -f "$FRAMEWORK_DIR/.cfgd-managed"
   [ "$status" -eq 0 ]
   [[ "$output" == *"managed by cfgd"* ]]
-  [[ "$output" == *"cfgd module upgrade task-cli"* ]]
+  [[ "$output" == *"cfgd module upgrade clift"* ]]
 }
 
 @test "update proceeds normally without .cfgd-managed" {
@@ -29,7 +29,7 @@ load test_helper
   [ "$status" -eq 0 ]
   [ -f "$TEST_DIR/newcli/module.yaml" ]
   # Verify it references the right module dependency
-  run grep "task-cli" "$TEST_DIR/newcli/module.yaml"
+  run grep "clift" "$TEST_DIR/newcli/module.yaml"
   [ "$status" -eq 0 ]
 }
 
@@ -64,7 +64,7 @@ load test_helper
     "$TEST_DIR/portable" "$FRAMEWORK_DIR" "mytools" "0.1.0" "minimal"
   [ "$status" -eq 0 ]
   # Should use ~/.local/share paths, not absolute machine paths
-  run grep "~/.local/share/task-cli" "$TEST_DIR/portable/module.yaml"
+  run grep "~/.local/share/clift" "$TEST_DIR/portable/module.yaml"
   [ "$status" -eq 0 ]
   run grep "~/.local/share/mytools" "$TEST_DIR/portable/module.yaml"
   [ "$status" -eq 0 ]

@@ -10,14 +10,14 @@ load test_helper
   [[ "$output" =~ GUM_AVAILABLE=(true|false) ]]
 }
 
-@test "TASK_CLI_VERSION is exported when FRAMEWORK_DIR is set" {
-  run bash -c 'export FRAMEWORK_DIR="/opt/repos/task-cli"; source "$FRAMEWORK_DIR/lib/check/deps.sh"; echo "TASK_CLI_VERSION=$TASK_CLI_VERSION"'
+@test "CLIFT_VERSION is exported when FRAMEWORK_DIR is set" {
+  run bash -c 'export FRAMEWORK_DIR="/opt/repos/clift"; source "$FRAMEWORK_DIR/lib/check/deps.sh"; echo "CLIFT_VERSION=$CLIFT_VERSION"'
   [ "$status" -eq 0 ]
-  [[ "$output" == *"TASK_CLI_VERSION=0.1.0"* ]]
+  [[ "$output" == *"CLIFT_VERSION=0.1.0"* ]]
 }
 
-@test "does not fail if .task-cli.yaml is missing" {
-  run bash -c 'export FRAMEWORK_DIR="$TEST_DIR"; source "/opt/repos/task-cli/lib/check/deps.sh"'
+@test "does not fail if .clift.yaml is missing" {
+  run bash -c 'export FRAMEWORK_DIR="$TEST_DIR"; source "/opt/repos/clift/lib/check/deps.sh"'
   [ "$status" -eq 0 ]
 }
 

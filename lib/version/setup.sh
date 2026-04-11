@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sets up cfgd versioning for a task-cli CLI.
+# Sets up cfgd versioning for a clift CLI.
 # Usage: setup.sh <CLI_DIR> <FRAMEWORK_DIR>
 #
 # Environment variables:
@@ -18,11 +18,11 @@ fi
 
 source "${FRAMEWORK_DIR}/lib/log/log.sh"
 
-cli_name="${CLI_NAME:-$(yq '.name' "${CLI_DIR}/.task-cli.yaml" 2>/dev/null)}"
-cli_version="${CLI_VERSION:-$(yq '.version' "${CLI_DIR}/.task-cli.yaml" 2>/dev/null)}"
+cli_name="${CLI_NAME:-$(yq '.name' "${CLI_DIR}/.clift.yaml" 2>/dev/null)}"
+cli_version="${CLI_VERSION:-$(yq '.version' "${CLI_DIR}/.clift.yaml" 2>/dev/null)}"
 
 if [[ -z "$cli_name" || "$cli_name" == "null" ]]; then
-  die "Could not determine CLI name from .task-cli.yaml"
+  die "Could not determine CLI name from .clift.yaml"
 fi
 
 # Already configured?

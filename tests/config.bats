@@ -4,7 +4,7 @@ load test_helper
 
 setup() {
   TEST_DIR="$(mktemp -d)"
-  export FRAMEWORK_DIR="/opt/repos/task-cli"
+  export FRAMEWORK_DIR="/opt/repos/clift"
   export CLI_DIR="$TEST_DIR"
   export CLI_NAME="testcli"
   export CLI_VERSION="1.0.0"

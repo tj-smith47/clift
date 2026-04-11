@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Generates shell completion scripts for task-cli.
+# Generates shell completion scripts for clift.
 # Usage: completion.sh <FORMAT> <TASKFILE_PATH> <CLI_NAME>
 # FORMAT: bash or zsh
 

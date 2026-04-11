@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# task-cli Router
+# clift Router
 # Called by every command's default task.
 # Usage: router.sh <TASK_NAME>
 # Reads CLI_ARGS from environment (set by command Taskfile template).

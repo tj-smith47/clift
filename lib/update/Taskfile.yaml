@@ -2,5 +2,5 @@ version: '3'
 
 tasks:
   default:
-    desc: "Update task-cli framework"
+    desc: "Update clift framework"
     cmd: "'{{.FRAMEWORK_DIR}}/lib/update/update.sh' '{{.FRAMEWORK_DIR}}'"

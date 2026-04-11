@@ -1,8 +1,8 @@
-# task-cli
+# clift
 
 A batteries-included, language-agnostic framework for building custom CLIs using [go-task](https://taskfile.dev).
 
-You write your command logic in any language -- shell, Python, Go, whatever -- and task-cli provides the CLI UX: help system, argument parsing, config management, logging, and more.
+You write your command logic in any language -- shell, Python, Go, whatever -- and clift provides the CLI UX: help system, argument parsing, config management, logging, and more.
 
 ## Quick Start
 
@@ -11,10 +11,10 @@ You write your command logic in any language -- shell, Python, Go, whatever -- a
 # Optional: gum (for pretty prompts)
 
 # Clone the framework
-git clone <repo-url> ~/.task-cli
+git clone <repo-url> ~/.clift
 
 # Bootstrap a new CLI
-task --taskfile ~/.task-cli/Taskfile.yaml setup:cli -- ~/.config/mycli
+task --taskfile ~/.clift/Taskfile.yaml setup:cli -- ~/.config/mycli
 
 # Source your shell and start using it
 source ~/.bashrc
@@ -47,7 +47,7 @@ mycli new:cmd            # create your first command
 
 ## How It Works
 
-task-cli is a framework repo that provides shared libraries (`lib/`) for help, logging, routing, argument parsing, config, and more. When you bootstrap a CLI with `setup:cli`, it creates a project directory with:
+clift is a framework repo that provides shared libraries (`lib/`) for help, logging, routing, argument parsing, config, and more. When you bootstrap a CLI with `setup:cli`, it creates a project directory with:
 
 ```
 ~/.config/mycli/
@@ -117,7 +117,7 @@ Configuration lives in `.env` at the CLI project root. Key variables:
 |---|---|
 | `CLI_NAME` | Name of your CLI |
 | `CLI_VERSION` | Version string |
-| `FRAMEWORK_DIR` | Path to the task-cli framework |
+| `FRAMEWORK_DIR` | Path to the clift framework |
 | `CLI_DIR` | Path to your CLI project |
 | `LOG_THEME` | Active logging theme |
 
@@ -182,7 +182,7 @@ eval "$(mycli completion:zsh)"
 
 ## Team Setup
 
-When sharing a CLI with your team, include the `.task-cli.yaml` file in your CLI's directory. It documents what dependencies your CLI needs:
+When sharing a CLI with your team, include the `.clift.yaml` file in your CLI's directory. It documents what dependencies your CLI needs:
 
 ```yaml
 name: my-team-cli
@@ -208,12 +208,12 @@ mycli update    # pulls latest framework from git
 
 ## Versioning
 
-task-cli CLIs can be versioned and distributed via [cfgd](https://github.com/tj-smith47/cfgd). Versioning is opt-in — enable it during setup or add it later.
+clift CLIs can be versioned and distributed via [cfgd](https://github.com/tj-smith47/cfgd). Versioning is opt-in — enable it during setup or add it later.
 
 ### Enable During Setup
 
 ```bash
-CFGD_VERSIONING=true task --taskfile ~/.task-cli/Taskfile.yaml setup:cli -- ~/my-cli
+CFGD_VERSIONING=true task --taskfile ~/.clift/Taskfile.yaml setup:cli -- ~/my-cli
 ```
 
 This installs cfgd (if missing), configures the CLI as a cfgd module, and adds the `version:*` commands.
@@ -270,14 +270,14 @@ Consumers upgrade with `mycli version:upgrade` or pin with `mycli version:set --
 
 ## cfgd Integration
 
-[cfgd](https://github.com/...) is a declarative machine configuration tool. When available, task-cli uses it as a backend for dependency management, updates, and drift detection. **cfgd is never required.** Everything works without it.
+[cfgd](https://github.com/...) is a declarative machine configuration tool. When available, clift uses it as a backend for dependency management, updates, and drift detection. **cfgd is never required.** Everything works without it.
 
 ### Framework Module
 
-To manage the task-cli framework with cfgd, copy `cfgd/task-cli/module.yaml` into your cfgd config's `modules/` directory:
+To manage the clift framework with cfgd, copy `cfgd/clift/module.yaml` into your cfgd config's `modules/` directory:
 
 ```bash
-cp ~/.task-cli/cfgd/task-cli/module.yaml ~/dotfiles/modules/task-cli/module.yaml
+cp ~/.clift/cfgd/clift/module.yaml ~/dotfiles/modules/clift/module.yaml
 ```
 
 This module declares `go-task`, `jq`, `yq`, and `gum` as packages and clones the framework repo. Add it to your profile:
@@ -286,14 +286,14 @@ This module declares `go-task`, `jq`, `yq`, and `gum` as packages and clones the
 # profiles/work.yaml
 spec:
   modules:
-    - task-cli
+    - clift
 ```
 
 Then `cfgd apply` installs everything.
 
 ### CLI Modules
 
-When you bootstrap a CLI with `setup:cli`, a `module.yaml` is generated alongside it. This module depends on `task-cli`, declares your CLI's dependencies from `.task-cli.yaml`, and configures the shell alias. Copy it to your cfgd config to distribute the CLI to other machines or teammates.
+When you bootstrap a CLI with `setup:cli`, a `module.yaml` is generated alongside it. This module depends on `clift`, declares your CLI's dependencies from `.clift.yaml`, and configures the shell alias. Copy it to your cfgd config to distribute the CLI to other machines or teammates.
 
 ### Update Modes
 
@@ -301,8 +301,8 @@ When cfgd manages your framework installation, `mycli update` detects this and d
 
 | Pin style | module.yaml source | How to update | What you get |
 |---|---|---|---|
-| **Tag** | `...git@v0.2.0` | `cfgd module upgrade task-cli --ref v0.3.0` | Explicit version bumps |
-| **Latest** | (any) | `cfgd module upgrade task-cli` | Bumps lockfile to repo HEAD |
+| **Tag** | `...git@v0.2.0` | `cfgd module upgrade clift --ref v0.3.0` | Explicit version bumps |
+| **Latest** | (any) | `cfgd module upgrade clift` | Bumps lockfile to repo HEAD |
 
 Both styles lock to a specific commit SHA in `modules.lock`. Between upgrades, the version never changes — even if new commits are pushed upstream.
 
@@ -321,7 +321,7 @@ What happens on drift depends on your `driftPolicy` (`Auto`, `NotifyOnly`, or `P
 If cfgd is not installed, nothing changes:
 - `deps.sh` checks for `jq` and `gum` directly
 - `mycli update` uses `git pull` as before
-- `.task-cli.yaml` documents dependencies for humans to install manually
+- `.clift.yaml` documents dependencies for humans to install manually
 
 ## License
 

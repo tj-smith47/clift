@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# task-cli Logging System
+# clift Logging System
 # Provides: log_info, log_warn, log_error, log_success, log_debug, log_suggest, die
 # Reads LOG_THEME, LOG_COLOR, NO_COLOR, VERBOSE, QUIET from environment.
 # Themes: icons, icons-color, brackets, brackets-color, minimal, minimal-color, custom

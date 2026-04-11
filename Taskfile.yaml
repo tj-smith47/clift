@@ -13,8 +13,8 @@ vars:
 
 tasks:
   default:
-    desc: "task-cli Framework"
-    cmd: echo "task-cli Framework - run 'task setup:cli -- <dir>' to create a CLI"
+    desc: "clift Framework"
+    cmd: echo "clift Framework - run 'task setup:cli -- <dir>' to create a CLI"
 
   setup:cli:
     desc: "Bootstrap a new CLI in a target directory"
@@ -41,5 +41,5 @@ tasks:
       - sh: '[[ -n "{{.CLI_ARGS}}" ]]'
         msg: "Usage: task setup:versioning -- <cli-directory>"
       - sh: '[[ -f "{{._CLI_DIR}}/.env" ]]'
-        msg: "Not a task-cli project: {{._CLI_DIR}} (missing .env)"
+        msg: "Not a clift project: {{._CLI_DIR}} (missing .env)"
     cmd: "'{{.FRAMEWORK_DIR}}/lib/version/setup.sh' '{{._CLI_DIR}}' '{{.FRAMEWORK_DIR}}'"

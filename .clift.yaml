@@ -1,4 +1,4 @@
-name: task-cli
+name: clift
 version: 0.1.0
 description: Batteries-included framework for building custom CLIs with go-task
 min_task_version: "3.0.0"

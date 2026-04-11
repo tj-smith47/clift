@@ -89,7 +89,7 @@ load test_helper
 @test "setup adds version include to Taskfile" {
   # Create a minimal CLI
   mkdir -p "$TEST_DIR/setupcli"
-  cat > "$TEST_DIR/setupcli/.task-cli.yaml" <<'YAML'
+  cat > "$TEST_DIR/setupcli/.clift.yaml" <<'YAML'
 name: setupcli
 version: 0.1.0
 YAML
@@ -150,7 +150,7 @@ YAML
 @test "setup copies module to CFGD_CONFIG_DIR when set" {
   # Create CLI with module.yaml
   mkdir -p "$TEST_DIR/teamcli"
-  cat > "$TEST_DIR/teamcli/.task-cli.yaml" <<'YAML'
+  cat > "$TEST_DIR/teamcli/.clift.yaml" <<'YAML'
 name: teamcli
 version: 0.1.0
 YAML
@@ -193,7 +193,7 @@ YAML
 
 @test "setup adds module to cfgd profiles when CFGD_PROFILES set" {
   mkdir -p "$TEST_DIR/profilecli"
-  cat > "$TEST_DIR/profilecli/.task-cli.yaml" <<'YAML'
+  cat > "$TEST_DIR/profilecli/.clift.yaml" <<'YAML'
 name: profilecli
 version: 0.1.0
 YAML
@@ -242,7 +242,7 @@ YAML
 
 @test "setup fails with nonexistent CFGD_CONFIG_DIR" {
   mkdir -p "$TEST_DIR/badcli"
-  cat > "$TEST_DIR/badcli/.task-cli.yaml" <<'YAML'
+  cat > "$TEST_DIR/badcli/.clift.yaml" <<'YAML'
 name: badcli
 version: 0.1.0
 YAML

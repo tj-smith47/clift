@@ -8,7 +8,9 @@
 setup() {
   TEST_DIR="$(mktemp -d)"
   export HOME="$TEST_DIR"
-  export FRAMEWORK_DIR="/opt/repos/task-cli"
+  # FRAMEWORK_DIR derives from the test file location so tests work regardless
+  # of where the repo is checked out (main worktree, feature worktree, /tmp, etc.)
+  export FRAMEWORK_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
   export CLI_DIR="$TEST_DIR"
   export CLI_NAME="testcli"
   export CLI_VERSION="1.0.0"

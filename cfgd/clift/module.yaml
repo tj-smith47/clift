@@ -1,8 +1,8 @@
 apiVersion: cfgd.io/v1alpha1
 kind: Module
 metadata:
-  name: task-cli
-  description: task-cli framework for building custom CLIs with go-task
+  name: clift
+  description: clift framework for building custom CLIs with go-task
 
 spec:
   packages:
@@ -20,12 +20,12 @@ spec:
     - name: gum
 
   files:
-    - source: https://github.com/YOUR_ORG/task-cli.git@main
-      target: ~/.local/share/task-cli
+    - source: https://github.com/YOUR_ORG/clift.git@main
+      target: ~/.local/share/clift
 
   env:
-    - name: TASK_CLI_DIR
-      value: ~/.local/share/task-cli
+    - name: CLIFT_DIR
+      value: ~/.local/share/clift
 
   scripts:
     postApply:

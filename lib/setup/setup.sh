@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# task-cli Setup — bootstraps a new CLI in a target directory.
+# clift Setup — bootstraps a new CLI in a target directory.
 # Usage: setup.sh <TARGET_DIR> <FRAMEWORK_DIR> <CLI_NAME> <CLI_VERSION> <LOG_THEME>
 
 set -euo pipefail
@@ -79,13 +79,13 @@ else
     "$ENV_FILE"
 fi
 
-# Render .task-cli.yaml (only if not exists)
-METADATA="${TARGET}/.task-cli.yaml"
+# Render .clift.yaml (only if not exists)
+METADATA="${TARGET}/.clift.yaml"
 if [[ ! -f "$METADATA" ]]; then
   sed \
     -e "s|%%CLI_NAME%%|${CLI_NAME}|g" \
     -e "s|%%CLI_VERSION%%|${CLI_VERSION}|g" \
-    "${FRAMEWORK_DIR}/templates/cli/.task-cli.yaml.tmpl" > "$METADATA"
+    "${FRAMEWORK_DIR}/templates/cli/.clift.yaml.tmpl" > "$METADATA"
 fi
 
 # Render Taskfile.yaml (only if not exists)
@@ -126,7 +126,7 @@ esac
 # Add alias if not already present
 if ! grep -qF "alias ${CLI_NAME}=" "$RC_FILE" 2>/dev/null; then
   echo "" >> "$RC_FILE"
-  echo "# task-cli: ${CLI_NAME}" >> "$RC_FILE"
+  echo "# clift: ${CLI_NAME}" >> "$RC_FILE"
   echo "$ALIAS_LINE" >> "$RC_FILE"
 else
   # Update existing alias (use temp file to avoid sed delimiter issues with paths)
