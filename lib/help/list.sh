@@ -6,6 +6,9 @@
 
 set -euo pipefail
 
+# shellcheck source=render_flags.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/render_flags.sh"
+
 TASKFILE_PATH="${1:-}"
 
 if [[ -z "$TASKFILE_PATH" ]]; then
@@ -94,18 +97,8 @@ _render_global_flags() {
   local gf
   gf="$(yq -o=json '.vars.FLAGS // []' "$TASKFILE_PATH" 2>/dev/null)"
   if [[ -n "$gf" && "$gf" != "[]" && "$gf" != "null" ]]; then
-    local fl
-    fl="$(echo "$gf" | jq -r '
-      .[] |
-      (if .short then "-\(.short), " else "    " end) +
-      "--\(.name)" +
-      (if .type and .type != "bool" then "=<\(.type)>" else "" end) +
-      "\t" +
-      (.desc // "") +
-      (if .required == true then " (required)" elif .default then " (default: \(.default))" else "" end)
-    ')"
     echo "Global Flags:"
-    echo "$fl" | column -t -s $'\t' | sed 's/^/  /'
+    clift_render_flags "$gf"
     echo ""
   fi
 }

@@ -7,8 +7,6 @@
 if [[ -n "${_CLIFT_ERRORS_LOADED:-}" ]]; then return 0; fi
 _CLIFT_ERRORS_LOADED=1
 
-_CLIFT_ERRORS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
 # Levenshtein distance — inline for zero-fork did-you-mean.
 # Sets _CLIFT_DIST to the computed distance.
 _clift_levenshtein() {

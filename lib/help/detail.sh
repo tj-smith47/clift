@@ -4,6 +4,9 @@
 
 set -euo pipefail
 
+# shellcheck source=render_flags.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/render_flags.sh"
+
 COMMAND="${1:-}"
 TASKFILE_PATH="${2:-}"
 
@@ -76,28 +79,16 @@ if [[ -f "$FLAGS_JSON" ]]; then
       [.[] | select(.name as $n | [$globals[].name] | index($n))]
     ')"
 
-    render_flags() {
-      echo "$1" | jq -r '
-        .[] |
-        (if .short then "-\(.short), " else "    " end) +
-        "--\(.name)" +
-        (if .type and .type != "bool" then "=<\(.type)>" else "" end) +
-        "\t" +
-        (.desc // "") +
-        (if .required == true then " (required)" elif .default then " (default: \(.default))" else "" end)
-      ' | column -t -s $'\t' | sed 's/^/  /'
-    }
-
     if [[ "$(echo "$local_flags" | jq 'length')" -gt 0 ]]; then
       echo ""
       echo "Flags:"
-      render_flags "$local_flags"
+      clift_render_flags "$local_flags"
     fi
 
     if [[ "$(echo "$global_flags" | jq 'length')" -gt 0 ]]; then
       echo ""
       echo "Global Flags:"
-      render_flags "$global_flags"
+      clift_render_flags "$global_flags"
     fi
   fi
 fi
