@@ -242,3 +242,36 @@ JSON
   [ "$status" -ne 0 ]
   [[ "$output" == *"requires a value"* ]]
 }
+
+@test "short flag list accumulation: -t a -t b produces indexed vars" {
+  cat > "$TEST_DIR/flags.json" <<'JSON'
+[{"name":"tag","short":"t","type":"list"}]
+JSON
+  run bash -c "source '$FRAMEWORK_DIR/lib/flags/parser.sh'; clift_parse_args '$TEST_DIR/flags.json' -t a -t b; echo \"COUNT=\$CLIFT_FLAG_TAG_COUNT T1=\$CLIFT_FLAG_TAG_1 T2=\$CLIFT_FLAG_TAG_2\""
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"COUNT=2"* ]]
+  [[ "$output" == *"T1=a"* ]]
+  [[ "$output" == *"T2=b"* ]]
+}
+
+@test "short flag -t=a,b with list type splits on commas" {
+  cat > "$TEST_DIR/flags.json" <<'JSON'
+[{"name":"tag","short":"t","type":"list"}]
+JSON
+  run bash -c "source '$FRAMEWORK_DIR/lib/flags/parser.sh'; clift_parse_args '$TEST_DIR/flags.json' '-t=a,b'; echo \"COUNT=\$CLIFT_FLAG_TAG_COUNT T1=\$CLIFT_FLAG_TAG_1 T2=\$CLIFT_FLAG_TAG_2\""
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"COUNT=2"* ]]
+  [[ "$output" == *"T1=a"* ]]
+  [[ "$output" == *"T2=b"* ]]
+}
+
+@test "long flag --tag=a,b with list type splits on commas" {
+  cat > "$TEST_DIR/flags.json" <<'JSON'
+[{"name":"tag","short":"t","type":"list"}]
+JSON
+  run bash -c "source '$FRAMEWORK_DIR/lib/flags/parser.sh'; clift_parse_args '$TEST_DIR/flags.json' '--tag=a,b'; echo \"COUNT=\$CLIFT_FLAG_TAG_COUNT T1=\$CLIFT_FLAG_TAG_1 T2=\$CLIFT_FLAG_TAG_2\""
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"COUNT=2"* ]]
+  [[ "$output" == *"T1=a"* ]]
+  [[ "$output" == *"T2=b"* ]]
+}

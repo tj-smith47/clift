@@ -86,6 +86,44 @@ clift_parse_args() {
     fi
   }
 
+  # Set a parsed flag value. Handles int validation, list append with comma
+  # splitting, and plain string/bool export. Centralizes logic shared between
+  # long-flag, short-flag, and -x=value code paths.
+  # Args: tok name type value
+  _clift_set_flag_value() {
+    local tok="$1" name="$2" type="$3" value="$4"
+    local var
+    var="$(_clift_var_name "$name")"
+
+    case "$type" in
+      bool)
+        export "${var}=${value}"
+        ;;
+      int)
+        if [[ ! "$value" =~ ^-?[0-9]+$ ]]; then
+          clift_err_wrong_type "$tok" "an integer" "$value"
+          return 1
+        fi
+        export "${var}=${value}"
+        ;;
+      list)
+        _clift_list_clear_if_defaulted "$name"
+        # Spec §5.1 step 6: list values split on commas
+        IFS=',' read -ra _items <<< "$value"
+        local count_var="${var}_COUNT"
+        local current="${!count_var:-0}"
+        for _item in "${_items[@]}"; do
+          current=$((current+1))
+          export "${var}_${current}=${_item}"
+        done
+        export "${count_var}=${current}"
+        ;;
+      *)
+        export "${var}=${value}"
+        ;;
+    esac
+  }
+
   # Main parse loop
   local positionals=() seen_names=""
   while (( $# > 0 )); do
@@ -121,9 +159,9 @@ clift_parse_args() {
 
       if [[ "$type" == "bool" ]]; then
         if [[ "$has_inline" == true ]]; then
-          export "${var}=${inline_val}"
+          _clift_set_flag_value "$tok" "$name" "$type" "$inline_val"
         else
-          export "${var}=true"
+          _clift_set_flag_value "$tok" "$name" "$type" "true"
         fi
       else
         local value
@@ -137,23 +175,7 @@ clift_parse_args() {
           shift
           value="$1"
         fi
-
-        if [[ "$type" == "int" ]]; then
-          if [[ ! "$value" =~ ^-?[0-9]+$ ]]; then
-            clift_err_wrong_type "$tok" "an integer" "$value"
-            return 1
-          fi
-          export "${var}=${value}"
-        elif [[ "$type" == "list" ]]; then
-          _clift_list_clear_if_defaulted "$name"
-          local count_var="${var}_COUNT"
-          local current="${!count_var:-0}"
-          current=$((current+1))
-          export "${var}_${current}=${value}"
-          export "${count_var}=${current}"
-        else
-          export "${var}=${value}"
-        fi
+        _clift_set_flag_value "$tok" "$name" "$type" "$value" || return 1
       fi
 
       seen_names="$seen_names $name"
@@ -180,11 +202,7 @@ clift_parse_args() {
         type="$(jq -r '.type' <<< "$entry")"
         var="$(_clift_var_name "$name")"
 
-        if [[ "$type" == "int" ]] && [[ ! "$value" =~ ^-?[0-9]+$ ]]; then
-          clift_err_wrong_type "$tok" "an integer" "$value"
-          return 1
-        fi
-        export "${var}=${value}"
+        _clift_set_flag_value "$tok" "$name" "$type" "$value" || return 1
         seen_names="$seen_names $name"
         shift
         continue
@@ -242,7 +260,7 @@ clift_parse_args() {
       var="$(_clift_var_name "$name")"
 
       if [[ "$type" == "bool" ]]; then
-        export "${var}=true"
+        _clift_set_flag_value "$tok" "$name" "$type" "true"
         seen_names="$seen_names $name"
         shift
         continue
@@ -254,11 +272,7 @@ clift_parse_args() {
       fi
       shift
       local value="$1"
-      if [[ "$type" == "int" ]] && [[ ! "$value" =~ ^-?[0-9]+$ ]]; then
-        clift_err_wrong_type "-$short" "an integer" "$value"
-        return 1
-      fi
-      export "${var}=${value}"
+      _clift_set_flag_value "$tok" "$name" "$type" "$value" || return 1
       seen_names="$seen_names $name"
       shift
       continue
