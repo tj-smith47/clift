@@ -1,0 +1,3 @@
+version: '3'
+
+# Namespace registration for LSP discovery. No user-facing tasks.
