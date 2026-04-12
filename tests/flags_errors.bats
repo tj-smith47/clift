@@ -39,3 +39,19 @@ load test_helper
   [[ "$output" == *"subcommand must come before flags"* ]]
   [[ "$output" == *"mycli deploy prod -v"* ]]
 }
+
+@test "did-you-mean returns empty for >200 candidates" {
+  source "$FRAMEWORK_DIR/lib/flags/errors.sh"
+  local many=""
+  for i in $(seq 1 201); do many="$many cand$i"; done
+  run clift_did_you_mean "cand1" "$many"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "did-you-mean skips candidates with length difference >2" {
+  source "$FRAMEWORK_DIR/lib/flags/errors.sh"
+  run clift_did_you_mean "abc" "abcdef xy"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}

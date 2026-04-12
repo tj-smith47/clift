@@ -9,6 +9,40 @@ _CLIFT_ERRORS_LOADED=1
 
 _CLIFT_ERRORS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Levenshtein distance — inline for zero-fork did-you-mean.
+# Sets _CLIFT_DIST to the computed distance.
+_clift_levenshtein() {
+  local a="$1" b="$2"
+  local la=${#a} lb=${#b}
+
+  if (( la == 0 )); then _CLIFT_DIST=$lb; return 0; fi
+  if (( lb == 0 )); then _CLIFT_DIST=$la; return 0; fi
+
+  local -a row
+  for (( j=0; j<=lb; j++ )); do row[j]=$j; done
+
+  local prev prev_diag cost del ins sub min
+  for (( i=1; i<=la; i++ )); do
+    prev=$((i-1))
+    row[0]=$i
+    prev_diag=$prev
+    for (( j=1; j<=lb; j++ )); do
+      cost=1
+      [[ "${a:i-1:1}" == "${b:j-1:1}" ]] && cost=0
+      del=$(( row[j] + 1 ))
+      ins=$(( row[j-1] + 1 ))
+      sub=$(( prev_diag + cost ))
+      min=$del
+      (( ins < min )) && min=$ins
+      (( sub < min )) && min=$sub
+      prev_diag=${row[j]}
+      row[j]=$min
+    done
+  done
+
+  _CLIFT_DIST=${row[lb]}
+}
+
 # Suggest the single closest match from a space-separated candidate list,
 # only when Levenshtein distance <= 2. Prints the suggestion to stdout
 # (empty string if no suggestion).
@@ -17,11 +51,20 @@ clift_did_you_mean() {
   local candidates="$2"
   local best="" best_dist=3
 
+  # Spec §10.1: bail out for very large candidate sets
+  local count=0
+  for _ in $candidates; do count=$((count+1)); done
+  if (( count > 200 )); then return 0; fi
+
   for cand in $candidates; do
-    local dist
-    dist="$(bash "$_CLIFT_ERRORS_DIR/levenshtein.sh" "$target" "$cand")"
-    if (( dist < best_dist )); then
-      best_dist=$dist
+    # Spec §10.1: skip candidates whose length differs by more than 2
+    local diff=$(( ${#cand} - ${#target} ))
+    (( diff < 0 )) && diff=$(( -diff ))
+    (( diff > 2 )) && continue
+
+    _clift_levenshtein "$target" "$cand"
+    if (( _CLIFT_DIST < best_dist )); then
+      best_dist=$_CLIFT_DIST
       best="$cand"
     fi
   done
