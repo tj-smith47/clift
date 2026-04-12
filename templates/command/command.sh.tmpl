@@ -3,4 +3,13 @@ set -euo pipefail
 
 source "${FRAMEWORK_DIR}/lib/log/log.sh"
 
-log_info "Hello from %%CMD_NAME%% (task=${CLIFT_TASK})"
+# Flag values arrive as CLIFT_FLAG_<NAME> (uppercased, dashes→underscores).
+# Positional args: CLIFT_POS_1, CLIFT_POS_2, ... CLIFT_POS_COUNT.
+# Task name: CLIFT_TASK (e.g. "%%CMD_NAME%%" or "%%CMD_NAME%%:sub").
+#
+# Examples:
+#   if [[ "${CLIFT_FLAG_DRY_RUN:-}" == "true" ]]; then log_info "dry run"; fi
+#   target="${CLIFT_FLAG_TARGET:-staging}"
+#   file="${CLIFT_POS_1:?missing file argument}"
+
+log_info "Hello from %%CMD_NAME%% (task=${CLIFT_TASK:-%%CMD_NAME%%})"

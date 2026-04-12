@@ -22,7 +22,7 @@ if [[ "${CLIFT_MODE:-task}" == "standard" ]]; then
       cat <<'BASH_STD'
 _{{CLI_NAME}}_completions() {
   local cli_dir
-  cli_dir="$(dirname "$(command -v {{CLI_NAME}}")"
+  cli_dir="$(dirname "$(command -v {{CLI_NAME}})")"
   cli_dir="$(cd "$cli_dir/.." && pwd)"
   local tasks_json="$cli_dir/.clift/tasks.json"
   local flags_json="$cli_dir/.clift/flags.json"

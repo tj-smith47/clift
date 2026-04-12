@@ -75,3 +75,10 @@ teardown() {
   [[ "$output" == *".clift/tasks.json"* ]]
   [[ "$output" == *"complete -F"* ]]
 }
+
+@test "standard mode bash completion output is valid bash" {
+  CLIFT_MODE=standard run bash "$FRAMEWORK_DIR/lib/completion/completion.sh" bash
+  [ "$status" -eq 0 ]
+  # Verify the generated output is syntactically valid bash
+  echo "$output" | bash -n
+}

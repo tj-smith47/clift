@@ -84,7 +84,7 @@ if [[ -f "$FLAGS_JSON" ]]; then
         (if .type and .type != "bool" then "=<\(.type)>" else "" end) +
         "\t" +
         (.desc // "") +
-        (if .default then " (default: \(.default))" else "" end)
+        (if .required == true then " (required)" elif .default then " (default: \(.default))" else "" end)
       ' | column -t -s $'\t' | sed 's/^/  /'
     }
 

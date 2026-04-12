@@ -102,7 +102,7 @@ _render_global_flags() {
       (if .type and .type != "bool" then "=<\(.type)>" else "" end) +
       "\t" +
       (.desc // "") +
-      (if .default then " (default: \(.default))" else "" end)
+      (if .required == true then " (required)" elif .default then " (default: \(.default))" else "" end)
     ')"
     echo "Global Flags:"
     echo "$fl" | column -t -s $'\t' | sed 's/^/  /'

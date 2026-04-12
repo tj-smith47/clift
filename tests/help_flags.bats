@@ -70,3 +70,24 @@ teardown() {
   [[ "$output" == *"<string>"* ]]
   [[ "$output" == *"default: staging"* ]]
 }
+
+@test "detail.sh shows (required) suffix" {
+  # Add a required flag to the deploy command
+  cat > "$TEST_DIR/cmds/deploy/Taskfile.yaml" <<'YAML'
+version: '3'
+vars:
+  FLAGS:
+    - {name: target, short: t, type: string, default: staging, desc: "Target env"}
+tasks:
+  default:
+    desc: "Deploy something"
+    vars:
+      FLAGS:
+        - {name: force, short: f, type: bool, desc: "Skip confirm"}
+        - {name: env, short: e, type: string, required: true, desc: "Environment"}
+    cmd: echo deploy
+YAML
+  bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$TEST_DIR"
+  run bash "$FRAMEWORK_DIR/lib/help/detail.sh" "deploy" "$TEST_DIR/Taskfile.yaml"
+  [[ "$output" == *"(required)"* ]]
+}
