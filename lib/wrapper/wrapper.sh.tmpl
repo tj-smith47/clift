@@ -125,7 +125,7 @@ done
 # the argv from CLIFT_ARG_COUNT + CLIFT_ARG_1..N.
 export CLIFT_ARG_COUNT="${#remaining[@]}"
 k=0
-for arg in "${remaining[@]}"; do
+for arg in "${remaining[@]+"${remaining[@]}"}"; do
   k=$((k+1))
   export "CLIFT_ARG_$k=$arg"
 done
