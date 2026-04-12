@@ -30,7 +30,7 @@ tasks:
     preconditions:
       - sh: '[[ -n "{{.CLI_ARGS}}" ]]'
         msg: "Usage: task setup:cli -- <directory>"
-    cmd: "{{.FRAMEWORK_DIR}}/lib/setup/setup.sh '{{._CLI_DIR}}' '{{.FRAMEWORK_DIR}}' '{{._CLI_NAME}}' '{{._CLI_VERSION}}' '{{._LOG_THEME}}'"
+    cmd: "{{.FRAMEWORK_DIR}}/lib/setup/setup.sh '{{._CLI_DIR}}' '{{.FRAMEWORK_DIR}}' '{{._CLI_NAME}}' '{{._CLI_VERSION}}' '{{._LOG_THEME}}' '{{.CLIFT_MODE | default \"task\"}}'"
 
   setup:versioning:
     desc: "Add cfgd versioning to an existing CLI"

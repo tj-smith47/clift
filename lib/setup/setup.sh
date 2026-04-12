@@ -9,11 +9,17 @@ FRAMEWORK_DIR="${2:-}"
 CLI_NAME="${3:-}"
 CLI_VERSION="${4:-0.1.0}"
 LOG_THEME="${5:-icons-color}"
+CLIFT_MODE="${6:-task}"
 
 if [[ -z "$TARGET" || -z "$FRAMEWORK_DIR" ]]; then
   echo "error: setup.sh requires TARGET_DIR and FRAMEWORK_DIR" >&2
   exit 1
 fi
+
+case "$CLIFT_MODE" in
+  task|standard) ;;
+  *) echo "error: CLIFT_MODE must be 'task' or 'standard', got '$CLIFT_MODE'" >&2; exit 1 ;;
+esac
 
 source "${FRAMEWORK_DIR}/lib/log/log.sh"
 
@@ -34,7 +40,11 @@ fi
 RECONFIGURE=false
 if [[ -f "${TARGET}/.env" ]]; then
   log_warn "CLI already exists at ${TARGET}"
-  read -rp "Reconfigure? [y/N] " response </dev/tty
+  if [[ "${RECONFIGURE_YES:-}" == "1" ]]; then
+    response="y"
+  else
+    read -rp "Reconfigure? [y/N] " response </dev/tty
+  fi
   if [[ ! "$response" =~ ^[Yy] ]]; then
     log_info "Setup cancelled"
     exit 0
@@ -49,6 +59,8 @@ if [[ -f "${TARGET}/.env" ]]; then
   _current_name="$(_read_env_val CLI_NAME)"
   _current_version="$(_read_env_val CLI_VERSION)"
   _current_theme="$(_read_env_val LOG_THEME)"
+  _current_mode="$(_read_env_val CLIFT_MODE)"
+  CLIFT_MODE="${CLIFT_MODE:-${_current_mode:-task}}"
 
   # Re-prompt with current values as defaults
   THEMES="icons,icons-color,brackets,brackets-color,minimal,minimal-color,custom"
@@ -70,6 +82,7 @@ if [[ "$RECONFIGURE" == "true" ]] || [[ ! -f "$ENV_FILE" ]]; then
     -e "s|%%CLI_NAME%%|${CLI_NAME}|g" \
     -e "s|%%CLI_VERSION%%|${CLI_VERSION}|g" \
     -e "s|%%LOG_THEME%%|${LOG_THEME}|g" \
+    -e "s|%%CLIFT_MODE%%|${CLIFT_MODE}|g" \
     "${FRAMEWORK_DIR}/templates/cli/.env.tmpl" > "$ENV_FILE"
 else
   # First install but .env somehow exists without reconfigure — update paths only
@@ -112,34 +125,44 @@ if [[ ! -f "${CI_DIR}/ci.yml" ]]; then
   cp "${FRAMEWORK_DIR}/templates/cli/.github/workflows/ci.yml" "${CI_DIR}/ci.yml"
 fi
 
-# Configure shell alias (with proper quoting for paths with spaces)
-ALIAS_LINE="alias ${CLI_NAME}='FRAMEWORK_DIR=\"${FRAMEWORK_DIR}\" task --taskfile \"${TARGET}/Taskfile.yaml\"'"
+source "${FRAMEWORK_DIR}/lib/setup/rc.sh"
 
-# Detect shell config file
-SHELL_NAME="$(basename "${SHELL:-/bin/bash}")"
-case "$SHELL_NAME" in
-  zsh)  RC_FILE="$HOME/.zshrc" ;;
-  bash) RC_FILE="$HOME/.bashrc" ;;
-  *)    RC_FILE="$HOME/.${SHELL_NAME}rc" ;;
-esac
-
-# Add alias if not already present
-if ! grep -qF "alias ${CLI_NAME}=" "$RC_FILE" 2>/dev/null; then
-  echo "" >> "$RC_FILE"
-  echo "# clift: ${CLI_NAME}" >> "$RC_FILE"
-  echo "$ALIAS_LINE" >> "$RC_FILE"
+if [[ -n "${CLIFT_RC_FILE:-}" ]]; then
+  RC_FILE="$CLIFT_RC_FILE"
 else
-  # Update existing alias (use temp file to avoid sed delimiter issues with paths)
-  tmpfile=$(mktemp)
-  while IFS= read -r line; do
-    if [[ "$line" == "alias ${CLI_NAME}="* ]]; then
-      printf '%s\n' "$ALIAS_LINE"
-    else
-      printf '%s\n' "$line"
-    fi
-  done < "$RC_FILE" > "$tmpfile"
-  mv "$tmpfile" "$RC_FILE"
+  SHELL_NAME="$(basename "${SHELL:-/bin/bash}")"
+  case "$SHELL_NAME" in
+    zsh) RC_FILE="$HOME/.zshrc" ;;
+    bash) RC_FILE="$HOME/.bashrc" ;;
+    *) RC_FILE="$HOME/.${SHELL_NAME}rc" ;;
+  esac
 fi
+touch "$RC_FILE"
+
+# Scrub any existing entry (covers mode switches)
+clift_rc_scrub "$RC_FILE" "$CLI_NAME"
+if [[ "$CLIFT_MODE" == "task" ]] && [[ -f "${TARGET}/bin/${CLI_NAME}" ]]; then
+  rm -f "${TARGET}/bin/${CLI_NAME}"
+fi
+
+if [[ "$CLIFT_MODE" == "task" ]]; then
+  ALIAS_LINE="alias ${CLI_NAME}='FRAMEWORK_DIR=\"${FRAMEWORK_DIR}\" task --taskfile \"${TARGET}/Taskfile.yaml\"'"
+  clift_rc_write "$RC_FILE" "$CLI_NAME" "$ALIAS_LINE"
+else
+  mkdir -p "${TARGET}/bin"
+  sed \
+    -e "s|%%FRAMEWORK_DIR%%|${FRAMEWORK_DIR}|g" \
+    -e "s|%%CLI_DIR%%|${TARGET}|g" \
+    -e "s|%%CLI_NAME%%|${CLI_NAME}|g" \
+    -e "s|%%CLI_VERSION%%|${CLI_VERSION}|g" \
+    "${FRAMEWORK_DIR}/lib/wrapper/wrapper.sh.tmpl" > "${TARGET}/bin/${CLI_NAME}"
+  chmod +x "${TARGET}/bin/${CLI_NAME}"
+  PATH_LINE="export PATH=\"${TARGET}/bin:\$PATH\""
+  clift_rc_write "$RC_FILE" "$CLI_NAME" "$PATH_LINE"
+fi
+
+# Precompile cache (may fail for fresh CLIs with no user commands yet)
+FRAMEWORK_DIR="${FRAMEWORK_DIR}" bash "${FRAMEWORK_DIR}/lib/flags/compile.sh" "$TARGET" 2>/dev/null || true
 
 echo ""
 if [[ "$RECONFIGURE" == "true" ]]; then
