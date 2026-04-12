@@ -19,75 +19,93 @@ if [[ "${CLIFT_MODE:-task}" == "standard" ]]; then
 
   case "$FORMAT" in
     bash)
-      cat <<'BASH_STD'
-_{{CLI_NAME}}_completions() {
+      cat <<BASH_STD
+_${CLI_NAME}_completions() {
   local cli_dir
-  cli_dir="$(dirname "$(command -v {{CLI_NAME}})")"
-  cli_dir="$(cd "$cli_dir/.." && pwd)"
-  local tasks_json="$cli_dir/.clift/tasks.json"
-  local flags_json="$cli_dir/.clift/flags.json"
+  cli_dir="\$(dirname "\$(command -v ${CLI_NAME})")"
+  cli_dir="\$(cd "\$cli_dir/.." && pwd)"
+  local tasks_json="\$cli_dir/.clift/tasks.json"
+  local flags_json="\$cli_dir/.clift/flags.json"
 
-  local cur="${COMP_WORDS[$COMP_CWORD]}"
-  local prev="${COMP_WORDS[$COMP_CWORD-1]}"
+  local cur="\${COMP_WORDS[\$COMP_CWORD]}"
 
-  # Complete commands from .clift/tasks.json
-  if [[ "$cur" != -* ]]; then
-    local commands
-    commands="$(jq -r '
-      [.. | .tasks? // empty | .[]]
-      | .[]
-      | select(.name != "default")
-      | select(.name | startswith("_") | not)
-      | .name | gsub(":default$"; "")
-    ' "$tasks_json" 2>/dev/null | sort -u)"
-    COMPREPLY=($(compgen -W "$commands" -- "$cur"))
-    return
-  fi
+  # Build the command path from words 1..(CWORD-1)
+  local cmd_path=""
+  local i
+  for (( i=1; i<COMP_CWORD; i++ )); do
+    local w="\${COMP_WORDS[\$i]}"
+    [[ "\$w" == -* ]] && continue
+    if [[ -z "\$cmd_path" ]]; then
+      cmd_path="\$w"
+    else
+      cmd_path="\${cmd_path}:\${w}"
+    fi
+  done
 
-  # Complete flags from .clift/flags.json
-  if [[ -f "$flags_json" ]]; then
-    local cmd="${COMP_WORDS[1]:-}"
+  # Complete flags
+  if [[ "\$cur" == -* ]] && [[ -f "\$flags_json" ]]; then
+    local lookup="\${cmd_path}:default"
+    [[ -z "\$cmd_path" ]] && lookup=""
     local flags
-    flags="$(jq -r --arg cmd "$cmd:default" --arg cmd2 "$cmd" '
-      (.[$cmd] // .[$cmd2] // [])
+    flags="\$(jq -r --arg cmd "\$lookup" --arg cmd2 "\$cmd_path" '
+      (.[\$cmd] // .[\$cmd2] // [])
       | if type == "array" then
           .[] | "--\(.name)", (if .short then "-\(.short)" else empty end)
         else empty end
-    ' "$flags_json" 2>/dev/null)"
-    COMPREPLY=($(compgen -W "$flags" -- "$cur"))
+    ' "\$flags_json" 2>/dev/null)"
+    COMPREPLY=(\$(compgen -W "\$flags" -- "\$cur"))
+    return
   fi
+
+  # Complete subcommands: offer the next segment after cmd_path
+  local all_tasks
+  all_tasks="\$(jq -r '[.. | .tasks? // empty | .[]] | .[] | select(.name != "default") | select(.name | startswith("_") | not) | .name | gsub(":default\$"; "")' "\$tasks_json" 2>/dev/null)"
+  local prefix="\$cmd_path"
+  [[ -n "\$prefix" ]] && prefix="\${prefix}:"
+  local candidates
+  candidates="\$(echo "\$all_tasks" | grep "^\${prefix}" | sed "s|^\${prefix}||" | cut -d: -f1 | sort -u)"
+  COMPREPLY=(\$(compgen -W "\$candidates" -- "\$cur"))
 }
-complete -F _{{CLI_NAME}}_completions {{CLI_NAME}}
+complete -F _${CLI_NAME}_completions ${CLI_NAME}
 BASH_STD
-      # Replace placeholder with actual CLI name
       ;;
     zsh)
-      cat <<'ZSH_STD'
-#compdef {{CLI_NAME}}
-_{{CLI_NAME}}() {
+      cat <<ZSH_STD
+#compdef ${CLI_NAME}
+_${CLI_NAME}() {
   local cli_dir tasks_json flags_json
-  cli_dir="${commands[{{CLI_NAME}}]:h:h}"
-  tasks_json="$cli_dir/.clift/tasks.json"
-  flags_json="$cli_dir/.clift/flags.json"
+  cli_dir="\${commands[${CLI_NAME}]:h:h}"
+  tasks_json="\$cli_dir/.clift/tasks.json"
+  flags_json="\$cli_dir/.clift/flags.json"
 
-  local -a commands
-  commands=($(jq -r '
-    [.. | .tasks? // empty | .[]]
-    | .[]
-    | select(.name != "default")
-    | select(.name | startswith("_") | not)
-    | .name | gsub(":default$"; "")
-  ' "$tasks_json" 2>/dev/null | sort -u))
-  _describe 'command' commands
+  # Build colon-joined command path from words before cursor
+  local cmd_path=""
+  local i
+  for (( i=1; i<CURRENT; i++ )); do
+    local w="\${words[\$i]}"
+    [[ "\$w" == -* ]] && continue
+    if [[ -z "\$cmd_path" ]]; then
+      cmd_path="\$w"
+    else
+      cmd_path="\${cmd_path}:\${w}"
+    fi
+  done
+
+  local prefix="\$cmd_path"
+  [[ -n "\$prefix" ]] && prefix="\${prefix}:"
+
+  local -a subcmds
+  subcmds=(\$(jq -r '[.. | .tasks? // empty | .[]] | .[] | select(.name != "default") | select(.name | startswith("_") | not) | .name | gsub(":default\$"; "")' "\$tasks_json" 2>/dev/null | grep "^\${prefix}" | sed "s|^\${prefix}||" | cut -d: -f1 | sort -u))
+  _describe 'command' subcmds
 }
-compdef _{{CLI_NAME}} {{CLI_NAME}}
+compdef _${CLI_NAME} ${CLI_NAME}
 ZSH_STD
       ;;
     *)
       echo "error: unknown format: $FORMAT (use 'bash' or 'zsh')" >&2
       exit 1
       ;;
-  esac | sed "s/{{CLI_NAME}}/$CLI_NAME/g"
+  esac
   exit 0
 fi
 
