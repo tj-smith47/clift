@@ -1,0 +1,4 @@
+version: '3'
+
+# Namespace registration for LSP discovery and future flag-related tasks.
+# No user-facing tasks are defined yet.
