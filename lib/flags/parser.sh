@@ -109,6 +109,7 @@ clift_parse_args() {
       list)
         _clift_list_clear_if_defaulted "$name"
         # Spec §5.1 step 6: list values split on commas
+        local _items _item
         IFS=',' read -ra _items <<< "$value"
         local count_var="${var}_COUNT"
         local current="${!count_var:-0}"
@@ -159,9 +160,9 @@ clift_parse_args() {
 
       if [[ "$type" == "bool" ]]; then
         if [[ "$has_inline" == true ]]; then
-          _clift_set_flag_value "$tok" "$name" "$type" "$inline_val"
+          _clift_set_flag_value "$tok" "$name" "$type" "$inline_val" || return 1
         else
-          _clift_set_flag_value "$tok" "$name" "$type" "true"
+          _clift_set_flag_value "$tok" "$name" "$type" "true" || return 1
         fi
       else
         local value
