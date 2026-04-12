@@ -8,6 +8,14 @@ output:
 set: [errexit, pipefail]
 dotenv: ['.env']
 
+vars:
+  FLAGS:
+    - {name: help,     short: h, type: bool, desc: "Show help"}
+    - {name: verbose,  short: v, type: bool, desc: "Verbose output"}
+    - {name: quiet,    short: q, type: bool, desc: "Suppress info/success output"}
+    - {name: no-color,           type: bool, desc: "Disable color output"}
+    - {name: version,            type: bool, desc: "Show version"}
+
 includes:
   # Framework libs (underscore prefix = hidden from help)
   _help:

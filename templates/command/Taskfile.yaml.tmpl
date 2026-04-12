@@ -1,5 +1,8 @@
 version: '3'
 
+vars:
+  FLAGS: []
+
 tasks:
   default:
     desc: "%%CMD_DESC%%"
@@ -7,7 +10,9 @@ tasks:
       %%CMD_DESC%%
 
       Examples:
-        %%CLI_NAME%% %%CMD_NAME%% -- <args>
+        %%CLI_NAME%% %%CMD_NAME%% [flags]
+    vars:
+      FLAGS: []
     cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
 
   help:

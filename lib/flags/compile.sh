@@ -28,10 +28,13 @@ fi
 
 mkdir -p "$CACHE_DIR"
 
-# Step 1: validate all Taskfiles before emitting any cache. If any flag schema
-# is invalid, fail loudly and leave the cache untouched so a stale-but-valid
+# Step 1: validate all command Taskfiles before emitting any cache. If any flag
+# schema is invalid, fail loudly and leave the cache untouched so a stale-but-valid
 # build stays usable.
-bash "$SCRIPT_DIR/validate.sh" "$ROOT_TASKFILE"
+# NOTE: the root Taskfile is intentionally skipped — its vars.FLAGS defines
+# the framework globals (help, verbose, quiet, no-color, version) which are
+# themselves the reserved names. Validating them against the reserved-name
+# blocklist is circular.
 for tf in "$CLI_DIR"/cmds/*/Taskfile.yaml; do
   [[ -f "$tf" ]] || continue
   bash "$SCRIPT_DIR/validate.sh" "$tf"
