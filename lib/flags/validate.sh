@@ -15,8 +15,9 @@ if [[ -z "$TASKFILE" ]] || [[ ! -f "$TASKFILE" ]]; then
   exit 1
 fi
 
-# Reserved flag names (framework globals — cannot be redeclared)
-RESERVED_NAMES=(help verbose quiet no-color version)
+# Reserved flag names — derived from the canonical globals.json
+_GLOBALS_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/globals.json"
+mapfile -t RESERVED_NAMES < <(jq -r '.[].name' "$_GLOBALS_FILE")
 
 # Name regex: lowercase, starts with letter, dashes allowed, NO underscores
 NAME_RE='^[a-z][a-z0-9-]*$'

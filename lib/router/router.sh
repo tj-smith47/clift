@@ -103,13 +103,7 @@ fi
 # Inject framework-global flags (version, verbose, quiet, no-color, help) into
 # the task's flag table so the parser recognises them. These names are reserved
 # in the validator and cannot be user-declared, so there is no collision risk.
-FRAMEWORK_GLOBALS='[
-  {"name":"version","short":"V","type":"bool"},
-  {"name":"verbose","short":"v","type":"bool"},
-  {"name":"quiet","short":"q","type":"bool"},
-  {"name":"no-color","type":"bool"},
-  {"name":"help","short":"h","type":"bool"}
-]'
+FRAMEWORK_GLOBALS="$(cat "${FRAMEWORK_DIR}/lib/flags/globals.json")"
 merged_table="$(jq -n --argjson user "$task_entry" --argjson globals "$FRAMEWORK_GLOBALS" '$globals + $user')"
 
 tmp_table="$(mktemp)"
