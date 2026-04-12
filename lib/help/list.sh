@@ -115,7 +115,11 @@ if [[ -z "$all_entries" ]]; then
   echo "  (no commands found)"
   echo ""
   _render_global_flags
-  echo "Run '${CLI_NAME} <command>:help' for details on a command."
+  if [[ "${CLIFT_MODE:-task}" == "standard" ]]; then
+    echo "Run '${CLI_NAME} <command> --help' for details on a command."
+  else
+    echo "Run '${CLI_NAME} <command>:help' for details on a command."
+  fi
   exit 0
 fi
 
@@ -154,4 +158,8 @@ done <<< "$ordered_groups"
 
 _render_global_flags
 
-echo "Run '${CLI_NAME} <command>:help' for details on a command."
+if [[ "${CLIFT_MODE:-task}" == "standard" ]]; then
+  echo "Run '${CLI_NAME} <command> --help' for details on a command."
+else
+  echo "Run '${CLI_NAME} <command>:help' for details on a command."
+fi

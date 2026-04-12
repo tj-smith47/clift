@@ -10,6 +10,11 @@ CLI_NAME="%%CLI_NAME%%"
 CLI_VERSION="%%CLI_VERSION%%"
 export CLI_NAME CLI_VERSION
 
+if ! command -v jq &>/dev/null; then
+  echo "error: jq is required but not installed. See https://jqlang.github.io/jq/download/" >&2
+  exit 1
+fi
+
 # shellcheck source=/dev/null
 source "$FRAMEWORK_DIR/lib/flags/errors.sh"
 

@@ -177,8 +177,13 @@ else
   echo ""
   echo "Next steps:"
   echo "  source ${RC_FILE}"
-  echo "  ${CLI_NAME}"
-  echo "  ${CLI_NAME} new:cmd"
+  if [[ "$CLIFT_MODE" == "standard" ]]; then
+    echo "  ${CLI_NAME}"
+    echo "  ${CLI_NAME} new cmd"
+  else
+    echo "  ${CLI_NAME}"
+    echo "  ${CLI_NAME} new:cmd"
+  fi
 fi
 
 # Set up cfgd versioning if requested
