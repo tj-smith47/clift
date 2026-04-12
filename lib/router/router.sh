@@ -66,19 +66,10 @@ else
 fi
 
 # Step 4: Ensure cache is fresh (only when we have a root Taskfile)
-_clift_ensure_cache() {
-  local cache_dir="$CLI_DIR/.clift"
-  local checksum_file="$cache_dir/checksum"
-  local current
-  current="$(find "$CLI_DIR/Taskfile.yaml" "$CLI_DIR"/cmds/*/Taskfile.yaml -printf '%T@\n' 2>/dev/null \
-    | sort -n | tail -1 | cut -d. -f1)"
-  if [[ ! -f "$checksum_file" ]] || [[ "$(cat "$checksum_file")" != "$current" ]]; then
-    bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$CLI_DIR" >&2
-  fi
-}
+source "${FRAMEWORK_DIR}/lib/cache.sh"
 
 if [[ "$is_legacy_no_cache" != "true" ]]; then
-  _clift_ensure_cache
+  clift_ensure_cache "$CLI_DIR" "$FRAMEWORK_DIR"
 fi
 
 # Step 5: Load merged flag table for this task from precompiled cache

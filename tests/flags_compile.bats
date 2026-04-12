@@ -82,7 +82,8 @@ teardown() {
 
   # Recompute what the checksum *would* be without rebuilding
   local current_max
-  current_max="$(find "$CLI_DIR/Taskfile.yaml" "$CLI_DIR/cmds/"*/Taskfile.yaml -printf '%T@\n' | sort -n | tail -1 | cut -d. -f1)"
+  source "$FRAMEWORK_DIR/lib/cache.sh"
+  current_max="$(clift_max_mtime "$CLI_DIR/Taskfile.yaml" "$CLI_DIR/cmds/"*/Taskfile.yaml)"
   [ "$current_max" != "$checksum_before" ]
 }
 

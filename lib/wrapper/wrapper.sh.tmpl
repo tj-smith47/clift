@@ -13,24 +13,9 @@ export CLI_NAME CLI_VERSION
 # shellcheck source=/dev/null
 source "$FRAMEWORK_DIR/lib/flags/errors.sh"
 
-# Cache staleness check and auto-rebuild.
-# Checksum is the max mtime (integer seconds) across the root Taskfile and any
-# cmds/*/Taskfile.yaml. If it differs from the cached value (or the cache is
-# missing) we rebuild before dispatching.
-_clift_ensure_cache() {
-  local cache_dir="$CLI_DIR/.clift"
-  local checksum_file="$cache_dir/checksum"
-
-  local current
-  current="$(find "$CLI_DIR/Taskfile.yaml" "$CLI_DIR"/cmds/*/Taskfile.yaml -printf '%T@\n' 2>/dev/null \
-    | sort -n | tail -1 | cut -d. -f1)"
-
-  if [[ ! -f "$checksum_file" ]] || [[ "$(cat "$checksum_file")" != "$current" ]]; then
-    bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$CLI_DIR" >&2
-  fi
-}
-
-_clift_ensure_cache
+# shellcheck source=/dev/null
+source "$FRAMEWORK_DIR/lib/cache.sh"
+clift_ensure_cache "$CLI_DIR" "$FRAMEWORK_DIR"
 
 # Special top-level cases that short-circuit the dispatch walk.
 if (( $# == 0 )); then

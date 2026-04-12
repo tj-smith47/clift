@@ -199,10 +199,9 @@ done < <(jq -c '.[]' <<< "$all_tasks_json")
 
 mv "${CACHE_DIR}/flags.json.tmp" "${CACHE_DIR}/flags.json"
 
-# Step 6: write checksum (max mtime across all relevant Taskfiles, integer
-# seconds). Used by wrapper/router for staleness detection.
-find "$ROOT_TASKFILE" "$CLI_DIR"/cmds/*/Taskfile.yaml -printf '%T@\n' 2>/dev/null \
-  | sort -n | tail -1 | cut -d. -f1 > "${CACHE_DIR}/checksum.tmp"
+# Step 6: write checksum using portable mtime helper.
+source "$SCRIPT_DIR/../cache.sh"
+clift_max_mtime "$ROOT_TASKFILE" "$CLI_DIR"/cmds/*/Taskfile.yaml > "${CACHE_DIR}/checksum.tmp"
 mv "${CACHE_DIR}/checksum.tmp" "${CACHE_DIR}/checksum"
 
 exit 0
