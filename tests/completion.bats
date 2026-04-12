@@ -68,3 +68,10 @@ teardown() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"_testcli()"* ]]
 }
+
+@test "standard mode emits cache-based completion" {
+  CLIFT_MODE=standard run bash "$FRAMEWORK_DIR/lib/completion/completion.sh" bash
+  [ "$status" -eq 0 ]
+  [[ "$output" == *".clift/tasks.json"* ]]
+  [[ "$output" == *"complete -F"* ]]
+}
