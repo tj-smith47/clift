@@ -21,12 +21,6 @@ _clift_var_name() {
   echo "CLIFT_FLAG_${upper//-/_}"
 }
 
-# Look up a flag entry by name or short. Prints the JSON entry or empty.
-_clift_find_flag() {
-  local table_json="$1" key="$2" field="$3"
-  jq -c --arg k "$key" ".[] | select(.${field} == \$k)" <<< "$table_json" | head -1
-}
-
 clift_parse_args() {
   local flag_table_file="$1"; shift
 
@@ -41,6 +35,18 @@ clift_parse_args() {
   # Pre-compute known names for error suggestions
   local known_names
   known_names="$(jq -r '[.[].name] | join(" ")' <<< "$table_json")"
+
+  # Pre-build lookup tables: one jq call → pure-bash lookups in the hot loop.
+  # Maps: name→type, short→name.
+  # Uses \x01 (SOH) as field separator so empty short fields survive read splitting.
+  declare -A _ft_type _ft_name_by_short
+  local _ft_lines
+  _ft_lines="$(jq -r '.[] | [.name, (.short // ""), .type] | join("\u0001")' <<< "$table_json")"
+  while IFS=$'\x01' read -r _fn _fs _ftype; do
+    [[ -z "$_fn" ]] && continue
+    _ft_type["$_fn"]="$_ftype"
+    [[ -n "$_fs" ]] && _ft_name_by_short["$_fs"]="$_fn"
+  done <<< "$_ft_lines"
 
   # Apply defaults first. For list flags, we track "defaulted" state separately
   # so that when a user passes the first --list=value, we can wipe the default
@@ -146,15 +152,11 @@ clift_parse_args() {
         has_inline=true
       fi
 
-      local entry
-      entry="$(_clift_find_flag "$table_json" "$name" name)"
-      if [[ -z "$entry" ]]; then
+      if [[ -z "${_ft_type[$name]+x}" ]]; then
         clift_err_unknown_flag "$tok" "$known_names"
         return 1
       fi
-
-      local type
-      type="$(jq -r '.type' <<< "$entry")"
+      local type="${_ft_type[$name]}"
       local var
       var="$(_clift_var_name "$name")"
 
@@ -192,15 +194,13 @@ clift_parse_args() {
       if [[ "$rest" == ?=* ]]; then
         local short="${rest:0:1}"
         local value="${rest#*=}"
-        local entry
-        entry="$(_clift_find_flag "$table_json" "$short" short)"
-        if [[ -z "$entry" ]]; then
+        local name="${_ft_name_by_short[$short]:-}"
+        if [[ -z "$name" ]]; then
           clift_err_unknown_flag "$tok" "$known_names"
           return 1
         fi
-        local name type var
-        name="$(jq -r '.name' <<< "$entry")"
-        type="$(jq -r '.type' <<< "$entry")"
+        local type="${_ft_type[$name]}"
+        local var
         var="$(_clift_var_name "$name")"
 
         _clift_set_flag_value "$tok" "$name" "$type" "$value" || return 1
@@ -215,14 +215,12 @@ clift_parse_args() {
         local all_bool=true nonbool_letter=""
         for (( i=0; i<${#rest}; i++ )); do
           local c="${rest:$i:1}"
-          local e
-          e="$(_clift_find_flag "$table_json" "$c" short)"
-          if [[ -z "$e" ]]; then
+          local name_for_c="${_ft_name_by_short[$c]:-}"
+          if [[ -z "$name_for_c" ]]; then
             clift_err_unknown_flag "-$c" "$known_names"
             return 1
           fi
-          local t
-          t="$(jq -r '.type' <<< "$e")"
+          local t="${_ft_type[$name_for_c]}"
           if [[ "$t" != "bool" ]]; then
             all_bool=false
             nonbool_letter="$c"
@@ -236,9 +234,8 @@ clift_parse_args() {
         # All bool — set each
         for (( i=0; i<${#rest}; i++ )); do
           local c="${rest:$i:1}"
-          local e n v
-          e="$(_clift_find_flag "$table_json" "$c" short)"
-          n="$(jq -r '.name' <<< "$e")"
+          local n="${_ft_name_by_short[$c]}"
+          local v
           v="$(_clift_var_name "$n")"
           export "${v}=true"
           seen_names="$seen_names $n"
@@ -249,15 +246,13 @@ clift_parse_args() {
 
       # Single short with separate value
       local short="$rest"
-      local entry
-      entry="$(_clift_find_flag "$table_json" "$short" short)"
-      if [[ -z "$entry" ]]; then
+      local name="${_ft_name_by_short[$short]:-}"
+      if [[ -z "$name" ]]; then
         clift_err_unknown_flag "$tok" "$known_names"
         return 1
       fi
-      local name type var
-      name="$(jq -r '.name' <<< "$entry")"
-      type="$(jq -r '.type' <<< "$entry")"
+      local type="${_ft_type[$name]}"
+      local var
       var="$(_clift_var_name "$name")"
 
       if [[ "$type" == "bool" ]]; then
