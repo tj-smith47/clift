@@ -66,6 +66,9 @@ _is_task_prefix() {
 # Longest-prefix walk: consume non-flag tokens while each extended path is
 # still a prefix of some known task. Stop at the first flag or at the first
 # token that would make the path non-matching.
+# Note: "${arr[@]+"${arr[@]}"}" is used throughout this file (and router.sh)
+# instead of plain "${arr[@]}" to avoid "unbound variable" errors on bash < 4.4
+# when the array is empty and set -u is active.
 path=()
 i=1
 while (( i <= $# )); do
