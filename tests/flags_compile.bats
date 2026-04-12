@@ -1,0 +1,104 @@
+#!/usr/bin/env bats
+bats_require_minimum_version 1.5.0
+
+load test_helper
+
+setup() {
+  TEST_DIR="$(mktemp -d)"
+  export HOME="$TEST_DIR"
+  export FRAMEWORK_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
+  export CLI_DIR="$TEST_DIR"
+
+  # Minimal CLI layout with one command
+  # NOTE: cannot use `help`/`verbose` here — validate.sh reserves those as
+  # framework globals. Use neutral root-level flags (`trace`, `debug`) that
+  # still exercise the root -> command -> task merge path.
+  cat > "$TEST_DIR/Taskfile.yaml" <<'YAML'
+version: '3'
+dotenv: ['.env']
+vars:
+  FLAGS:
+    - {name: trace, short: t, type: bool, desc: "Trace mode"}
+    - {name: debug, short: d, type: bool, desc: "Debug mode"}
+includes:
+  greet:
+    taskfile: ./cmds/greet
+tasks:
+  default:
+    cmd: echo hello
+YAML
+  echo "CLI_NAME=testcli" > "$TEST_DIR/.env"
+
+  mkdir -p "$TEST_DIR/cmds/greet"
+  cat > "$TEST_DIR/cmds/greet/Taskfile.yaml" <<'YAML'
+version: '3'
+vars:
+  FLAGS:
+    - {name: name, short: n, type: string, default: world, desc: "Who to greet"}
+tasks:
+  default:
+    vars:
+      FLAGS:
+        - {name: loud, short: l, type: bool, desc: "Shout"}
+    cmd: "'{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
+YAML
+}
+
+teardown() {
+  rm -rf "$TEST_DIR"
+}
+
+@test "fresh compile creates all three cache files" {
+  run bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$CLI_DIR"
+  [ "$status" -eq 0 ]
+  [ -f "$CLI_DIR/.clift/tasks.json" ]
+  [ -f "$CLI_DIR/.clift/flags.json" ]
+  [ -f "$CLI_DIR/.clift/checksum" ]
+}
+
+@test "tasks.json contains greet namespace" {
+  bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$CLI_DIR"
+  run jq -r '[.. | .tasks? // empty | .[] | .name] | .[]' "$CLI_DIR/.clift/tasks.json"
+  [[ "$output" == *"greet"* ]]
+}
+
+@test "flags.json merges root + command + task for greet" {
+  bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$CLI_DIR"
+  run jq -r '(.["greet"] // .["greet:default"]) | map(.name) | .[]' "$CLI_DIR/.clift/flags.json"
+  [[ "$output" == *"trace"* ]]      # from root
+  [[ "$output" == *"debug"* ]]      # from root
+  [[ "$output" == *"name"* ]]       # from command
+  [[ "$output" == *"loud"* ]]       # from task
+}
+
+@test "checksum is max mtime across relevant taskfiles" {
+  bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$CLI_DIR"
+  local checksum_before
+  checksum_before="$(cat "$CLI_DIR/.clift/checksum")"
+
+  # Touch the command Taskfile to bump its mtime forward
+  sleep 1
+  touch "$CLI_DIR/cmds/greet/Taskfile.yaml"
+
+  # Recompute what the checksum *would* be without rebuilding
+  local current_max
+  current_max="$(find "$CLI_DIR/Taskfile.yaml" "$CLI_DIR/cmds/"*/Taskfile.yaml -printf '%T@\n' | sort -n | tail -1 | cut -d. -f1)"
+  [ "$current_max" != "$checksum_before" ]
+}
+
+@test "legacy command (no vars.FLAGS) marked legacy" {
+  mkdir -p "$CLI_DIR/cmds/old"
+  cat > "$CLI_DIR/cmds/old/Taskfile.yaml" <<'YAML'
+version: '3'
+tasks:
+  default:
+    cmd: echo old
+YAML
+  # Add the include in the root Taskfile
+  sed -i 's|includes:|includes:\n  old:\n    taskfile: ./cmds/old|' "$CLI_DIR/Taskfile.yaml"
+
+  run bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$CLI_DIR"
+  [ "$status" -eq 0 ]
+  run jq -r '.["old:default"].legacy // .["old"].legacy // false' "$CLI_DIR/.clift/flags.json"
+  [ "$output" = "true" ]
+}

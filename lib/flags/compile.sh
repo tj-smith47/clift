@@ -1,0 +1,205 @@
+#!/usr/bin/env bash
+# clift Precompilation Cache Builder
+# Usage: compile.sh <CLI_DIR>
+# Builds .clift/tasks.json, .clift/flags.json, .clift/checksum from Taskfiles.
+#
+# Called by:
+#   - setup:cli (fresh install)
+#   - new:cmd / new:subcmd (after scaffold writes)
+#   - wrapper.sh and router.sh when cache is stale
+
+set -euo pipefail
+
+CLI_DIR="${1:-}"
+
+if [[ -z "$CLI_DIR" ]] || [[ ! -d "$CLI_DIR" ]]; then
+  echo "error: compile.sh requires a valid CLI directory" >&2
+  exit 1
+fi
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CACHE_DIR="${CLI_DIR}/.clift"
+ROOT_TASKFILE="${CLI_DIR}/Taskfile.yaml"
+
+if [[ ! -f "$ROOT_TASKFILE" ]]; then
+  echo "error: no Taskfile.yaml found at ${CLI_DIR}" >&2
+  exit 1
+fi
+
+mkdir -p "$CACHE_DIR"
+
+# Step 1: validate all Taskfiles before emitting any cache. If any flag schema
+# is invalid, fail loudly and leave the cache untouched so a stale-but-valid
+# build stays usable.
+bash "$SCRIPT_DIR/validate.sh" "$ROOT_TASKFILE"
+for tf in "$CLI_DIR"/cmds/*/Taskfile.yaml; do
+  [[ -f "$tf" ]] || continue
+  bash "$SCRIPT_DIR/validate.sh" "$tf"
+done
+
+# Step 2: capture task list via `task --list-all --json --nested`.
+# Must run from within the CLI dir so Task resolves includes correctly.
+( cd "$CLI_DIR" && task --list-all --json --nested ) > "${CACHE_DIR}/tasks.json.tmp"
+mv "${CACHE_DIR}/tasks.json.tmp" "${CACHE_DIR}/tasks.json"
+
+# Step 3: flatten the nested task list.
+# `--list-all --json --nested` has TWO sources of tasks:
+#   - .tasks[]                         (root-level tasks)
+#   - .namespaces.<ns>.tasks[]         (namespaced/included tasks, recursive
+#                                       for deeper nesting)
+# The recursive descent `.. | .tasks? // empty` flattens any depth. Each task
+# object carries `.location.taskfile` pointing at its source file — the
+# authoritative way to know which command a task belongs to, without ever
+# string-parsing task names.
+all_tasks_json="$(jq '[.. | .tasks? // empty | .[]]' "${CACHE_DIR}/tasks.json")"
+
+# Step 4: batch-load each command Taskfile exactly ONCE.
+# At scale (100+ commands) we cannot afford per-task yq invocations. Read each
+# unique command Taskfile a single time and cache its FLAGS data in-memory as
+# a jq object keyed by absolute file path.
+
+# Skip framework-internal taskfiles — their location.taskfile lives under
+# FRAMEWORK_DIR. The `:-__nomatch__` fallback keeps us safe under `set -u`
+# when FRAMEWORK_DIR isn't exported (e.g. when running outside a wrapper).
+FW_DIR="${FRAMEWORK_DIR:-__nomatch__}"
+
+unique_taskfiles="$(jq -r --arg fw "$FW_DIR" '
+  [ .[]
+    | .location.taskfile
+    | select(startswith($fw) | not)
+  ] | unique | .[]
+' <<< "$all_tasks_json")"
+
+root_flags="$(yq -o=json '.vars.FLAGS // []' "$ROOT_TASKFILE")"
+
+# Build an in-memory map: taskfile path -> {toplevel: [...], tasks: {name: [...]}}
+declare -A taskfile_data
+while IFS= read -r tf; do
+  [[ -z "$tf" ]] && continue
+  # Single yq call per Taskfile extracts EVERYTHING we need:
+  #   - top-level vars.FLAGS
+  #   - per-task vars.FLAGS keyed by task name
+  tf_json="$(yq -o=json '
+    {
+      "toplevel": (.vars.FLAGS // null),
+      "tasks": (.tasks // {} | with_entries(.value = (.value.vars.FLAGS // null)))
+    }
+  ' "$tf")"
+  taskfile_data["$tf"]="$tf_json"
+done <<< "$unique_taskfiles"
+
+# Step 5: build flags.json in a single loop using the in-memory map.
+# For each task: look up its source Taskfile's cached data, determine opt-in,
+# merge layers, emit entry under the canonical task name AND every alias.
+
+echo '{}' > "${CACHE_DIR}/flags.json.tmp"
+
+while IFS= read -r task_row; do
+  [[ -z "$task_row" ]] && continue
+
+  task_name="$(jq -r '.name' <<< "$task_row")"
+  # Skip framework-internal tasks (underscore prefix).
+  [[ "$task_name" == _* ]] && continue
+  [[ "$task_name" == *:_* ]] && continue
+
+  source_tf="$(jq -r '.location.taskfile' <<< "$task_row")"
+
+  # Root-level helpers (version, default) that live in the root Taskfile —
+  # skip. They have no command directory and are not dispatched through the
+  # router; they're plain Task aliases.
+  if [[ "$source_tf" == "$ROOT_TASKFILE" ]]; then
+    continue
+  fi
+
+  # Framework library taskfile (lib/help/Taskfile.yaml, etc.) — skip.
+  if [[ "$source_tf" == "$FW_DIR"* ]]; then
+    continue
+  fi
+
+  tf_data="${taskfile_data[$source_tf]:-}"
+  if [[ -z "$tf_data" ]]; then
+    continue
+  fi
+
+  # The task name inside the command Taskfile is the portion after the
+  # namespace separator. For `greet:loud` from cmds/greet/Taskfile.yaml, the
+  # local task name is `loud`. For `greet:default`, it's `default`.
+  first_seg="${task_name%%:*}"
+  if [[ "$first_seg" == "$task_name" ]]; then
+    local_task="default"
+  else
+    local_task="${task_name#*:}"
+  fi
+
+  # Opt-in check: does this Taskfile have a top-level FLAGS or ANY per-task
+  # FLAGS entry? If neither, every task in the command is treated as legacy
+  # and the router falls back to the positional-argv path at runtime.
+  has_optin="$(jq -r '
+    (.toplevel != null) or
+    ([.tasks[]? | select(. != null)] | length > 0)
+  ' <<< "$tf_data")"
+
+  # Read aliases as NUL-separated list (safe for names with spaces/colons).
+  # The canonical task_name is always indexed; aliases are additional lookup
+  # keys so callers can use either `greet` or `greet:default`.
+  aliases=()
+  while IFS= read -r -d '' a; do
+    [[ -n "$a" ]] && aliases+=("$a")
+  done < <(jq -j '(.aliases // []) | .[] + "\u0000"' <<< "$task_row")
+
+  if [[ "$has_optin" != "true" ]]; then
+    # Legacy: index under task_name + aliases.
+    jq --arg k "$task_name" '.[$k] = {legacy: true}' "${CACHE_DIR}/flags.json.tmp" \
+      > "${CACHE_DIR}/flags.json.tmp2"
+    mv "${CACHE_DIR}/flags.json.tmp2" "${CACHE_DIR}/flags.json.tmp"
+    for alias in "${aliases[@]}"; do
+      jq --arg k "$alias" '.[$k] = {legacy: true}' "${CACHE_DIR}/flags.json.tmp" \
+        > "${CACHE_DIR}/flags.json.tmp2"
+      mv "${CACHE_DIR}/flags.json.tmp2" "${CACHE_DIR}/flags.json.tmp"
+    done
+    continue
+  fi
+
+  # Merge: root <- command-top <- task-level. Later layers win on name OR
+  # short collision (same-name OR same-short replaces the earlier entry).
+  merged="$(jq -n \
+    --argjson root "$root_flags" \
+    --argjson tfdata "$tf_data" \
+    --arg local_task "$local_task" \
+    '
+    def merge_in(acc; new):
+      if new == null or new == [] then acc
+      else
+        reduce new[] as $e (acc;
+          map(select(
+            .name != $e.name
+            and (((.short // "") == "") or ((.short // "") != ($e.short // "__none__")))
+          )) + [$e]
+        )
+      end;
+    merge_in(
+      merge_in($root; $tfdata.toplevel);
+      $tfdata.tasks[$local_task]
+    )
+    ')"
+
+  jq --arg k "$task_name" --argjson v "$merged" '.[$k] = $v' \
+    "${CACHE_DIR}/flags.json.tmp" > "${CACHE_DIR}/flags.json.tmp2"
+  mv "${CACHE_DIR}/flags.json.tmp2" "${CACHE_DIR}/flags.json.tmp"
+
+  for alias in "${aliases[@]}"; do
+    jq --arg k "$alias" --argjson v "$merged" '.[$k] = $v' \
+      "${CACHE_DIR}/flags.json.tmp" > "${CACHE_DIR}/flags.json.tmp2"
+    mv "${CACHE_DIR}/flags.json.tmp2" "${CACHE_DIR}/flags.json.tmp"
+  done
+done < <(jq -c '.[]' <<< "$all_tasks_json")
+
+mv "${CACHE_DIR}/flags.json.tmp" "${CACHE_DIR}/flags.json"
+
+# Step 6: write checksum (max mtime across all relevant Taskfiles, integer
+# seconds). Used by wrapper/router for staleness detection.
+find "$ROOT_TASKFILE" "$CLI_DIR"/cmds/*/Taskfile.yaml -printf '%T@\n' 2>/dev/null \
+  | sort -n | tail -1 | cut -d. -f1 > "${CACHE_DIR}/checksum.tmp"
+mv "${CACHE_DIR}/checksum.tmp" "${CACHE_DIR}/checksum"
+
+exit 0
