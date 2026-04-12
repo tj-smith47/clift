@@ -65,3 +65,20 @@ teardown() {
   [ "$status" -ne 0 ]
   [[ "$output" == *"CLIFT_MODE"* ]]
 }
+
+@test "reconfigure without explicit mode preserves existing mode" {
+  export RECONFIGURE_YES=1
+
+  # First install in standard mode
+  bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
+    "$TEST_DIR/mycli" "$FRAMEWORK_DIR" "mycli" "1.0.0" "minimal" "standard"
+
+  # Reconfigure without passing mode argument (only 5 args)
+  bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
+    "$TEST_DIR/mycli" "$FRAMEWORK_DIR" "mycli" "1.0.0" "minimal"
+
+  # Mode should still be standard, not silently reset to task
+  local saved_mode
+  saved_mode="$(grep '^CLIFT_MODE=' "$TEST_DIR/mycli/.env" | cut -d= -f2)"
+  [ "$saved_mode" = "standard" ]
+}

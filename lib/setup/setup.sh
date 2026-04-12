@@ -9,17 +9,12 @@ FRAMEWORK_DIR="${2:-}"
 CLI_NAME="${3:-}"
 CLI_VERSION="${4:-0.1.0}"
 LOG_THEME="${5:-icons-color}"
-CLIFT_MODE="${6:-task}"
+CLIFT_MODE="${6:-}"
 
 if [[ -z "$TARGET" || -z "$FRAMEWORK_DIR" ]]; then
   echo "error: setup.sh requires TARGET_DIR and FRAMEWORK_DIR" >&2
   exit 1
 fi
-
-case "$CLIFT_MODE" in
-  task|standard) ;;
-  *) echo "error: CLIFT_MODE must be 'task' or 'standard', got '$CLIFT_MODE'" >&2; exit 1 ;;
-esac
 
 source "${FRAMEWORK_DIR}/lib/log/log.sh"
 
@@ -60,7 +55,7 @@ if [[ -f "${TARGET}/.env" ]]; then
   _current_version="$(_read_env_val CLI_VERSION)"
   _current_theme="$(_read_env_val LOG_THEME)"
   _current_mode="$(_read_env_val CLIFT_MODE)"
-  CLIFT_MODE="${CLIFT_MODE:-${_current_mode:-task}}"
+  CLIFT_MODE="${CLIFT_MODE:-${_current_mode:-}}"
 
   # Re-prompt with current values as defaults
   THEMES="icons,icons-color,brackets,brackets-color,minimal,minimal-color,custom"
@@ -68,6 +63,14 @@ if [[ -f "${TARGET}/.env" ]]; then
   CLI_VERSION=$("${FRAMEWORK_DIR}/lib/prompt/prompt.sh" input 'Version' --var _RECONFIG_VERSION --default "${_current_version:-$CLI_VERSION}")
   LOG_THEME=$("${FRAMEWORK_DIR}/lib/prompt/prompt.sh" choose 'Log theme' --var _RECONFIG_THEME --options "$THEMES" --default "${_current_theme:-$LOG_THEME}")
 fi
+
+# Default mode: use arg if given, else saved value (from reconfigure), else task
+CLIFT_MODE="${CLIFT_MODE:-task}"
+
+case "$CLIFT_MODE" in
+  task|standard) ;;
+  *) echo "error: CLIFT_MODE must be 'task' or 'standard', got '$CLIFT_MODE'" >&2; exit 1 ;;
+esac
 
 # Create directory structure
 mkdir -p "${TARGET}/cmds"
