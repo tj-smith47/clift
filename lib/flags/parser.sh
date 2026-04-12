@@ -228,7 +228,7 @@ clift_parse_args() {
           fi
         done
         if [[ "$all_bool" != true ]]; then
-          clift_err_nonbool_in_cluster "$nonbool_letter" "$tok" "merged flag table"
+          clift_err_nonbool_in_cluster "$nonbool_letter" "$tok" "command flag '${_ft_name_by_short[$nonbool_letter]:-unknown}' (type: ${_ft_type[${_ft_name_by_short[$nonbool_letter]:-}]:-unknown})"
           return 1
         fi
         # All bool — set each

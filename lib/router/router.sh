@@ -148,10 +148,11 @@ script_path="${cmd_dir}/${script_name}.sh"
 # Fallback to single-script convention for pre-spec commands
 if [[ ! -f "$script_path" ]]; then
   script_path="${cmd_dir}/${first_seg}.sh"
+  log_debug "one-script-per-task path not found, falling back to legacy: ${script_path}"
 fi
 
 if [[ ! -f "$script_path" ]]; then
-  log_error "script not found for task '${TASK_NAME}'"
+  log_error "script not found for task '${TASK_NAME}' (looked at ${cmd_dir}/${script_name}.sh, ${cmd_dir}/${first_seg}.sh)"
   exit 1
 fi
 
