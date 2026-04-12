@@ -89,10 +89,32 @@ all_entries=$(echo "$json" | jq -r '
   )
 ')
 
+# Helper: render Global Flags section from root Taskfile vars.FLAGS
+_render_global_flags() {
+  local gf
+  gf="$(yq -o=json '.vars.FLAGS // []' "$TASKFILE_PATH" 2>/dev/null)"
+  if [[ -n "$gf" && "$gf" != "[]" && "$gf" != "null" ]]; then
+    local fl
+    fl="$(echo "$gf" | jq -r '
+      .[] |
+      (if .short then "-\(.short), " else "    " end) +
+      "--\(.name)" +
+      (if .type and .type != "bool" then "=<\(.type)>" else "" end) +
+      "\t" +
+      (.desc // "") +
+      (if .default then " (default: \(.default))" else "" end)
+    ')"
+    echo "Global Flags:"
+    echo "$fl" | column -t -s $'\t' | sed 's/^/  /'
+    echo ""
+  fi
+}
+
 if [[ -z "$all_entries" ]]; then
   echo ""
   echo "  (no commands found)"
   echo ""
+  _render_global_flags
   echo "Run '${CLI_NAME} <command>:help' for details on a command."
   exit 0
 fi
@@ -129,5 +151,7 @@ while IFS= read -r group; do
   echo "$group_entries" | column -t -s $'\t' | sed 's/^/  /'
   echo ""
 done <<< "$ordered_groups"
+
+_render_global_flags
 
 echo "Run '${CLI_NAME} <command>:help' for details on a command."

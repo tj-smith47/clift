@@ -51,3 +51,53 @@ if [[ -n "$summary" && "$summary" != "null" ]]; then
 else
   echo "No detailed help available for '${COMMAND}'."
 fi
+
+# Render flag sections from precompiled .clift/flags.json
+TASKFILE_DIR="$(dirname "$TASKFILE_PATH")"
+FLAGS_JSON="${TASKFILE_DIR}/.clift/flags.json"
+ROOT_TASKFILE="$TASKFILE_PATH"
+
+if [[ -f "$FLAGS_JSON" ]]; then
+  # Look up this command's merged flags. Try "cmd:default" first, then "cmd".
+  cmd_flags="$(jq -r --arg cmd "${COMMAND}:default" --arg cmd2 "$COMMAND" '
+    .[$cmd] // .[$cmd2] // null
+  ' "$FLAGS_JSON")"
+
+  if [[ -n "$cmd_flags" && "$cmd_flags" != "null" && "$cmd_flags" != '{"legacy":true}' ]]; then
+    # Load root globals to split local vs global flags
+    root_globals="$(yq -o=json '.vars.FLAGS // []' "$ROOT_TASKFILE" 2>/dev/null)"
+    root_names="$(echo "$root_globals" | jq -r '.[].name' 2>/dev/null)"
+
+    # Split into local flags (not in root globals) and global flags (in root globals)
+    local_flags="$(echo "$cmd_flags" | jq -r --argjson globals "$root_globals" '
+      [.[] | select(.name as $n | [$globals[].name] | index($n) | not)]
+    ')"
+    global_flags="$(echo "$cmd_flags" | jq -r --argjson globals "$root_globals" '
+      [.[] | select(.name as $n | [$globals[].name] | index($n))]
+    ')"
+
+    render_flags() {
+      echo "$1" | jq -r '
+        .[] |
+        (if .short then "-\(.short), " else "    " end) +
+        "--\(.name)" +
+        (if .type and .type != "bool" then "=<\(.type)>" else "" end) +
+        "\t" +
+        (.desc // "") +
+        (if .default then " (default: \(.default))" else "" end)
+      ' | column -t -s $'\t' | sed 's/^/  /'
+    }
+
+    if [[ "$(echo "$local_flags" | jq 'length')" -gt 0 ]]; then
+      echo ""
+      echo "Flags:"
+      render_flags "$local_flags"
+    fi
+
+    if [[ "$(echo "$global_flags" | jq 'length')" -gt 0 ]]; then
+      echo ""
+      echo "Global Flags:"
+      render_flags "$global_flags"
+    fi
+  fi
+fi
