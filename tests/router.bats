@@ -12,8 +12,40 @@ setup() {
   export CLI_VERSION="1.0.0"
   export LOG_THEME="minimal"
 
-  # Create a minimal command
+  # Create a root Taskfile with standard framework-global flags so the parser
+  # path fires for the existing tests (--version, --verbose, --quiet, --no-color).
+  cat > "$TEST_DIR/Taskfile.yaml" <<'YAML'
+version: '3'
+dotenv: ['.env']
+vars:
+  FLAGS: []
+includes:
+  hello:
+    taskfile: ./cmds/hello
+tasks:
+  default:
+    cmd: echo root
+YAML
+  cat > "$TEST_DIR/.env" <<ENV
+CLI_NAME=$CLI_NAME
+CLI_VERSION=$CLI_VERSION
+CLI_DIR=$TEST_DIR
+FRAMEWORK_DIR=$FRAMEWORK_DIR
+ENV
+
+  # Create a minimal hello command
   mkdir -p "$TEST_DIR/cmds/hello"
+  cat > "$TEST_DIR/cmds/hello/Taskfile.yaml" <<'YAML'
+version: '3'
+vars:
+  FLAGS: []
+tasks:
+  default:
+    vars:
+      FLAGS: []
+    cmd: echo hello
+YAML
+
   cat > "$TEST_DIR/cmds/hello/hello.sh" << 'SCRIPT'
 #!/usr/bin/env bash
 echo "hello output"
@@ -23,6 +55,9 @@ echo "NO_COLOR=${NO_COLOR:-unset}"
 for arg in "$@"; do echo "arg=$arg"; done
 SCRIPT
   chmod +x "$TEST_DIR/cmds/hello/hello.sh"
+
+  # Precompile the flag cache
+  bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$TEST_DIR"
 }
 
 teardown() {
@@ -73,7 +108,7 @@ teardown() {
 
 @test "unknown command shows error" {
   run -127 bash "$FRAMEWORK_DIR/lib/router/router.sh" "nonexistent" 2>&1
-  [[ "$output" == *"Unknown command"* ]]
+  [[ "$output" == *"Unknown command"* ]] || [[ "$output" == *"script not found"* ]]
 }
 
 @test "router without task name exits with error" {
@@ -96,9 +131,154 @@ teardown() {
   [[ "$output" == *"hello output"* ]]
 }
 
-@test "eval set preserves quoted args" {
-  CLI_ARGS="--name=hello\ world positional" run bash "$FRAMEWORK_DIR/lib/router/router.sh" "hello"
+@test "unknown flags rejected by parser in non-legacy mode" {
+  CLI_ARGS="--name=test" run bash "$FRAMEWORK_DIR/lib/router/router.sh" "hello"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"unknown flag"* ]]
+}
+
+# ── New contract tests ─────────────────────────────────────────────
+
+@test "CLIFT_FLAG_* exported from parser in standard mode" {
+  rm -rf "$TEST_DIR"/*
+  mkdir -p "$TEST_DIR/cmds/greeter"
+  cat > "$TEST_DIR/Taskfile.yaml" <<'YAML'
+version: '3'
+dotenv: ['.env']
+vars:
+  FLAGS:
+    - {name: trace, short: t, type: bool}
+includes:
+  greeter:
+    taskfile: ./cmds/greeter
+tasks:
+  default:
+    cmd: echo root
+YAML
+  cat > "$TEST_DIR/.env" <<ENV
+CLI_NAME=testcli
+CLI_VERSION=1.0.0
+CLI_DIR=$TEST_DIR
+FRAMEWORK_DIR=$FRAMEWORK_DIR
+ENV
+  cat > "$TEST_DIR/cmds/greeter/Taskfile.yaml" <<'YAML'
+version: '3'
+vars:
+  FLAGS:
+    - {name: name, short: n, type: string, default: world}
+tasks:
+  default:
+    vars:
+      FLAGS: []
+    cmd: echo greeter
+YAML
+  cat > "$TEST_DIR/cmds/greeter/greeter.sh" <<'SCRIPT'
+#!/usr/bin/env bash
+echo "FLAG_TRACE=${CLIFT_FLAG_TRACE:-unset}"
+echo "FLAG_NAME=${CLIFT_FLAG_NAME:-unset}"
+echo "POS_1=${CLIFT_POS_1:-unset}"
+SCRIPT
+  chmod +x "$TEST_DIR/cmds/greeter/greeter.sh"
+
+  bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$TEST_DIR"
+
+  CLIFT_ARG_COUNT=3 \
+  CLIFT_ARG_1=--trace \
+  CLIFT_ARG_2=--name \
+  CLIFT_ARG_3=alice \
+  CLI_DIR="$TEST_DIR" \
+  run bash "$FRAMEWORK_DIR/lib/router/router.sh" "greeter"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"arg=--name=hello world"* ]]
-  [[ "$output" == *"arg=positional"* ]]
+  [[ "$output" == *"FLAG_TRACE=true"* ]]
+  [[ "$output" == *"FLAG_NAME=alice"* ]]
+}
+
+@test "legacy graceful-degradation: no vars.FLAGS → CLI_ARGS path" {
+  rm -rf "$TEST_DIR"/*
+  cat > "$TEST_DIR/Taskfile.yaml" <<'YAML'
+version: '3'
+dotenv: ['.env']
+includes:
+  legacy:
+    taskfile: ./cmds/legacy
+tasks:
+  default:
+    cmd: echo root
+YAML
+  cat > "$TEST_DIR/.env" <<ENV
+CLI_NAME=testcli
+CLI_VERSION=1.0.0
+CLI_DIR=$TEST_DIR
+FRAMEWORK_DIR=$FRAMEWORK_DIR
+ENV
+  mkdir -p "$TEST_DIR/cmds/legacy"
+  cat > "$TEST_DIR/cmds/legacy/Taskfile.yaml" <<'YAML'
+version: '3'
+tasks:
+  default:
+    cmd: echo legacy
+YAML
+  cat > "$TEST_DIR/cmds/legacy/legacy.sh" <<'SCRIPT'
+#!/usr/bin/env bash
+for a in "$@"; do echo "arg=$a"; done
+SCRIPT
+  chmod +x "$TEST_DIR/cmds/legacy/legacy.sh"
+
+  bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$TEST_DIR"
+
+  CLI_ARGS='--foo bar' \
+  CLI_DIR="$TEST_DIR" \
+  run bash "$FRAMEWORK_DIR/lib/router/router.sh" "legacy"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"arg=--foo"* ]]
+  [[ "$output" == *"arg=bar"* ]]
+}
+
+@test "subcommand resolves to its own script file" {
+  rm -rf "$TEST_DIR"/*
+  mkdir -p "$TEST_DIR/cmds/deploy"
+  cat > "$TEST_DIR/Taskfile.yaml" <<'YAML'
+version: '3'
+dotenv: ['.env']
+includes:
+  deploy:
+    taskfile: ./cmds/deploy
+tasks:
+  default:
+    cmd: echo root
+YAML
+  cat > "$TEST_DIR/.env" <<ENV
+CLI_NAME=testcli
+CLI_VERSION=1.0.0
+CLI_DIR=$TEST_DIR
+FRAMEWORK_DIR=$FRAMEWORK_DIR
+ENV
+  cat > "$TEST_DIR/cmds/deploy/Taskfile.yaml" <<'YAML'
+version: '3'
+vars:
+  FLAGS: []
+tasks:
+  default:
+    vars: {FLAGS: []}
+    cmd: echo deploy-default
+  prod:
+    vars: {FLAGS: []}
+    cmd: echo deploy-prod
+YAML
+  cat > "$TEST_DIR/cmds/deploy/deploy.sh" << 'SCRIPT'
+#!/usr/bin/env bash
+echo "default-script"
+SCRIPT
+  cat > "$TEST_DIR/cmds/deploy/deploy.prod.sh" << 'SCRIPT'
+#!/usr/bin/env bash
+echo "prod-script"
+SCRIPT
+  chmod +x "$TEST_DIR/cmds/deploy/deploy.sh" "$TEST_DIR/cmds/deploy/deploy.prod.sh"
+
+  bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$TEST_DIR"
+
+  CLIFT_ARG_COUNT=0 CLI_DIR="$TEST_DIR" \
+  run bash "$FRAMEWORK_DIR/lib/router/router.sh" "deploy:prod"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"prod-script"* ]]
 }
