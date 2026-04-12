@@ -43,6 +43,18 @@ load test_helper
   [ -f "$CLI_DIR/.clift/checksum" ]
 }
 
+@test "clift_ensure_cache triggers rebuild when cache is stale" {
+  source "$FRAMEWORK_DIR/lib/cache.sh"
+  create_test_cli "greet"
+  clift_ensure_cache "$CLI_DIR" "$FRAMEWORK_DIR"
+  # Write a known-stale value so ensure_cache sees mismatch
+  echo "0" > "$CLI_DIR/.clift/checksum"
+  clift_ensure_cache "$CLI_DIR" "$FRAMEWORK_DIR"
+  local checksum_after
+  checksum_after="$(cat "$CLI_DIR/.clift/checksum")"
+  [ "$checksum_after" != "0" ]
+}
+
 @test "clift_ensure_cache skips rebuild when cache is fresh" {
   source "$FRAMEWORK_DIR/lib/cache.sh"
   create_test_cli "greet"

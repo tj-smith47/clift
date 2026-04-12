@@ -5,8 +5,6 @@
 if [[ -n "${_CLIFT_CACHE_LOADED:-}" ]]; then return 0; fi
 _CLIFT_CACHE_LOADED=1
 
-_CLIFT_CACHE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
 # Portable max-mtime across a list of files.
 # Works on Linux (GNU stat -c) and macOS (BSD stat -f).
 # Prints a single integer (epoch seconds) to stdout.
