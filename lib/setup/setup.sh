@@ -86,10 +86,12 @@ if [[ "$RECONFIGURE" == "true" ]] || [[ ! -f "$ENV_FILE" ]]; then
     "${FRAMEWORK_DIR}/templates/cli/.env.tmpl" > "$ENV_FILE"
 else
   # First install but .env somehow exists without reconfigure — update paths only
-  sed -i \
+  _tmp="$(mktemp)"
+  sed \
     -e "s|^FRAMEWORK_DIR=.*|FRAMEWORK_DIR=${FRAMEWORK_DIR}|" \
     -e "s|^CLI_DIR=.*|CLI_DIR=${TARGET}|" \
-    "$ENV_FILE"
+    "$ENV_FILE" > "$_tmp"
+  mv "$_tmp" "$ENV_FILE"
 fi
 
 # Render .clift.yaml (only if not exists)

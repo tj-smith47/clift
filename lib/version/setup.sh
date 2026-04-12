@@ -123,7 +123,9 @@ fi
 # --- Step 4: Enable versioning in .env ---
 env_file="${CLI_DIR}/.env"
 if [[ -f "$env_file" ]] && grep -q "^CFGD_VERSIONING=" "$env_file" 2>/dev/null; then
-  sed -i "s|^CFGD_VERSIONING=.*|CFGD_VERSIONING=true|" "$env_file"
+  _tmp="$(mktemp)"
+  sed "s|^CFGD_VERSIONING=.*|CFGD_VERSIONING=true|" "$env_file" > "$_tmp"
+  mv "$_tmp" "$env_file"
 else
   echo "CFGD_VERSIONING=true" >> "$env_file"
 fi
@@ -134,18 +136,26 @@ if [[ -f "$taskfile" ]]; then
   # Add version include if not already present
   if ! grep -q "taskfile:.*lib/version" "$taskfile" 2>/dev/null; then
     if grep -q "# User commands" "$taskfile"; then
-      sed -i "/# User commands/i\\
-  version:\\
-    taskfile: '{{.FRAMEWORK_DIR}}/lib/version'" "$taskfile"
+      _tmp="$(mktemp)"
+      awk '
+        /# User commands/ { print "  version:"; print "    taskfile: '"'"'{{.FRAMEWORK_DIR}}/lib/version'"'"'"; print; next }
+        { print }
+      ' "$taskfile" > "$_tmp"
+      mv "$_tmp" "$taskfile"
     else
-      sed -i "/^tasks:/i\\
-  version:\\
-    taskfile: '{{.FRAMEWORK_DIR}}/lib/version'" "$taskfile"
+      _tmp="$(mktemp)"
+      awk '
+        /^tasks:/ { print "  version:"; print "    taskfile: '"'"'{{.FRAMEWORK_DIR}}/lib/version'"'"'" }
+        { print }
+      ' "$taskfile" > "$_tmp"
+      mv "$_tmp" "$taskfile"
     fi
   fi
 
   # Remove simple version task (matches "  version:" with desc "Print version")
-  sed -i '/^  version:$/{N;/Print version/{N;d;}}' "$taskfile"
+  _tmp="$(mktemp)"
+  sed '/^  version:$/{N;/Print version/{N;d;}}' "$taskfile" > "$_tmp"
+  mv "$_tmp" "$taskfile"
 fi
 
 log_success "Versioning enabled for ${cli_name}"

@@ -22,7 +22,9 @@ NEW_THEME=$("${FRAMEWORK_DIR}/lib/prompt/prompt.sh" choose 'Select log theme' --
 
 # Update LOG_THEME in .env
 if grep -q "^LOG_THEME=" "$ENV_FILE"; then
-  sed -i "s|^LOG_THEME=.*|LOG_THEME=${NEW_THEME}|" "$ENV_FILE"
+  _tmp="$(mktemp)"
+  sed "s|^LOG_THEME=.*|LOG_THEME=${NEW_THEME}|" "$ENV_FILE" > "$_tmp"
+  mv "$_tmp" "$ENV_FILE"
 else
   echo "LOG_THEME=${NEW_THEME}" >> "$ENV_FILE"
 fi

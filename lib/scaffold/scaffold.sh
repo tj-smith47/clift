@@ -98,14 +98,20 @@ else
   if ! grep -q "^  ${CMD_NAME}:" "$ROOT_TASKFILE" 2>/dev/null; then
     # Find the "# User commands" comment and append after it
     if grep -q "# User commands" "$ROOT_TASKFILE"; then
-      sed -i "/# User commands.*/a\\
-  ${CMD_NAME}:\\
-    taskfile: ./cmds/${CMD_NAME}" "$ROOT_TASKFILE"
+      _tmp="$(mktemp)"
+      awk -v name="$CMD_NAME" '
+        /# User commands/ { print; print "  " name ":"; print "    taskfile: ./cmds/" name; next }
+        { print }
+      ' "$ROOT_TASKFILE" > "$_tmp"
+      mv "$_tmp" "$ROOT_TASKFILE"
     else
       # Fallback: append to includes section before tasks section
-      sed -i "/^tasks:/i\\
-  ${CMD_NAME}:\\
-    taskfile: ./cmds/${CMD_NAME}" "$ROOT_TASKFILE"
+      _tmp="$(mktemp)"
+      awk -v name="$CMD_NAME" '
+        /^tasks:/ { print "  " name ":"; print "    taskfile: ./cmds/" name }
+        { print }
+      ' "$ROOT_TASKFILE" > "$_tmp"
+      mv "$_tmp" "$ROOT_TASKFILE"
     fi
   fi
 
