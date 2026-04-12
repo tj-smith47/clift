@@ -3,16 +3,6 @@ bats_require_minimum_version 1.5.0
 
 load test_helper
 
-setup() {
-  TEST_DIR="$(mktemp -d)"
-  export HOME="$TEST_DIR"
-  export FRAMEWORK_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
-}
-
-teardown() {
-  rm -rf "$TEST_DIR"
-}
-
 @test "valid bool flag passes" {
   cat > "$TEST_DIR/Taskfile.yaml" <<'YAML'
 version: '3'
@@ -193,4 +183,118 @@ vars:
 YAML
   run bash "$FRAMEWORK_DIR/lib/flags/validate.sh" "$TEST_DIR/Taskfile.yaml"
   [ "$status" -eq 0 ]
+}
+
+@test "task name with colon validates per-task FLAGS" {
+  cat > "$TEST_DIR/Taskfile.yaml" <<'YAML'
+version: '3'
+tasks:
+  deploy:staging:
+    vars:
+      FLAGS:
+        - {name: bad_name, type: bool}
+    cmd: echo hi
+YAML
+  run bash "$FRAMEWORK_DIR/lib/flags/validate.sh" "$TEST_DIR/Taskfile.yaml"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"tasks.deploy:staging"* ]]
+  [[ "$output" == *"must match"* ]]
+}
+
+@test "task name with colon and valid FLAGS passes" {
+  cat > "$TEST_DIR/Taskfile.yaml" <<'YAML'
+version: '3'
+tasks:
+  deploy:prod:
+    vars:
+      FLAGS:
+        - {name: force, short: f, type: bool}
+    cmd: echo hi
+YAML
+  run bash "$FRAMEWORK_DIR/lib/flags/validate.sh" "$TEST_DIR/Taskfile.yaml"
+  [ "$status" -eq 0 ]
+}
+
+@test "flag name starting with arg- rejected" {
+  cat > "$TEST_DIR/Taskfile.yaml" <<'YAML'
+version: '3'
+vars:
+  FLAGS:
+    - {name: arg-count, type: int}
+YAML
+  run bash "$FRAMEWORK_DIR/lib/flags/validate.sh" "$TEST_DIR/Taskfile.yaml"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"reserved"* ]]
+}
+
+@test "flag name 'task' rejected" {
+  cat > "$TEST_DIR/Taskfile.yaml" <<'YAML'
+version: '3'
+vars:
+  FLAGS:
+    - {name: task, type: string}
+YAML
+  run bash "$FRAMEWORK_DIR/lib/flags/validate.sh" "$TEST_DIR/Taskfile.yaml"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"reserved"* ]]
+}
+
+@test "flag name 'mode' rejected" {
+  cat > "$TEST_DIR/Taskfile.yaml" <<'YAML'
+version: '3'
+vars:
+  FLAGS:
+    - {name: mode, type: string}
+YAML
+  run bash "$FRAMEWORK_DIR/lib/flags/validate.sh" "$TEST_DIR/Taskfile.yaml"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"reserved"* ]]
+}
+
+@test "bare-string FLAGS entry rejected cleanly (no jq stderr leak)" {
+  cat > "$TEST_DIR/Taskfile.yaml" <<'YAML'
+version: '3'
+vars:
+  FLAGS:
+    - force
+YAML
+  run bash "$FRAMEWORK_DIR/lib/flags/validate.sh" "$TEST_DIR/Taskfile.yaml"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"must be a map"* ]]
+  [[ "$output" != *"jq: error"* ]]
+}
+
+@test "malformed YAML surfaces real error, not silent pass" {
+  cat > "$TEST_DIR/Taskfile.yaml" <<'YAML'
+version: '3'
+vars:
+  FLAGS: [this is not valid yaml :
+YAML
+  run bash "$FRAMEWORK_DIR/lib/flags/validate.sh" "$TEST_DIR/Taskfile.yaml"
+  [ "$status" -ne 0 ]
+}
+
+@test "100 tasks with 2 flags each validates quickly" {
+  # Build a synthetic Taskfile with 100 tasks
+  {
+    echo "version: '3'"
+    echo "tasks:"
+    for i in $(seq 1 100); do
+      cat <<YAML
+  task${i}:
+    vars:
+      FLAGS:
+        - {name: opt-a-${i}, short: a, type: bool}
+        - {name: opt-b-${i}, short: b, type: string, default: "hi"}
+    cmd: echo ${i}
+YAML
+    done
+  } > "$TEST_DIR/Taskfile.yaml"
+
+  # Bound: 5 seconds (generous; target is <1s after fix)
+  local start=$SECONDS
+  run bash "$FRAMEWORK_DIR/lib/flags/validate.sh" "$TEST_DIR/Taskfile.yaml"
+  local elapsed=$((SECONDS - start))
+  [ "$status" -eq 0 ]
+  [ "$elapsed" -lt 5 ]
 }
