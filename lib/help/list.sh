@@ -22,10 +22,17 @@ CLI_VERSION="${CLI_VERSION:-0.0.0}"
 echo "${CLI_NAME} - version ${CLI_VERSION}"
 
 # Get task list as nested JSON (namespaces are separate from root tasks)
-json=$(task --list-all --json --nested --taskfile "$TASKFILE_PATH" 2>/dev/null) || {
-  echo "error: failed to read task list" >&2
-  exit 1
-}
+TASKFILE_DIR="$(dirname "$TASKFILE_PATH")"
+TASKS_CACHE="${TASKFILE_DIR}/.clift/tasks.json"
+
+if [[ -f "$TASKS_CACHE" ]]; then
+  json="$(cat "$TASKS_CACHE")"
+else
+  json=$(task --list-all --json --nested --taskfile "$TASKFILE_PATH" 2>/dev/null) || {
+    echo "error: failed to read task list" >&2
+    exit 1
+  }
+fi
 
 # Flatten nested JSON into group<TAB>display_name<TAB>desc lines.
 # Root tasks → "Commands" group (unless they have a vars.group override).
@@ -95,7 +102,7 @@ all_entries=$(echo "$json" | jq -r '
 # Helper: render Global Flags section from root Taskfile vars.FLAGS
 _render_global_flags() {
   local gf
-  gf="$(yq -o=json '.vars.FLAGS // []' "$TASKFILE_PATH" 2>/dev/null)"
+  gf="$(cat "${FRAMEWORK_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}/lib/flags/globals.json" 2>/dev/null || echo '[]')"
   if [[ -n "$gf" && "$gf" != "[]" && "$gf" != "null" ]]; then
     echo "Global Flags:"
     clift_render_flags "$gf"

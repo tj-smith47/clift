@@ -18,14 +18,21 @@ fi
 CLI_NAME="${CLI_NAME:-mycli}"
 
 # The task to look up is "<command>:default" or just "<command>"
-json=$(task --list-all --json --taskfile "$TASKFILE_PATH" 2>/dev/null) || {
-  echo "error: failed to read task list" >&2
-  exit 1
-}
+TASKFILE_DIR="$(dirname "$TASKFILE_PATH")"
+TASKS_CACHE="${TASKFILE_DIR}/.clift/tasks.json"
+
+if [[ -f "$TASKS_CACHE" ]]; then
+  json="$(cat "$TASKS_CACHE")"
+else
+  json=$(task --list-all --json --taskfile "$TASKFILE_PATH" 2>/dev/null) || {
+    echo "error: failed to read task list" >&2
+    exit 1
+  }
+fi
 
 # Try <command>:default first, then <command> (single jq pass)
 task_info=$(echo "$json" | jq -r --arg cmd "$COMMAND" '
-  [.tasks[] | select(.name == ($cmd + ":default") or .name == $cmd)]
+  [.. | .tasks? // empty | .[] | select(.name == ($cmd + ":default") or .name == $cmd)]
   | sort_by(if .name | endswith(":default") then 0 else 1 end)
   | first
   | {desc, summary, location: .location.taskfile}
@@ -56,9 +63,7 @@ else
 fi
 
 # Render flag sections from precompiled .clift/flags.json
-TASKFILE_DIR="$(dirname "$TASKFILE_PATH")"
 FLAGS_JSON="${TASKFILE_DIR}/.clift/flags.json"
-ROOT_TASKFILE="$TASKFILE_PATH"
 
 if [[ -f "$FLAGS_JSON" ]]; then
   # Look up this command's merged flags. Try "cmd:default" first, then "cmd".
@@ -68,7 +73,7 @@ if [[ -f "$FLAGS_JSON" ]]; then
 
   if [[ -n "$cmd_flags" && "$cmd_flags" != "null" && "$cmd_flags" != '{"legacy":true}' ]]; then
     # Load root globals to split local vs global flags
-    root_globals="$(yq -o=json '.vars.FLAGS // []' "$ROOT_TASKFILE" 2>/dev/null)"
+    root_globals="$(cat "${FRAMEWORK_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}/lib/flags/globals.json" 2>/dev/null || echo '[]')"
     root_names="$(echo "$root_globals" | jq -r '.[].name' 2>/dev/null)"
 
     # Split into local flags (not in root globals) and global flags (in root globals)
