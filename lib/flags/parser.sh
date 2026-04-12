@@ -52,15 +52,14 @@ clift_parse_args() {
   # and start fresh — a user-supplied value REPLACES a default, not appends to
   # it. This matches Cobra semantics.
   declare -A _list_was_defaulted
-  local defaults
-  defaults="$(jq -c '.[] | select(.default != null and .type != "bool") | {name, default, type}' <<< "$table_json")"
-  while IFS= read -r d; do
-    [[ -z "$d" ]] && continue
-    local dname dtype ddefault dvar
-    dname="$(jq -r '.name' <<< "$d")"
-    dtype="$(jq -r '.type' <<< "$d")"
-    ddefault="$(jq -r '.default' <<< "$d")"
-    _clift_var_name "$dname"; dvar="$_CLIFT_VAR"
+  local defaults_tsv
+  defaults_tsv="$(jq -r '
+    .[] | select(.default != null and .type != "bool")
+    | [.name, .type, (.default | tostring)] | join("\u0001")
+  ' <<< "$table_json")"
+  while IFS=$'\x01' read -r dname dtype ddefault; do
+    [[ -z "$dname" ]] && continue
+    _clift_var_name "$dname"; local dvar="$_CLIFT_VAR"
     if [[ "$dtype" == "list" ]]; then
       local idx=0
       IFS=',' read -ra items <<< "$ddefault"
@@ -73,7 +72,7 @@ clift_parse_args() {
     else
       export "${dvar}=${ddefault}"
     fi
-  done <<< "$defaults"
+  done <<< "$defaults_tsv"
 
   # Helper: clear a list flag's defaulted values before appending a user value.
   # Only fires once per list flag per parse.
