@@ -22,15 +22,17 @@ clift_rc_scrub() {
     $0 == s  { skip = 1; next }
     { print }
   ' "$rc_file" > "$tmp"
+  chmod "$(stat -c '%a' "$rc_file" 2>/dev/null || stat -f '%Lp' "$rc_file" 2>/dev/null || echo 644)" "$tmp"
   mv "$tmp" "$rc_file"
 }
 
 clift_rc_write() {
   local rc_file="$1" name="$2" entry="$3"
   clift_rc_scrub "$rc_file" "$name"
-  {
-    echo ""
-    _clift_rc_sentinel "$name"
-    printf '%s\n' "$entry"
-  } >> "$rc_file"
+  # Only add blank line if file doesn't already end with one
+  if [[ -s "$rc_file" ]] && [[ "$(tail -c1 "$rc_file")" != "" ]]; then
+    echo "" >> "$rc_file"
+  fi
+  _clift_rc_sentinel "$name" >> "$rc_file"
+  printf '%s\n' "$entry" >> "$rc_file"
 }
