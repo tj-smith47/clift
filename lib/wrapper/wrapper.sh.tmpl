@@ -26,7 +26,7 @@ case "$1" in
   --help|-h)
     exec task --taskfile "$CLI_DIR/Taskfile.yaml" _help:list
     ;;
-  --version)
+  --version|-V)
     echo "$CLI_NAME version $CLI_VERSION"
     exit 0
     ;;
@@ -73,7 +73,7 @@ while (( i <= $# )); do
   if [[ "$tok" == -* ]]; then
     break
   fi
-  candidate_path=("${path[@]}" "$tok")
+  candidate_path=("${path[@]+"${path[@]}"}" "$tok")
   joined="$(IFS=:; echo "${candidate_path[*]}")"
   if _is_task_prefix "$joined"; then
     path=("${candidate_path[@]}")
@@ -106,7 +106,7 @@ done
 # the matched path to a known task, the user likely meant that subcommand but
 # interrupted the command with a flag. Emit a "subcommand must come before
 # flags" error with a reordered suggestion.
-for r in "${remaining[@]}"; do
+for r in "${remaining[@]+"${remaining[@]}"}"; do
   [[ "$r" == -* ]] && continue
   would_be="${matched_task}:${r}"
   if _is_task_prefix "$would_be"; then

@@ -141,3 +141,9 @@ teardown() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"hello-ran"* ]]
 }
+
+@test "-V echoes version directly" {
+  run "$TEST_DIR/bin/$CLI_NAME" -V
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"$CLI_NAME version $CLI_VERSION"* ]]
+}
