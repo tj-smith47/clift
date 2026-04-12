@@ -22,6 +22,15 @@ mycli                    # see available commands
 mycli new:cmd            # create your first command
 ```
 
+## Modes
+
+clift CLIs support two argument-format styles, chosen at setup time:
+
+- **Task mode (default)** -- `mycli cmd:subcmd -- --flag value`
+- **Standard mode** -- `mycli cmd subcmd --flag value` (Cobra-like)
+
+Set `CLIFT_MODE=standard` before `task setup:cli` to opt in. See [docs/modes.md](docs/modes.md).
+
 ## Features
 
 - Cobra-style help system with grouped commands

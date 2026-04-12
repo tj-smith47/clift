@@ -41,6 +41,16 @@ Each `lib/` component has a `Taskfile.yaml` (for Task integration) and one or mo
 - One `Taskfile.yaml` per command directory (for LSP detection)
 - Shell scripts handle their own argument parsing and error output
 
+## The `.clift/` cache
+
+Generated CLIs use a precompiled cache at `.clift/` for runtime flag/task lookup. During framework development, if you change parser or compile logic, test CLIs need their cache rebuilt:
+
+```bash
+bash lib/flags/compile.sh /path/to/test-cli
+```
+
+See [docs/cache.md](docs/cache.md) for details.
+
 ## Submitting Changes
 
 1. Create a branch from `main`
