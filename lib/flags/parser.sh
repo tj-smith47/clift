@@ -16,9 +16,8 @@ source "$_CLIFT_PARSER_DIR/errors.sh"
 
 # Transform a flag long name ("dry-run") to its env var name ("CLIFT_FLAG_DRY_RUN")
 _clift_var_name() {
-  local name="$1"
-  local upper="${name^^}"
-  echo "CLIFT_FLAG_${upper//-/_}"
+  local upper="${1^^}"
+  _CLIFT_VAR="CLIFT_FLAG_${upper//-/_}"
 }
 
 clift_parse_args() {
@@ -61,7 +60,7 @@ clift_parse_args() {
     dname="$(jq -r '.name' <<< "$d")"
     dtype="$(jq -r '.type' <<< "$d")"
     ddefault="$(jq -r '.default' <<< "$d")"
-    dvar="$(_clift_var_name "$dname")"
+    _clift_var_name "$dname"; dvar="$_CLIFT_VAR"
     if [[ "$dtype" == "list" ]]; then
       local idx=0
       IFS=',' read -ra items <<< "$ddefault"
@@ -80,7 +79,7 @@ clift_parse_args() {
   # Only fires once per list flag per parse.
   _clift_list_clear_if_defaulted() {
     local name="$1" var
-    var="$(_clift_var_name "$name")"
+    _clift_var_name "$name"; var="$_CLIFT_VAR"
     if [[ -n "${_list_was_defaulted[$name]:-}" ]]; then
       local count_var="${var}_COUNT"
       local cnt="${!count_var:-0}"
@@ -99,7 +98,7 @@ clift_parse_args() {
   _clift_set_flag_value() {
     local tok="$1" name="$2" type="$3" value="$4"
     local var
-    var="$(_clift_var_name "$name")"
+    _clift_var_name "$name"; var="$_CLIFT_VAR"
 
     case "$type" in
       bool)
@@ -158,7 +157,7 @@ clift_parse_args() {
       fi
       local type="${_ft_type[$name]}"
       local var
-      var="$(_clift_var_name "$name")"
+      _clift_var_name "$name"; var="$_CLIFT_VAR"
 
       if [[ "$type" == "bool" ]]; then
         if [[ "$has_inline" == true ]]; then
@@ -201,7 +200,7 @@ clift_parse_args() {
         fi
         local type="${_ft_type[$name]}"
         local var
-        var="$(_clift_var_name "$name")"
+        _clift_var_name "$name"; var="$_CLIFT_VAR"
 
         _clift_set_flag_value "$tok" "$name" "$type" "$value" || return 1
         seen_names="$seen_names $name"
@@ -236,7 +235,7 @@ clift_parse_args() {
           local c="${rest:$i:1}"
           local n="${_ft_name_by_short[$c]}"
           local v
-          v="$(_clift_var_name "$n")"
+          _clift_var_name "$n"; v="$_CLIFT_VAR"
           export "${v}=true"
           seen_names="$seen_names $n"
         done
@@ -253,7 +252,7 @@ clift_parse_args() {
       fi
       local type="${_ft_type[$name]}"
       local var
-      var="$(_clift_var_name "$name")"
+      _clift_var_name "$name"; var="$_CLIFT_VAR"
 
       if [[ "$type" == "bool" ]]; then
         _clift_set_flag_value "$tok" "$name" "$type" "true"
