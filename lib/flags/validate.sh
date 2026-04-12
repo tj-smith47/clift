@@ -149,7 +149,7 @@ _validate_layer() {
     ] | @tsv
   ')"
 
-  local seen_names="" seen_shorts=""
+  local seen_names="" seen_shorts="" seen_envs=""
   while IFS=$'\t' read -r idx entry_type name short type required has_default default_val; do
     [[ -z "$idx" ]] && continue
     # Strip sentinel prefix from each field
@@ -178,6 +178,20 @@ _validate_layer() {
         return 1
       fi
       seen_shorts="$seen_shorts $short"
+    fi
+
+    # Env-var collision check: two different names could transform to the
+    # same CLIFT_FLAG_X if they differ only in dash placement. With the
+    # no-underscore rule this is extremely unlikely, but spec §4.4 #10
+    # requires the check as a safety net.
+    if [[ -n "$name" ]]; then
+      local env_form="${name^^}"
+      env_form="CLIFT_FLAG_${env_form//-/_}"
+      if [[ " $seen_envs " == *" $env_form "* ]]; then
+        echo "error: ${context}: flag name '$name' transforms to env var '$env_form' which collides with another flag" >&2
+        return 1
+      fi
+      seen_envs="$seen_envs $env_form"
     fi
   done <<< "$tsv"
 

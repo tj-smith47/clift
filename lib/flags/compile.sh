@@ -165,6 +165,26 @@ while IFS= read -r task_row; do
     )
     ')"
 
+  # Spec §4.3: warn if a command-level flag shadows a global short alias.
+  if [[ -n "${tf_data}" ]]; then
+    shadow_check="$(jq -r -n \
+      --argjson root "$root_flags" \
+      --argjson tfdata "$tf_data" \
+      --arg local_task "$local_task" \
+      --arg task_name "$task_name" \
+      '
+      ($root | map({(.short // ""): .name}) | add // {}) as $globals |
+      [($tfdata.toplevel // [])[], ($tfdata.tasks[$local_task] // [])[]] |
+      .[] |
+      select(.short != null and .short != "") |
+      select($globals[.short] != null) |
+      "warning: task \($task_name) shadows global short -\(.short) (was --\($globals[.short]), now --\(.name))"
+      ')"
+    if [[ -n "$shadow_check" ]]; then
+      echo "$shadow_check" >&2
+    fi
+  fi
+
   flags_entries="$(jq --arg k "$task_name" --argjson v "$merged" '.[$k] = $v' <<< "$flags_entries")"
   for alias in "${aliases[@]}"; do
     flags_entries="$(jq --arg k "$alias" --argjson v "$merged" '.[$k] = $v' <<< "$flags_entries")"

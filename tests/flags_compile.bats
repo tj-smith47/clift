@@ -87,6 +87,25 @@ teardown() {
   [ "$current_max" != "$checksum_before" ]
 }
 
+@test "compile emits warning when command shadows global short alias" {
+  # Command declares -t for --target, shadowing the root-level -t for --trace
+  cat > "$CLI_DIR/cmds/greet/Taskfile.yaml" <<'YAML'
+version: '3'
+vars:
+  FLAGS:
+    - {name: target, short: t, type: string}
+tasks:
+  default:
+    vars:
+      FLAGS: []
+    cmd: "'{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
+YAML
+  run bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$CLI_DIR"
+  [ "$status" -eq 0 ]
+  # bats captures both stdout and stderr into $output
+  [[ "$output" == *"shadows"* ]] || [[ "$output" == *"warning"* ]]
+}
+
 @test "legacy command (no vars.FLAGS) marked legacy" {
   mkdir -p "$CLI_DIR/cmds/old"
   cat > "$CLI_DIR/cmds/old/Taskfile.yaml" <<'YAML'

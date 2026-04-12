@@ -274,6 +274,21 @@ YAML
   [ "$status" -ne 0 ]
 }
 
+@test "env-var collision check passes for non-colliding flags" {
+  # The no-underscore name regex makes real collisions impossible today,
+  # but the check exists as a safety net per spec §4.4 check 10.
+  cat > "$TEST_DIR/Taskfile.yaml" <<'YAML'
+version: '3'
+vars:
+  FLAGS:
+    - {name: dry-run, type: bool}
+    - {name: force, type: bool}
+YAML
+  run bash "$FRAMEWORK_DIR/lib/flags/validate.sh" "$TEST_DIR/Taskfile.yaml"
+  [ "$status" -eq 0 ]
+}
+
+
 @test "100 tasks with 2 flags each validates quickly" {
   # Build a synthetic Taskfile with 100 tasks
   {
