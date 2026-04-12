@@ -16,8 +16,15 @@ fi
 
 source "${FRAMEWORK_DIR}/lib/log/log.sh"
 
+# Validate command name: lowercase, starts with letter, colons for subcommands
+NAME_RE='^[a-z][a-z0-9-]*(:[a-z][a-z0-9-]*)*$'
+if [[ ! "$CMD_NAME" =~ $NAME_RE ]]; then
+  log_error "Invalid: command names must match ${NAME_RE} (lowercase, start with letter, colons for sub)"
+  exit 1
+fi
+
 # Determine if this is a top-level command or subcommand
-# "greet" → top-level, "greet:loud" → subcommand of greet
+# "greet" -> top-level, "greet:loud" -> subcommand of greet
 TOP_CMD="${CMD_NAME%%:*}"
 SUB_CMD="${CMD_NAME#*:}"
 IS_SUBCOMMAND=false
@@ -27,14 +34,22 @@ fi
 
 CMD_DIR="${CLI_DIR}/cmds/${TOP_CMD}"
 TASKFILE_PATH="${CMD_DIR}/Taskfile.yaml"
-SCRIPT_PATH="${CMD_DIR}/${TOP_CMD}.sh"
 
 if [[ "$IS_SUBCOMMAND" == "true" ]]; then
-  # Subcommand: append task to existing Taskfile
+  # Subcommand: append task to existing Taskfile, create separate script
   if [[ ! -f "$TASKFILE_PATH" ]]; then
     log_error "Top-level command '${TOP_CMD}' doesn't exist. Create it first: new:cmd NAME=${TOP_CMD}"
     exit 1
   fi
+
+  # One-script-per-task: cmds/<cmd>/<cmd>.<sub>.sh
+  SCRIPT_PATH="${CMD_DIR}/${TOP_CMD}.${SUB_CMD}.sh"
+
+  # Render the subcommand script from template
+  sed \
+    -e "s|%%CMD_NAME%%|${CMD_NAME}|g" \
+    "${FRAMEWORK_DIR}/templates/command/command.sh.tmpl" > "$SCRIPT_PATH"
+  chmod +x "$SCRIPT_PATH"
 
   # Append the subcommand task to the existing Taskfile
   cat >> "$TASKFILE_PATH" <<YAML
@@ -45,7 +60,9 @@ if [[ "$IS_SUBCOMMAND" == "true" ]]; then
       ${CMD_DESC}
 
       Examples:
-        {{.CLI_NAME}} ${CMD_NAME} -- <args>
+        {{.CLI_NAME}} ${CMD_NAME} [flags]
+    vars:
+      FLAGS: []
     cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
 YAML
 
@@ -60,6 +77,8 @@ else
   fi
 
   mkdir -p "$CMD_DIR"
+
+  SCRIPT_PATH="${CMD_DIR}/${TOP_CMD}.sh"
 
   # Render Taskfile from template
   sed \
@@ -93,3 +112,15 @@ else
   log_success "Created command '${CMD_NAME}' at ${CMD_DIR}"
   log_info "Edit ${SCRIPT_PATH} to add your logic"
 fi
+
+# Validate the command Taskfile
+bash "${FRAMEWORK_DIR}/lib/flags/validate.sh" "$TASKFILE_PATH" || {
+  log_error "Generated Taskfile failed validation"
+  exit 1
+}
+
+# Refresh the precompilation cache
+FRAMEWORK_DIR="${FRAMEWORK_DIR}" bash "${FRAMEWORK_DIR}/lib/flags/compile.sh" "$CLI_DIR" || {
+  log_error "Cache rebuild failed"
+  exit 1
+}
