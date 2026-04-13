@@ -87,7 +87,7 @@ _is_task_prefix() {
 }
 
 # Join arguments with ':' without spawning a subshell.
-# Sets _JOINED instead of printing, so the caller reads $JOINED.
+# Sets _JOINED instead of printing, so the caller reads $_JOINED.
 _join_colon() {
   local IFS=':'
   _JOINED="${*}"

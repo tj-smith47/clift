@@ -151,7 +151,7 @@ while IFS=$'\x01' read -r -d '' task_name source_tf aliases_json; do
 
   if [[ "$has_optin" != "true" ]]; then
     printf '%s\t%s\n' "$task_name" '{"legacy":true}' >> "$entries_tmpfile"
-    for alias in "${aliases[@]}"; do
+    for alias in "${aliases[@]+"${aliases[@]}"}"; do
       printf '%s\t%s\n' "$alias" '{"legacy":true}' >> "$entries_tmpfile"
     done
     continue
@@ -199,7 +199,7 @@ while IFS=$'\x01' read -r -d '' task_name source_tf aliases_json; do
   fi
 
   printf '%s\t%s\n' "$task_name" "$merged" >> "$entries_tmpfile"
-  for alias in "${aliases[@]}"; do
+  for alias in "${aliases[@]+"${aliases[@]}"}"; do
     printf '%s\t%s\n' "$alias" "$merged" >> "$entries_tmpfile"
   done
 done < <(jq -j '
