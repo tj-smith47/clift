@@ -43,9 +43,9 @@ if [[ -z "$task_info" || "$task_info" == "null" ]]; then
   exit 1
 fi
 
-desc=$(echo "$task_info" | jq -r '.desc // ""')
-summary=$(echo "$task_info" | jq -r '.summary // ""')
-location=$(echo "$task_info" | jq -r '.location // ""')
+{
+  IFS=$'\t' read -r desc summary location
+} < <(echo "$task_info" | jq -r '[(.desc // ""), (.summary // ""), (.location // "")] | @tsv')
 
 # Apply colon-to-space display heuristic for user commands (those under /cmds/)
 display_name="$COMMAND"
@@ -74,23 +74,21 @@ if [[ -f "$FLAGS_JSON" ]]; then
   if [[ -n "$cmd_flags" && "$cmd_flags" != "null" && "$cmd_flags" != '{"legacy":true}' ]]; then
     # Load root globals to split local vs global flags
     root_globals="$(cat "${FRAMEWORK_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}/lib/flags/globals.json" 2>/dev/null || echo '[]')"
-    root_names="$(echo "$root_globals" | jq -r '.[].name' 2>/dev/null)"
-
     # Split into local flags (not in root globals) and global flags (in root globals)
-    local_flags="$(echo "$cmd_flags" | jq -r --argjson globals "$root_globals" '
-      [.[] | select(.name as $n | [$globals[].name] | index($n) | not)]
-    ')"
-    global_flags="$(echo "$cmd_flags" | jq -r --argjson globals "$root_globals" '
-      [.[] | select(.name as $n | [$globals[].name] | index($n))]
-    ')"
+    {
+      IFS=$'\t' read -r local_flags global_flags
+    } < <(echo "$cmd_flags" | jq -r --argjson globals "$root_globals" '
+      ([.[] | select(.name as $n | [$globals[].name] | index($n) | not)] | tojson) + "\t" +
+      ([.[] | select(.name as $n | [$globals[].name] | index($n))] | tojson)
+    ')
 
-    if [[ "$(echo "$local_flags" | jq 'length')" -gt 0 ]]; then
+    if [[ "$local_flags" != "[]" ]]; then
       echo ""
       echo "Flags:"
       clift_render_flags "$local_flags"
     fi
 
-    if [[ "$(echo "$global_flags" | jq 'length')" -gt 0 ]]; then
+    if [[ "$global_flags" != "[]" ]]; then
       echo ""
       echo "Global Flags:"
       clift_render_flags "$global_flags"
