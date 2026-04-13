@@ -65,12 +65,12 @@ clift is a framework repo that provides shared libraries (`lib/`) for help, logg
 
 ```
 ~/.config/mycli/
-  .env               # CLI_NAME, CLI_VERSION, FRAMEWORK_DIR, LOG_THEME
-  Taskfile.yaml       # includes framework libs + your commands
+  .env                       # CLI_NAME, CLI_VERSION, FRAMEWORK_DIR, LOG_THEME
+  Taskfile.yaml              # includes framework libs + your commands
   cmds/
     greet/
-      Taskfile.yaml   # task definition (desc, routing, help)
-      greet.{sh,py,go,rs,...}  # your command logic, any language
+      Taskfile.yaml          # task definition (desc, routing, help)
+      greet.{sh,py,go,rs,…}  # your command logic, any language
 ```
 
 In task mode, your CLI is a shell alias that invokes `task`. In standard mode, it's a wrapper script on PATH that provides Cobra-style `mycli cmd subcmd --flag` UX. The framework's router handles global flags, logging setup, and dispatching to your command scripts. Commands are Taskfile includes -- each command lives in `cmds/<name>/` with its own Taskfile and script.
