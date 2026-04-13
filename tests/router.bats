@@ -234,6 +234,35 @@ SCRIPT
   [[ "$output" == *"arg=bar"* ]]
 }
 
+@test "--help flag dispatches to detail.sh" {
+  CLI_ARGS="--help" run bash "$FRAMEWORK_DIR/lib/router/router.sh" "hello"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"testcli"* ]]
+  [[ "$output" == *"hello"* ]]
+}
+
+@test "CLIFT_ARG_COUNT standard mode args are passed to parser" {
+  CLIFT_ARG_COUNT=1 \
+  CLIFT_ARG_1="--verbose" \
+  run bash "$FRAMEWORK_DIR/lib/router/router.sh" "hello"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"VERBOSE=true"* ]]
+}
+
+@test "router without FRAMEWORK_DIR exits with error" {
+  local fw="$FRAMEWORK_DIR"
+  run -1 bash -c "unset FRAMEWORK_DIR; bash '$fw/lib/router/router.sh' 'hello' 2>&1"
+  [[ "$output" == *"FRAMEWORK_DIR is not set"* ]]
+}
+
+@test "missing script for parsed command shows error" {
+  # Remove the script but keep the compiled cache
+  rm -f "$TEST_DIR/cmds/hello/hello.sh"
+  CLI_ARGS="" run bash "$FRAMEWORK_DIR/lib/router/router.sh" "hello"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"script not found"* ]]
+}
+
 @test "subcommand resolves to its own script file" {
   rm -rf "$TEST_DIR"/*
   mkdir -p "$TEST_DIR/cmds/deploy"

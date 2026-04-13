@@ -16,6 +16,8 @@ fi
 
 source "${FRAMEWORK_DIR}/lib/log/log.sh"
 
+trap 'rm -f "${_tmp:-}"' EXIT
+
 # Validate command name: lowercase, starts with letter, colons for subcommands, no dashes
 NAME_RE='^[a-z][a-z0-9]*(:[a-z][a-z0-9]*)*$'
 if [[ ! "$CMD_NAME" =~ $NAME_RE ]]; then
@@ -46,9 +48,10 @@ if [[ "$IS_SUBCOMMAND" == "true" ]]; then
   SCRIPT_PATH="${CMD_DIR}/${TOP_CMD}.${SUB_CMD}.sh"
 
   # Render the subcommand script from template
-  sed \
-    -e "s|%%CMD_NAME%%|${CMD_NAME}|g" \
-    "${FRAMEWORK_DIR}/templates/command/command.sh.tmpl" > "$SCRIPT_PATH"
+  while IFS= read -r _line; do
+    _line="${_line//%%CMD_NAME%%/$CMD_NAME}"
+    printf '%s\n' "$_line"
+  done < "${FRAMEWORK_DIR}/templates/command/command.sh.tmpl" > "$SCRIPT_PATH"
   chmod +x "$SCRIPT_PATH"
 
   # Append the subcommand task to the existing Taskfile
@@ -81,16 +84,19 @@ else
   SCRIPT_PATH="${CMD_DIR}/${TOP_CMD}.sh"
 
   # Render Taskfile from template
-  sed \
-    -e "s|%%CMD_NAME%%|${CMD_NAME}|g" \
-    -e "s|%%CMD_DESC%%|${CMD_DESC}|g" \
-    -e "s|%%CLI_NAME%%|${CLI_NAME:-mycli}|g" \
-    "${FRAMEWORK_DIR}/templates/command/Taskfile.yaml.tmpl" > "$TASKFILE_PATH"
+  _cli="${CLI_NAME:-mycli}"
+  while IFS= read -r _line; do
+    _line="${_line//%%CMD_NAME%%/$CMD_NAME}"
+    _line="${_line//%%CMD_DESC%%/$CMD_DESC}"
+    _line="${_line//%%CLI_NAME%%/$_cli}"
+    printf '%s\n' "$_line"
+  done < "${FRAMEWORK_DIR}/templates/command/Taskfile.yaml.tmpl" > "$TASKFILE_PATH"
 
   # Render script from template
-  sed \
-    -e "s|%%CMD_NAME%%|${CMD_NAME}|g" \
-    "${FRAMEWORK_DIR}/templates/command/command.sh.tmpl" > "$SCRIPT_PATH"
+  while IFS= read -r _line; do
+    _line="${_line//%%CMD_NAME%%/$CMD_NAME}"
+    printf '%s\n' "$_line"
+  done < "${FRAMEWORK_DIR}/templates/command/command.sh.tmpl" > "$SCRIPT_PATH"
   chmod +x "$SCRIPT_PATH"
 
   # Append include to root Taskfile

@@ -59,7 +59,9 @@ clift_check_deps_full() {
 
     if [[ -n "$_min_task_version" ]] && command -v task &>/dev/null; then
       local _current_task_version
-      _current_task_version="$(task --version | sed 's/.*v\([0-9][0-9.]*\).*/\1/')"
+      # Strip pre-release suffixes (e.g. "3.0.0-rc1" → "3.0.0") so that
+      # the numeric comparison in _version_lt doesn't choke on non-digits.
+      _current_task_version="$(task --version | sed 's/.*v\([0-9][0-9.]*\).*/\1/; s/-.*//')"
 
       _version_lt() {
         local -a a b

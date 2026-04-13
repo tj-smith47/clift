@@ -55,6 +55,35 @@ teardown() {
   [ "$output" = "1" ]
 }
 
+@test "scrub on nonexistent file returns 0 (no-op)" {
+  source "$FRAMEWORK_DIR/lib/setup/rc.sh"
+  run clift_rc_scrub "$TEST_DIR/doesnotexist" "mycli"
+  [ "$status" -eq 0 ]
+}
+
+@test "write multiple CLIs coexist in same rc file" {
+  source "$FRAMEWORK_DIR/lib/setup/rc.sh"
+  clift_rc_write "$RC_FILE" "cli1" "alias cli1='x'"
+  clift_rc_write "$RC_FILE" "cli2" "alias cli2='y'"
+  run grep -c "^# clift:" "$RC_FILE"
+  [ "$output" = "2" ]
+  # Scrub one, other remains
+  clift_rc_scrub "$RC_FILE" "cli1"
+  run grep -c "^# clift:" "$RC_FILE"
+  [ "$output" = "1" ]
+  run grep -c "alias cli2" "$RC_FILE"
+  [ "$output" = "1" ]
+}
+
+@test "write preserves file permissions" {
+  source "$FRAMEWORK_DIR/lib/setup/rc.sh"
+  chmod 600 "$RC_FILE"
+  clift_rc_write "$RC_FILE" "mycli" "alias mycli='x'"
+  local perms
+  perms=$(stat -c '%a' "$RC_FILE" 2>/dev/null || stat -f '%Lp' "$RC_FILE")
+  [ "$perms" = "600" ]
+}
+
 @test "switching from alias to path export scrubs alias first" {
   source "$FRAMEWORK_DIR/lib/setup/rc.sh"
   clift_rc_write "$RC_FILE" "mycli" "alias mycli='x'"

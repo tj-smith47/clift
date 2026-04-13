@@ -78,7 +78,10 @@ while IFS= read -r tf; do
   [[ -z "$tf" ]] && continue
   [[ "$tf" == "$ROOT_TASKFILE" ]] && continue
 
-  local_tf_json="$(yq -o=json '.' "$tf")"
+  local_tf_json="$(yq -o=json '.' "$tf")" || {
+    echo "error: failed to parse Taskfile: ${tf}" >&2
+    exit 1
+  }
 
   top_layer="$(echo "$local_tf_json" | jq -c '.vars.FLAGS // null')"
   _validate_layer "$top_layer" "${tf}:vars.FLAGS" || exit 1
@@ -100,7 +103,10 @@ done <<< "$unique_taskfiles"
 # unique command Taskfile a single time and cache its FLAGS data in-memory as
 # a jq object keyed by absolute file path.
 
-root_flags="$(yq -o=json '.vars.FLAGS // []' "$ROOT_TASKFILE")"
+root_flags="$(yq -o=json '.vars.FLAGS // []' "$ROOT_TASKFILE")" || {
+  echo "error: failed to parse root Taskfile: ${ROOT_TASKFILE}" >&2
+  exit 1
+}
 
 # Build an in-memory map: taskfile path -> {toplevel: [...], tasks: {name: [...]}}
 declare -A taskfile_data
@@ -114,7 +120,10 @@ while IFS= read -r tf; do
       "toplevel": (.vars.FLAGS // null),
       "tasks": (.tasks // {} | with_entries(.value = (.value.vars.FLAGS // null)))
     }
-  ' "$tf")"
+  ' "$tf")" || {
+    echo "error: failed to parse Taskfile: ${tf}" >&2
+    exit 1
+  }
   taskfile_data["$tf"]="$tf_json"
 done <<< "$unique_taskfiles"
 
@@ -249,7 +258,8 @@ source "$SCRIPT_DIR/../cache.sh"
   while IFS= read -r _sf; do
     [[ -n "$_sf" ]] && echo "$_sf"
   done <<< "$unique_taskfiles"
-} > "${CACHE_DIR}/sources"
+} > "${CACHE_DIR}/sources.tmp"
+mv "${CACHE_DIR}/sources.tmp" "${CACHE_DIR}/sources"
 # Word splitting is intentional: one file path per line from the sources manifest.
 # shellcheck disable=SC2046
 clift_max_mtime $(< "${CACHE_DIR}/sources") > "${CACHE_DIR}/checksum.tmp"

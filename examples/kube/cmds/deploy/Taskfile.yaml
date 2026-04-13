@@ -1,0 +1,42 @@
+version: '3'
+
+vars:
+  FLAGS:
+    - {name: target, short: t, type: string, default: staging, desc: "Target environment"}
+    - {name: force, short: f, type: bool, desc: "Skip confirmation prompt"}
+    - {name: tag, type: list, desc: "Image tags to deploy (repeatable)"}
+    - {name: replicas, short: r, type: int, default: "3", desc: "Number of replicas"}
+
+tasks:
+  default:
+    desc: "Deploy services to an environment"
+    summary: |
+      Deploy services to the specified target environment.
+
+      Supports deploying multiple tagged images with configurable replica counts.
+      Use --force to skip the confirmation prompt.
+
+      Examples:
+        kube deploy --target prod --tag=api:v1.2 --tag=web:v1.3
+        kube deploy -t staging --replicas 5
+        kube deploy --force --tag=api:latest
+    vars:
+      FLAGS:
+        - {name: target, short: t, type: string, default: staging, desc: "Target environment"}
+        - {name: force, short: f, type: bool, desc: "Skip confirmation prompt"}
+        - {name: tag, type: list, desc: "Image tags to deploy (repeatable)"}
+        - {name: replicas, short: r, type: int, default: "3", desc: "Number of replicas"}
+    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
+
+  rollback:
+    desc: "Roll back to previous deployment"
+    summary: |
+      Roll back the most recent deployment in the target environment.
+
+      Examples:
+        kube deploy rollback --target prod
+        kube deploy rollback -t staging
+    vars:
+      FLAGS:
+        - {name: target, short: t, type: string, default: staging, desc: "Target environment"}
+    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"

@@ -18,6 +18,21 @@ fi
 
 source "${FRAMEWORK_DIR}/lib/log/log.sh"
 
+# Render a template file, replacing %%PLACEHOLDER%% tokens with bash parameter
+# expansion. Avoids sed — immune to delimiter/metacharacter injection from paths.
+_render_template() {
+  local _tmpl="$1" _dest="$2"
+  while IFS= read -r _line; do
+    _line="${_line//%%FRAMEWORK_DIR%%/$FRAMEWORK_DIR}"
+    _line="${_line//%%CLI_DIR%%/$TARGET}"
+    _line="${_line//%%CLI_NAME%%/$CLI_NAME}"
+    _line="${_line//%%CLI_VERSION%%/$CLI_VERSION}"
+    _line="${_line//%%LOG_THEME%%/$LOG_THEME}"
+    _line="${_line//%%CLIFT_MODE%%/$CLIFT_MODE}"
+    printf '%s\n' "$_line"
+  done < "$_tmpl" > "$_dest"
+}
+
 # Strip trailing Taskfile.yaml if full path was passed
 if [[ "$TARGET" == *.yaml ]] || [[ "$TARGET" == *.yml ]]; then
   TARGET="$(dirname "$TARGET")"
@@ -89,48 +104,38 @@ mkdir -p "${TARGET}/cmds"
 ENV_FILE="${TARGET}/.env"
 if [[ "$RECONFIGURE" == "true" ]] || [[ ! -f "$ENV_FILE" ]]; then
   # Fresh render (new install or reconfigure)
-  sed \
-    -e "s|%%FRAMEWORK_DIR%%|${FRAMEWORK_DIR}|g" \
-    -e "s|%%CLI_DIR%%|${TARGET}|g" \
-    -e "s|%%CLI_NAME%%|${CLI_NAME}|g" \
-    -e "s|%%CLI_VERSION%%|${CLI_VERSION}|g" \
-    -e "s|%%LOG_THEME%%|${LOG_THEME}|g" \
-    -e "s|%%CLIFT_MODE%%|${CLIFT_MODE}|g" \
-    "${FRAMEWORK_DIR}/templates/cli/.env.tmpl" > "$ENV_FILE"
+  _render_template "${FRAMEWORK_DIR}/templates/cli/.env.tmpl" "$ENV_FILE"
 else
   # First install but .env somehow exists without reconfigure — update paths only
   _tmp="$(mktemp)"
-  sed \
-    -e "s|^FRAMEWORK_DIR=.*|FRAMEWORK_DIR=${FRAMEWORK_DIR}|" \
-    -e "s|^CLI_DIR=.*|CLI_DIR=${TARGET}|" \
-    "$ENV_FILE" > "$_tmp"
+  while IFS= read -r _line; do
+    if [[ "$_line" == "FRAMEWORK_DIR="* ]]; then
+      printf 'FRAMEWORK_DIR=%s\n' "$FRAMEWORK_DIR"
+    elif [[ "$_line" == "CLI_DIR="* ]]; then
+      printf 'CLI_DIR=%s\n' "$TARGET"
+    else
+      printf '%s\n' "$_line"
+    fi
+  done < "$ENV_FILE" > "$_tmp"
   mv "$_tmp" "$ENV_FILE"
 fi
 
 # Render .clift.yaml (only if not exists)
 METADATA="${TARGET}/.clift.yaml"
 if [[ ! -f "$METADATA" ]]; then
-  sed \
-    -e "s|%%CLI_NAME%%|${CLI_NAME}|g" \
-    -e "s|%%CLI_VERSION%%|${CLI_VERSION}|g" \
-    "${FRAMEWORK_DIR}/templates/cli/.clift.yaml.tmpl" > "$METADATA"
+  _render_template "${FRAMEWORK_DIR}/templates/cli/.clift.yaml.tmpl" "$METADATA"
 fi
 
 # Render Taskfile.yaml (only if not exists)
 TASKFILE="${TARGET}/Taskfile.yaml"
 if [[ ! -f "$TASKFILE" ]]; then
-  sed \
-    -e "s|%%CLI_NAME%%|${CLI_NAME}|g" \
-    -e "s|%%CLI_VERSION%%|${CLI_VERSION}|g" \
-    "${FRAMEWORK_DIR}/templates/cli/Taskfile.yaml.tmpl" > "$TASKFILE"
+  _render_template "${FRAMEWORK_DIR}/templates/cli/Taskfile.yaml.tmpl" "$TASKFILE"
 fi
 
 # Render cfgd module.yaml (only if not exists)
 MODULE_FILE="${TARGET}/module.yaml"
 if [[ ! -f "$MODULE_FILE" ]]; then
-  sed \
-    -e "s|%%CLI_NAME%%|${CLI_NAME}|g" \
-    "${FRAMEWORK_DIR}/templates/cli/module.yaml.tmpl" > "$MODULE_FILE"
+  _render_template "${FRAMEWORK_DIR}/templates/cli/module.yaml.tmpl" "$MODULE_FILE"
 fi
 
 # Copy CI workflow (only if not exists)
@@ -165,12 +170,7 @@ if [[ "$CLIFT_MODE" == "task" ]]; then
   clift_rc_write "$RC_FILE" "$CLI_NAME" "$ALIAS_LINE"
 else
   mkdir -p "${TARGET}/bin"
-  sed \
-    -e "s|%%FRAMEWORK_DIR%%|${FRAMEWORK_DIR}|g" \
-    -e "s|%%CLI_DIR%%|${TARGET}|g" \
-    -e "s|%%CLI_NAME%%|${CLI_NAME}|g" \
-    -e "s|%%CLI_VERSION%%|${CLI_VERSION}|g" \
-    "${FRAMEWORK_DIR}/lib/wrapper/wrapper.sh.tmpl" > "${TARGET}/bin/${CLI_NAME}"
+  _render_template "${FRAMEWORK_DIR}/lib/wrapper/wrapper.sh.tmpl" "${TARGET}/bin/${CLI_NAME}"
   chmod +x "${TARGET}/bin/${CLI_NAME}"
   PATH_LINE="export PATH=\"${TARGET}/bin:\$PATH\""
   clift_rc_write "$RC_FILE" "$CLI_NAME" "$PATH_LINE"

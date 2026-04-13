@@ -22,13 +22,20 @@ THEMES="icons,icons-color,brackets,brackets-color,minimal,minimal-color,custom"
 unset LOG_THEME
 NEW_THEME=$("${FRAMEWORK_DIR}/lib/prompt/prompt.sh" choose 'Select log theme' --var LOG_THEME --options "$THEMES")
 
-# Update LOG_THEME in .env
+# Update LOG_THEME in .env (uses while-read instead of sed to avoid
+# injection if NEW_THEME contains sed metacharacters like | \ &).
 if [[ -f "$ENV_FILE" ]] && grep -q "^LOG_THEME=" "$ENV_FILE"; then
   _tmp="$(mktemp)"
-  sed "s|^LOG_THEME=.*|LOG_THEME=${NEW_THEME}|" "$ENV_FILE" > "$_tmp"
+  while IFS= read -r line; do
+    if [[ "$line" == "LOG_THEME="* ]]; then
+      printf '%s=%s\n' "LOG_THEME" "$NEW_THEME"
+    else
+      printf '%s\n' "$line"
+    fi
+  done < "$ENV_FILE" > "$_tmp"
   mv "$_tmp" "$ENV_FILE"
 else
-  echo "LOG_THEME=${NEW_THEME}" >> "$ENV_FILE"
+  printf '%s=%s\n' "LOG_THEME" "$NEW_THEME" >> "$ENV_FILE"
 fi
 
 LOG_THEME="$NEW_THEME" log_success "Log theme set to: ${NEW_THEME}"

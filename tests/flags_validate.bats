@@ -289,6 +289,53 @@ YAML
 }
 
 
+@test "flag missing name rejected" {
+  cat > "$TEST_DIR/Taskfile.yaml" <<'YAML'
+version: '3'
+vars:
+  FLAGS:
+    - {type: bool}
+YAML
+  run bash "$FRAMEWORK_DIR/lib/flags/validate.sh" "$TEST_DIR/Taskfile.yaml"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"missing 'name'"* ]]
+}
+
+@test "flag name starting with number rejected" {
+  cat > "$TEST_DIR/Taskfile.yaml" <<'YAML'
+version: '3'
+vars:
+  FLAGS:
+    - {name: 1bad, type: bool}
+YAML
+  run bash "$FRAMEWORK_DIR/lib/flags/validate.sh" "$TEST_DIR/Taskfile.yaml"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"must match"* ]]
+}
+
+@test "list type with string default accepted" {
+  cat > "$TEST_DIR/Taskfile.yaml" <<'YAML'
+version: '3'
+vars:
+  FLAGS:
+    - {name: tags, type: list, default: "a,b"}
+YAML
+  run bash "$FRAMEWORK_DIR/lib/flags/validate.sh" "$TEST_DIR/Taskfile.yaml"
+  [ "$status" -eq 0 ]
+}
+
+@test "validate.sh requires a valid file path" {
+  run bash "$FRAMEWORK_DIR/lib/flags/validate.sh" ""
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"requires a valid Taskfile"* ]]
+}
+
+@test "validate.sh rejects nonexistent file" {
+  run bash "$FRAMEWORK_DIR/lib/flags/validate.sh" "$TEST_DIR/nope.yaml"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"requires a valid Taskfile"* ]]
+}
+
 @test "100 tasks with 2 flags each validates quickly" {
   # Build a synthetic Taskfile with 100 tasks
   {

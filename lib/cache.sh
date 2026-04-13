@@ -34,12 +34,16 @@ clift_max_mtime() {
 }
 
 # Ensure the .clift/ cache is fresh. Rebuilds if checksum differs or is missing.
+# Uses mkdir-based locking to prevent concurrent rebuilds (portable — works on
+# macOS and Linux without flock).
 # Usage: clift_ensure_cache <CLI_DIR> <FRAMEWORK_DIR>
 clift_ensure_cache() {
   local cli_dir="$1" fw_dir="$2"
   local cache_dir="$cli_dir/.clift"
   local checksum_file="$cache_dir/checksum"
   local sources_file="$cache_dir/sources"
+
+  mkdir -p "$cache_dir"
 
   # Read tracked source files from the manifest written by compile.sh.
   # Falls back to the root Taskfile if no manifest exists yet (first run).
@@ -52,6 +56,35 @@ clift_ensure_cache() {
   fi
 
   if [[ ! -f "$checksum_file" ]] || [[ "$(<"$checksum_file")" != "$current" ]]; then
-    bash "$fw_dir/lib/flags/compile.sh" "$cli_dir" >&2
+    # Serialize concurrent rebuilds. mkdir is atomic on all POSIX systems,
+    # so exactly one process wins the race. Others wait and use the winner's
+    # output.
+    local lockdir="$cache_dir/.lock.d"
+    if mkdir "$lockdir" 2>/dev/null; then
+      # Re-check after acquiring lock — another process may have finished
+      # the rebuild while we were checking staleness.
+      if [[ -f "$sources_file" ]]; then
+        # shellcheck disable=SC2046
+        current="$(clift_max_mtime $(< "$sources_file"))"
+      else
+        current="$(clift_max_mtime "$cli_dir/Taskfile.yaml")"
+      fi
+      local _compile_rc=0
+      if [[ ! -f "$checksum_file" ]] || [[ "$(<"$checksum_file")" != "$current" ]]; then
+        bash "$fw_dir/lib/flags/compile.sh" "$cli_dir" >&2 || _compile_rc=$?
+      fi
+      rm -rf "$lockdir"
+      return "$_compile_rc"
+    else
+      # Another process holds the lock — wait for it to finish (up to 5s).
+      local _tries=0
+      while [[ -d "$lockdir" ]] && (( _tries < 50 )); do
+        sleep 0.1
+        _tries=$((_tries + 1))
+      done
+      # Stale lock guard: if still present after timeout, the holder likely
+      # crashed. Remove the lock so the next invocation can rebuild.
+      [[ -d "$lockdir" ]] && rm -rf "$lockdir"
+    fi
   fi
 }

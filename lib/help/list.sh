@@ -92,7 +92,7 @@ all_entries=$(echo "$json" | jq -r '
     | select(.display_name != "")
     | .group = (
         if (.group_var != "" and .group_var != "null") then .group_var
-        else (.ns | sub("^."; (.[:1] | ascii_upcase)))
+        else (.ns | (ascii_upcase[:1] + .[1:]))
         end
       )
     | "\(.group)\t\(.display_name)\t\(.desc)"

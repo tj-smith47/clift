@@ -1,4 +1,5 @@
 #!/usr/bin/env bats
+bats_require_minimum_version 1.5.0
 
 load test_helper
 
@@ -81,4 +82,51 @@ teardown() {
   [ "$status" -eq 0 ]
   # Verify the generated output is syntactically valid bash
   echo "$output" | bash -n
+}
+
+@test "standard mode zsh completion has compdef" {
+  CLIFT_MODE=standard run bash "$FRAMEWORK_DIR/lib/completion/completion.sh" zsh
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"compdef"* ]]
+  [[ "$output" == *"#compdef"* ]]
+  [[ "$output" == *".clift/tasks.json"* ]]
+}
+
+@test "standard mode zsh completion references flags.json" {
+  CLIFT_MODE=standard run bash "$FRAMEWORK_DIR/lib/completion/completion.sh" zsh
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"flags_json"* ]]
+}
+
+@test "standard mode unknown format rejected" {
+  CLIFT_MODE=standard run bash "$FRAMEWORK_DIR/lib/completion/completion.sh" fish
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"unknown format"* ]]
+}
+
+@test "standard mode requires FORMAT argument" {
+  CLIFT_MODE=standard run bash "$FRAMEWORK_DIR/lib/completion/completion.sh" ""
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"requires FORMAT"* ]]
+}
+
+@test "task mode bash completion includes command names" {
+  run bash "$FRAMEWORK_DIR/lib/completion/completion.sh" bash "$TEST_DIR/Taskfile.yaml" testcli
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"hello"* ]]
+  [[ "$output" == *"greet"* ]]
+}
+
+@test "task mode zsh completion includes command names" {
+  run bash "$FRAMEWORK_DIR/lib/completion/completion.sh" zsh "$TEST_DIR/Taskfile.yaml" testcli
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"hello"* ]]
+  [[ "$output" == *"greet"* ]]
+}
+
+@test "standard mode bash flag completion uses jq on flags.json" {
+  CLIFT_MODE=standard run bash "$FRAMEWORK_DIR/lib/completion/completion.sh" bash
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"flags_json"* ]]
+  [[ "$output" == *'--\(.name)'* ]] || [[ "$output" == *"COMPREPLY"* ]]
 }

@@ -106,6 +106,34 @@ YAML
   [[ "$output" == *"shadows"* ]] || [[ "$output" == *"warning"* ]]
 }
 
+@test "compile requires valid CLI directory" {
+  run bash "$FRAMEWORK_DIR/lib/flags/compile.sh" ""
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"requires a valid CLI directory"* ]]
+}
+
+@test "compile fails when no Taskfile.yaml exists" {
+  local empty_dir="$(mktemp -d)"
+  run bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$empty_dir"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no Taskfile.yaml"* ]]
+  rm -rf "$empty_dir"
+}
+
+@test "compile sources manifest lists all tracked files" {
+  bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$CLI_DIR"
+  [ -f "$CLI_DIR/.clift/sources" ]
+  # Should include root Taskfile and the command Taskfile
+  grep -q "Taskfile.yaml" "$CLI_DIR/.clift/sources"
+}
+
+@test "compile with yq failure on command Taskfile exits non-zero" {
+  # Create an invalid YAML file
+  echo "{{{{invalid" > "$CLI_DIR/cmds/greet/Taskfile.yaml"
+  run bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$CLI_DIR"
+  [ "$status" -ne 0 ]
+}
+
 @test "command without vars.FLAGS marked passthrough" {
   mkdir -p "$CLI_DIR/cmds/old"
   cat > "$CLI_DIR/cmds/old/Taskfile.yaml" <<'YAML'

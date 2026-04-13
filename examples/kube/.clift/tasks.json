@@ -1,0 +1,257 @@
+{
+  "tasks": [
+    {
+      "name": "default",
+      "task": "default",
+      "desc": "",
+      "summary": "",
+      "aliases": [],
+      "up_to_date": false,
+      "location": {
+        "line": 37,
+        "column": 3,
+        "taskfile": "/opt/repos/task-cli/examples/deploy-cli/Taskfile.yaml"
+      }
+    }
+  ],
+  "namespaces": {
+    "_help": {
+      "tasks": [
+        {
+          "name": "_help:detail",
+          "task": "_help:detail",
+          "desc": "Show detailed help for a command",
+          "summary": "",
+          "aliases": [],
+          "up_to_date": false,
+          "location": {
+            "line": 8,
+            "column": 3,
+            "taskfile": "/opt/repos/task-cli/lib/help/Taskfile.yaml"
+          }
+        },
+        {
+          "name": "_help:list",
+          "task": "_help:list",
+          "desc": "List all commands",
+          "summary": "",
+          "aliases": [],
+          "up_to_date": false,
+          "location": {
+            "line": 4,
+            "column": 3,
+            "taskfile": "/opt/repos/task-cli/lib/help/Taskfile.yaml"
+          }
+        }
+      ]
+    },
+    "_new": {
+      "tasks": [
+        {
+          "name": "_new:cmd",
+          "task": "_new:cmd",
+          "desc": "Scaffold a new command",
+          "summary": "",
+          "aliases": [
+            "new:command"
+          ],
+          "up_to_date": false,
+          "location": {
+            "line": 4,
+            "column": 3,
+            "taskfile": "/opt/repos/task-cli/lib/scaffold/Taskfile.yaml"
+          }
+        }
+      ]
+    },
+    "completion": {
+      "tasks": [
+        {
+          "name": "completion:bash",
+          "task": "completion:bash",
+          "desc": "Generate bash completions",
+          "summary": "",
+          "aliases": [],
+          "up_to_date": false,
+          "location": {
+            "line": 4,
+            "column": 3,
+            "taskfile": "/opt/repos/task-cli/lib/completion/Taskfile.yaml"
+          }
+        },
+        {
+          "name": "completion:zsh",
+          "task": "completion:zsh",
+          "desc": "Generate zsh completions",
+          "summary": "",
+          "aliases": [],
+          "up_to_date": false,
+          "location": {
+            "line": 8,
+            "column": 3,
+            "taskfile": "/opt/repos/task-cli/lib/completion/Taskfile.yaml"
+          }
+        }
+      ]
+    },
+    "config": {
+      "tasks": [
+        {
+          "name": "config:edit",
+          "task": "config:edit",
+          "desc": "Edit configuration in $EDITOR",
+          "summary": "",
+          "aliases": [],
+          "up_to_date": false,
+          "location": {
+            "line": 12,
+            "column": 3,
+            "taskfile": "/opt/repos/task-cli/lib/config/Taskfile.yaml"
+          }
+        },
+        {
+          "name": "config:get",
+          "task": "config:get",
+          "desc": "Get a configuration value",
+          "summary": "",
+          "aliases": [],
+          "up_to_date": false,
+          "location": {
+            "line": 16,
+            "column": 3,
+            "taskfile": "/opt/repos/task-cli/lib/config/Taskfile.yaml"
+          }
+        },
+        {
+          "name": "config:set",
+          "task": "config:set",
+          "desc": "Set a configuration value",
+          "summary": "",
+          "aliases": [],
+          "up_to_date": false,
+          "location": {
+            "line": 20,
+            "column": 3,
+            "taskfile": "/opt/repos/task-cli/lib/config/Taskfile.yaml"
+          }
+        },
+        {
+          "name": "config:show",
+          "task": "config:show",
+          "desc": "Show current configuration",
+          "summary": "",
+          "aliases": [],
+          "up_to_date": false,
+          "location": {
+            "line": 4,
+            "column": 3,
+            "taskfile": "/opt/repos/task-cli/lib/config/Taskfile.yaml"
+          }
+        },
+        {
+          "name": "config:theme",
+          "task": "config:theme",
+          "desc": "Change log theme",
+          "summary": "",
+          "aliases": [],
+          "up_to_date": false,
+          "location": {
+            "line": 8,
+            "column": 3,
+            "taskfile": "/opt/repos/task-cli/lib/config/Taskfile.yaml"
+          }
+        }
+      ]
+    },
+    "deploy": {
+      "tasks": [
+        {
+          "name": "deploy:default",
+          "task": "deploy:default",
+          "desc": "Deploy services to an environment",
+          "summary": "Deploy services to the specified target environment.\n\nSupports deploying multiple tagged images with configurable replica counts.\nUse --force to skip the confirmation prompt.\n\nExamples:\n  ops deploy --target prod --tag=api:v1.2 --tag=web:v1.3\n  ops deploy -t staging --replicas 5\n  ops deploy --force --tag=api:latest\n",
+          "aliases": [
+            "deploy"
+          ],
+          "up_to_date": false,
+          "location": {
+            "line": 11,
+            "column": 3,
+            "taskfile": "/opt/repos/task-cli/examples/deploy-cli/cmds/deploy/Taskfile.yaml"
+          }
+        },
+        {
+          "name": "deploy:rollback",
+          "task": "deploy:rollback",
+          "desc": "Roll back to previous deployment",
+          "summary": "Roll back the most recent deployment in the target environment.\n\nExamples:\n  ops deploy rollback --target prod\n  ops deploy rollback -t staging\n",
+          "aliases": [],
+          "up_to_date": false,
+          "location": {
+            "line": 31,
+            "column": 3,
+            "taskfile": "/opt/repos/task-cli/examples/deploy-cli/cmds/deploy/Taskfile.yaml"
+          }
+        }
+      ]
+    },
+    "logs": {
+      "tasks": [
+        {
+          "name": "logs:default",
+          "task": "logs:default",
+          "desc": "View service logs",
+          "summary": "View logs for a specific service.\n\nExamples:\n  ops logs --service api\n  ops logs -s worker --lines 100\n  ops logs -s api --follow\n",
+          "aliases": [
+            "logs"
+          ],
+          "up_to_date": false,
+          "location": {
+            "line": 10,
+            "column": 3,
+            "taskfile": "/opt/repos/task-cli/examples/deploy-cli/cmds/logs/Taskfile.yaml"
+          }
+        }
+      ]
+    },
+    "status": {
+      "tasks": [
+        {
+          "name": "status:default",
+          "task": "status:default",
+          "desc": "Show deployment status",
+          "summary": "Display the current deployment status for an environment.\n\nExamples:\n  ops status\n  ops status --target prod --wide\n",
+          "aliases": [
+            "status"
+          ],
+          "up_to_date": false,
+          "location": {
+            "line": 9,
+            "column": 3,
+            "taskfile": "/opt/repos/task-cli/examples/deploy-cli/cmds/status/Taskfile.yaml"
+          }
+        }
+      ]
+    },
+    "update": {
+      "tasks": [
+        {
+          "name": "update:default",
+          "task": "update:default",
+          "desc": "Update clift framework",
+          "summary": "",
+          "aliases": [
+            "update"
+          ],
+          "up_to_date": false,
+          "location": {
+            "line": 4,
+            "column": 3,
+            "taskfile": "/opt/repos/task-cli/lib/update/Taskfile.yaml"
+          }
+        }
+      ]
+    }
+  },
+  "location": "/opt/repos/task-cli/examples/deploy-cli/Taskfile.yaml"
+}

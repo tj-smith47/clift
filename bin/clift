@@ -1,0 +1,125 @@
+#!/usr/bin/env bash
+# clift — CLI Framework in Task
+# Entry point for the framework itself. Provides `clift init` to bootstrap
+# new CLIs with Cobra-style flags (no interactive prompts required).
+set -euo pipefail
+
+FRAMEWORK_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+export FRAMEWORK_DIR
+
+# shellcheck source=../lib/log/log.sh
+source "$FRAMEWORK_DIR/lib/log/log.sh"
+
+_version() {
+  local ver="dev"
+  if [[ -f "$FRAMEWORK_DIR/.clift.yaml" ]]; then
+    ver="$(yq '.version // "dev"' "$FRAMEWORK_DIR/.clift.yaml" 2>/dev/null || echo "dev")"
+  fi
+  echo "clift version $ver"
+}
+
+_usage() {
+  _version
+  echo ""
+  echo "Usage:"
+  echo "  clift init <path> [flags]    Create a new CLI project"
+  echo "  clift version                Show framework version"
+  echo "  clift help                   Show this help"
+  echo ""
+  echo "Init flags:"
+  echo "  --name    NAME      CLI name (default: directory basename)"
+  echo "  --version VERSION   Initial version (default: 0.1.0)"
+  echo "  --theme   THEME     Log theme (default: icons-color)"
+  echo "                      Options: icons, icons-color, brackets, brackets-color,"
+  echo "                               minimal, minimal-color, custom"
+  echo "  --mode    MODE      Entry point style (default: standard)"
+  echo "                      Options: standard (Cobra-like), task (go-task native)"
+  echo ""
+  echo "Environment variables (override flags):"
+  echo "  CLI_NAME, CLI_VERSION, LOG_THEME, CLIFT_MODE"
+  echo "  PROMPT=false        Skip all interactive prompts"
+  echo ""
+  echo "Examples:"
+  echo "  clift init ~/mycli"
+  echo "  clift init ~/mycli --name deploy-tools --mode standard"
+  echo "  clift init ./tools/ops --theme brackets --version 1.0.0"
+  echo ""
+  echo "After init:"
+  echo "  source ~/.bashrc"
+  echo "  mycli              # see available commands"
+  echo "  mycli new cmd      # scaffold your first command"
+}
+
+_init() {
+  local path="" name="" version="" theme="" mode=""
+
+  # Parse flags
+  while (( $# > 0 )); do
+    case "$1" in
+      --name)    name="$2";    shift 2 ;;
+      --version) version="$2"; shift 2 ;;
+      --theme)   theme="$2";   shift 2 ;;
+      --mode)    mode="$2";    shift 2 ;;
+      --help|-h) _usage; exit 0 ;;
+      -*)
+        echo "error: unknown flag '$1'" >&2
+        echo "  run 'clift help' for usage" >&2
+        exit 1
+        ;;
+      *)
+        if [[ -z "$path" ]]; then
+          path="$1"; shift
+        else
+          echo "error: unexpected argument '$1'" >&2
+          exit 1
+        fi
+        ;;
+    esac
+  done
+
+  if [[ -z "$path" ]]; then
+    echo "error: path required" >&2
+    echo "  usage: clift init <path> [--name NAME] [--version VER]" >&2
+    exit 1
+  fi
+
+  # Defaults: flags > env vars > sensible defaults
+  name="${name:-${CLI_NAME:-$(basename "$path")}}"
+  version="${version:-${CLI_VERSION:-0.1.0}}"
+  theme="${theme:-${LOG_THEME:-icons-color}}"
+  mode="${mode:-${CLIFT_MODE:-standard}}"
+
+  # Validate
+  if [[ ! "$name" =~ ^[a-z][a-z0-9_-]*$ ]]; then
+    die "CLI name must be lowercase alphanumeric (got '$name')"
+  fi
+  case "$mode" in
+    task|standard) ;;
+    *) die "Mode must be 'task' or 'standard' (got '$mode')" ;;
+  esac
+
+  # Export for setup.sh and prompt.sh (prevents interactive prompts)
+  export CLI_NAME="$name"
+  export CLI_VERSION="$version"
+  export LOG_THEME="$theme"
+  export CLIFT_MODE="$mode"
+  export PROMPT=false
+
+  exec bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
+    "$path" "$FRAMEWORK_DIR" "$name" "$version" "$theme" "$mode"
+}
+
+# --- Command dispatch ---
+cmd="${1:-help}"
+shift || true
+
+case "$cmd" in
+  init)    _init "$@" ;;
+  version) _version ;;
+  help|--help|-h) _usage ;;
+  *)
+    echo "error: unknown command '$cmd'" >&2
+    echo "  run 'clift help' for usage" >&2
+    exit 1
+    ;;
+esac

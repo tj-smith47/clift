@@ -31,11 +31,12 @@ else
 fi
 
 # Try <command>:default first, then <command> (single jq pass)
-task_info=$(echo "$json" | jq -r --arg cmd "$COMMAND" '
+task_info=$(echo "$json" | jq -c --arg cmd "$COMMAND" '
   [.. | .tasks? // empty | .[] | select(.name == ($cmd + ":default") or .name == $cmd)]
   | sort_by(if .name | endswith(":default") then 0 else 1 end)
-  | first
-  | {desc, summary, location: .location.taskfile}
+  | if length == 0 then null
+    else first | {desc, summary, location: .location.taskfile}
+    end
 ' 2>/dev/null)
 
 if [[ -z "$task_info" || "$task_info" == "null" ]]; then
@@ -44,8 +45,10 @@ if [[ -z "$task_info" || "$task_info" == "null" ]]; then
 fi
 
 {
-  IFS=$'\t' read -r desc summary location
-} < <(echo "$task_info" | jq -r '[(.desc // ""), (.summary // ""), (.location // "")] | @tsv')
+  IFS= read -r -d '' desc || true
+  IFS= read -r -d '' summary || true
+  IFS= read -r -d '' location || true
+} < <(echo "$task_info" | jq -j '(.desc // "") + "\u0000" + (.summary // "") + "\u0000" + (.location // "") + "\u0000"')
 
 # Apply colon-to-space display heuristic for user commands (those under /cmds/)
 display_name="$COMMAND"
@@ -67,7 +70,7 @@ FLAGS_JSON="${TASKFILE_DIR}/.clift/flags.json"
 
 if [[ -f "$FLAGS_JSON" ]]; then
   # Look up this command's merged flags. Try "cmd:default" first, then "cmd".
-  cmd_flags="$(jq -r --arg cmd "${COMMAND}:default" --arg cmd2 "$COMMAND" '
+  cmd_flags="$(jq -c --arg cmd "${COMMAND}:default" --arg cmd2 "$COMMAND" '
     .[$cmd] // .[$cmd2] // null
   ' "$FLAGS_JSON")"
 

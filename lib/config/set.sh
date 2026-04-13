@@ -31,6 +31,7 @@ fi
 if grep -q "^${KEY}=" "$ENV_FILE"; then
   # Use a temp file to avoid sed delimiter issues with special chars in VALUE
   tmpfile=$(mktemp)
+  trap 'rm -f "$tmpfile"' EXIT
   while IFS= read -r line; do
     if [[ "$line" == "${KEY}="* ]]; then
       printf '%s=%s\n' "$KEY" "$VALUE"

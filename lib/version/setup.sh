@@ -63,15 +63,19 @@ cfgd_profiles="${CFGD_PROFILES:-}"
 _ensure_module_yaml() {
   local dest="$1"
   if [[ ! -f "$dest" ]]; then
-    sed -e "s|%%CLI_NAME%%|${cli_name}|g" \
-      "${FRAMEWORK_DIR}/templates/cli/module.yaml.tmpl" > "$dest"
+    while IFS= read -r _line; do
+      _line="${_line//%%CLI_NAME%%/$cli_name}"
+      printf '%s\n' "$_line"
+    done < "${FRAMEWORK_DIR}/templates/cli/module.yaml.tmpl" > "$dest"
   fi
 }
 
 _set_git_source() {
   local module_file="$1"
   if [[ -n "$git_remote" ]]; then
-    yq -i ".spec.files = [{\"source\": \"${git_remote}@main\", \"target\": \"~/.local/share/${cli_name}\"}]" "$module_file"
+    # Use env vars + strenv() to safely inject values (avoids yq expression injection).
+    _YQ_REMOTE="${git_remote}" _YQ_NAME="${cli_name}" \
+      yq -i '.spec.files = [{"source": (strenv(_YQ_REMOTE) + "@main"), "target": ("~/.local/share/" + strenv(_YQ_NAME))}]' "$module_file"
   fi
 }
 
@@ -100,7 +104,7 @@ if [[ -n "$cfgd_config_dir" ]]; then
       profile="${profile# }"; profile="${profile% }"
       profile_file="${cfgd_config_dir}/profiles/${profile}.yaml"
       if [[ -f "$profile_file" ]]; then
-        yq -i ".spec.modules += [\"${cli_name}\"] | .spec.modules |= unique" "$profile_file"
+        _YQ_NAME="${cli_name}" yq -i '.spec.modules += [strenv(_YQ_NAME)] | .spec.modules |= unique' "$profile_file"
         log_success "Added ${cli_name} to profile: ${profile}"
       else
         log_warn "Profile not found: ${profile_file}"
@@ -126,10 +130,16 @@ fi
 env_file="${CLI_DIR}/.env"
 if [[ -f "$env_file" ]] && grep -q "^CFGD_VERSIONING=" "$env_file" 2>/dev/null; then
   _tmp="$(mktemp)"
-  sed "s|^CFGD_VERSIONING=.*|CFGD_VERSIONING=true|" "$env_file" > "$_tmp"
+  while IFS= read -r _line; do
+    if [[ "$_line" == "CFGD_VERSIONING="* ]]; then
+      printf 'CFGD_VERSIONING=true\n'
+    else
+      printf '%s\n' "$_line"
+    fi
+  done < "$env_file" > "$_tmp"
   mv "$_tmp" "$env_file"
 else
-  echo "CFGD_VERSIONING=true" >> "$env_file"
+  printf 'CFGD_VERSIONING=true\n' >> "$env_file"
 fi
 
 # --- Step 5: Add version namespace to CLI Taskfile ---

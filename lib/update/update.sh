@@ -28,8 +28,8 @@ fi
 
 # Fetch latest
 log_info "Checking for updates..."
-git -C "$FRAMEWORK_DIR" fetch --quiet 2>/dev/null || {
-  die "Failed to fetch updates. Check your network connection."
+git -C "$FRAMEWORK_DIR" fetch --quiet || {
+  die "Failed to fetch updates"
 }
 
 # Get current and remote branch
@@ -37,7 +37,7 @@ current_branch=$(git -C "$FRAMEWORK_DIR" rev-parse --abbrev-ref HEAD)
 remote_ref="origin/${current_branch}"
 
 local_sha=$(git -C "$FRAMEWORK_DIR" rev-parse HEAD)
-remote_sha=$(git -C "$FRAMEWORK_DIR" rev-parse "$remote_ref" 2>/dev/null) || {
+remote_sha=$(git -C "$FRAMEWORK_DIR" rev-parse "$remote_ref") || {
   die "Could not find remote branch: $remote_ref"
 }
 

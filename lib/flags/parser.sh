@@ -70,13 +70,18 @@ clift_parse_args() {
     [[ -z "$dname" ]] && continue
     _clift_var_name "$dname"; local dvar="$_CLIFT_VAR"
     if [[ "$dtype" == "list" ]]; then
-      local idx=0
-      IFS=',' read -ra items <<< "$ddefault"
-      for item in "${items[@]}"; do
-        idx=$((idx+1))
-        export "${dvar}_${idx}=${item}"
-      done
-      export "${dvar}_COUNT=${idx}"
+      if [[ -n "$ddefault" ]]; then
+        local idx=0
+        IFS=',' read -ra items <<< "$ddefault"
+        for item in "${items[@]}"; do
+          idx=$((idx+1))
+          export "${dvar}_${idx}=${item}"
+        done
+        export "${dvar}_COUNT=${idx}"
+      else
+        # Empty string default → empty list, not a single empty element.
+        export "${dvar}_COUNT=0"
+      fi
       _list_was_defaulted["$dname"]=1
     else
       export "${dvar}=${ddefault}"

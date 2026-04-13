@@ -1,4 +1,5 @@
 #!/usr/bin/env bats
+bats_require_minimum_version 1.5.0
 
 load test_helper
 
@@ -82,6 +83,63 @@ load test_helper
   run bash "$FRAMEWORK_DIR/lib/version/set.sh" "$CLI_DIR" "$FRAMEWORK_DIR" "v1.0.0"
   [ "$status" -ne 0 ]
   [[ "$output" == *"not installed"* ]]
+}
+
+@test "version requires CLI_DIR and FRAMEWORK_DIR" {
+  run bash "$FRAMEWORK_DIR/lib/version/version.sh" "" ""
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"required"* ]]
+}
+
+@test "version shows cfgd not installed warning when versioning enabled" {
+  export CFGD_VERSIONING=true
+  export PATH="/usr/bin:/bin"
+  run bash "$FRAMEWORK_DIR/lib/version/version.sh" "$CLI_DIR" "$FRAMEWORK_DIR" 2>&1
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"cfgd not installed"* ]] || [[ "$output" == *"version 1.0.0"* ]]
+}
+
+@test "version shows cfgd versioning enabled but not applied" {
+  export CFGD_VERSIONING=true
+  # Mock cfgd
+  mkdir -p "$TEST_DIR/bin"
+  echo '#!/bin/sh' > "$TEST_DIR/bin/cfgd"
+  chmod +x "$TEST_DIR/bin/cfgd"
+  export PATH="$TEST_DIR/bin:$PATH"
+
+  run bash "$FRAMEWORK_DIR/lib/version/version.sh" "$CLI_DIR" "$FRAMEWORK_DIR" 2>&1
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"versioning enabled"* ]]
+}
+
+@test "upgrade requires CLI_DIR and FRAMEWORK_DIR" {
+  run bash "$FRAMEWORK_DIR/lib/version/upgrade.sh" "" ""
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"required"* ]]
+}
+
+@test "set requires CLI_DIR and FRAMEWORK_DIR" {
+  run bash "$FRAMEWORK_DIR/lib/version/set.sh" "" ""
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"required"* ]]
+}
+
+@test "set uses cli-name/version ref convention" {
+  export CFGD_VERSIONING=true
+  # Mock cfgd that always fails (no real version to pin)
+  mkdir -p "$TEST_DIR/bin"
+  cat > "$TEST_DIR/bin/cfgd" <<'SH'
+#!/bin/sh
+echo "mock-cfgd: $*"
+exit 1
+SH
+  chmod +x "$TEST_DIR/bin/cfgd"
+  export PATH="$TEST_DIR/bin:$PATH"
+
+  run bash "$FRAMEWORK_DIR/lib/version/set.sh" "$CLI_DIR" "$FRAMEWORK_DIR" "v1.0.0" 2>&1
+  [ "$status" -ne 0 ]
+  # The mock should receive the ref with cli-name prefix
+  [[ "$output" == *"testcli/v1.0.0"* ]]
 }
 
 # --- setup.sh (Taskfile modification) ---

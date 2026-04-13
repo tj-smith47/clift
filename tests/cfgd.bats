@@ -1,4 +1,5 @@
 #!/usr/bin/env bats
+bats_require_minimum_version 1.5.0
 
 load test_helper
 
@@ -63,6 +64,22 @@ load test_helper
   [ -f "$TEST_DIR/cigentest/.github/workflows/ci.yml" ]
   run grep "shellcheck" "$TEST_DIR/cigentest/.github/workflows/ci.yml"
   [ "$status" -eq 0 ]
+}
+
+@test "update requires FRAMEWORK_DIR" {
+  run bash "$FRAMEWORK_DIR/lib/update/update.sh" ""
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"FRAMEWORK_DIR required"* ]]
+}
+
+@test "update fails when not a git repo" {
+  local mock_fw="$TEST_DIR/notgit"
+  mkdir -p "$mock_fw/lib/update"
+  cp "$FRAMEWORK_DIR/lib/update/update.sh" "$mock_fw/lib/update/update.sh"
+  cp -r "$FRAMEWORK_DIR/lib/log" "$mock_fw/lib/log"
+  run bash "$mock_fw/lib/update/update.sh" "$mock_fw"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"not a git repository"* ]]
 }
 
 @test "setup module.yaml uses portable paths" {

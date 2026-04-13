@@ -49,7 +49,7 @@ _log_format() {
         debug)   prefix="●"; color="$_CLR_CYAN" ;;
       esac
       if [[ "$_LOG_THEME" == "icons-color" ]]; then
-        printf "${color}%s${_CLR_RESET} %s\n" "$prefix" "$msg"
+        printf '%b%s%b %s\n' "$color" "$prefix" "$_CLR_RESET" "$msg"
       else
         printf "%s %s\n" "$prefix" "$msg"
       fi
@@ -63,7 +63,7 @@ _log_format() {
         debug)   prefix="[DEBUG]"; color="$_CLR_CYAN" ;;
       esac
       if [[ "$_LOG_THEME" == "brackets-color" ]]; then
-        printf "${color}%s${_CLR_RESET} %s\n" "$prefix" "$msg"
+        printf '%b%s%b %s\n' "$color" "$prefix" "$_CLR_RESET" "$msg"
       else
         printf "%s %s\n" "$prefix" "$msg"
       fi
@@ -77,7 +77,7 @@ _log_format() {
         debug)   prefix="debug: "; color="$_CLR_CYAN" ;;
       esac
       if [[ "$_LOG_THEME" == "minimal-color" ]]; then
-        printf "${color}%s%s${_CLR_RESET}\n" "$prefix" "$msg"
+        printf '%b%s%s%b\n' "$color" "$prefix" "$msg" "$_CLR_RESET"
       else
         printf "%s%s\n" "$prefix" "$msg"
       fi
@@ -99,8 +99,10 @@ _log_format() {
           success) color="$_CLR_GREEN" ;;
           debug)   color="$_CLR_CYAN" ;;
         esac
+        local _formatted
         # shellcheck disable=SC2059
-        printf "${color}${fmt}${_CLR_RESET}\n" "$msg"
+        printf -v _formatted "${fmt}" "$msg"
+        printf '%b%s%b\n' "$color" "$_formatted" "$_CLR_RESET"
       else
         # shellcheck disable=SC2059
         printf "${fmt}\n" "$msg"
@@ -117,6 +119,6 @@ log_warn()    { _log_format warn "$@" >&2; }
 log_error()   { _log_format error "$@" >&2; }
 log_success() { [[ "${QUIET:-}" == "true" ]] && return 0; _log_format success "$@"; }
 log_debug()   { [[ "${VERBOSE:-}" != "true" ]] && return 0; _log_format debug "$@" >&2; }
-log_suggest() { [[ "${QUIET:-}" == "true" ]] && return 0; printf "${_CLR_DIM}  %s${_CLR_RESET}\n" "$*" >&2; }
+log_suggest() { [[ "${QUIET:-}" == "true" ]] && return 0; printf '%b  %s%b\n' "$_CLR_DIM" "$*" "$_CLR_RESET" >&2; }
 
 die() { log_error "$1"; exit "${2:-1}"; }

@@ -275,3 +275,90 @@ JSON
   [[ "$output" == *"T1=a"* ]]
   [[ "$output" == *"T2=b"* ]]
 }
+
+@test "flag value with shell metacharacters survives literally" {
+  run bash -c "
+    source '$FRAMEWORK_DIR/lib/flags/parser.sh'
+    clift_parse_args '$TEST_DIR/flags.json' --target 'foo|bar;baz\$(pwd)' --required-one x
+    echo \"TARGET=[\${CLIFT_FLAG_TARGET}]\"
+  "
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'TARGET=[foo|bar;baz$(pwd)]'* ]]
+}
+
+@test "bool flag does not consume next positional as value" {
+  run bash -c "
+    source '$FRAMEWORK_DIR/lib/flags/parser.sh'
+    clift_parse_args '$TEST_DIR/flags.json' --force --required-one x file.txt
+    echo \"FORCE=\${CLIFT_FLAG_FORCE}\"
+    echo \"P1=\${CLIFT_POS_1}\"
+  "
+  [[ "$output" == *"FORCE=true"* ]]
+  [[ "$output" == *"P1=file.txt"* ]]
+}
+
+@test "bool flag with explicit =true and =false" {
+  run bash -c "
+    source '$FRAMEWORK_DIR/lib/flags/parser.sh'
+    clift_parse_args '$TEST_DIR/flags.json' --force=true --verbose=false --required-one x
+    echo \"FORCE=\${CLIFT_FLAG_FORCE}\"
+    echo \"VERBOSE=\${CLIFT_FLAG_VERBOSE}\"
+  "
+  [[ "$output" == *"FORCE=true"* ]]
+  [[ "$output" == *"VERBOSE=false"* ]]
+}
+
+@test "empty list default produces COUNT=0" {
+  cat > "$TEST_DIR/flags_empty_list.json" <<'JSON'
+[{"name": "tag", "type": "list", "default": ""}]
+JSON
+  run bash -c "
+    source '$FRAMEWORK_DIR/lib/flags/parser.sh'
+    clift_parse_args '$TEST_DIR/flags_empty_list.json'
+    echo \"COUNT=\${CLIFT_FLAG_TAG_COUNT}\"
+  "
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"COUNT=0"* ]]
+}
+
+@test "multiple list flags accumulate across separate invocations" {
+  cat > "$TEST_DIR/flags.json" <<'JSON'
+[{"name":"tag","short":"t","type":"list"}]
+JSON
+  run bash -c "
+    source '$FRAMEWORK_DIR/lib/flags/parser.sh'
+    clift_parse_args '$TEST_DIR/flags.json' --tag=a --tag=b --tag=c
+    echo \"COUNT=\$CLIFT_FLAG_TAG_COUNT\"
+    echo \"T1=\$CLIFT_FLAG_TAG_1\"
+    echo \"T2=\$CLIFT_FLAG_TAG_2\"
+    echo \"T3=\$CLIFT_FLAG_TAG_3\"
+  "
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"COUNT=3"* ]]
+  [[ "$output" == *"T1=a"* ]]
+  [[ "$output" == *"T2=b"* ]]
+  [[ "$output" == *"T3=c"* ]]
+}
+
+@test "no flags and no positionals produces CLIFT_POS_COUNT=0" {
+  cat > "$TEST_DIR/flags_optional.json" <<'JSON'
+[{"name": "force", "type": "bool"}]
+JSON
+  run bash -c "
+    source '$FRAMEWORK_DIR/lib/flags/parser.sh'
+    clift_parse_args '$TEST_DIR/flags_optional.json'
+    echo \"POS=\${CLIFT_POS_COUNT}\"
+  "
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"POS=0"* ]]
+}
+
+@test "short flag with equals -t=value" {
+  run bash -c "
+    source '$FRAMEWORK_DIR/lib/flags/parser.sh'
+    clift_parse_args '$TEST_DIR/flags.json' -t=myhost -r x
+    echo \"TARGET=\${CLIFT_FLAG_TARGET}\"
+  "
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"TARGET=myhost"* ]]
+}

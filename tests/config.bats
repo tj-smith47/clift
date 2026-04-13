@@ -1,4 +1,5 @@
 #!/usr/bin/env bats
+bats_require_minimum_version 1.5.0
 
 load test_helper
 
@@ -82,4 +83,69 @@ EOF
   run bash "$FRAMEWORK_DIR/lib/config/show.sh" "$CLI_DIR"
   [ "$status" -eq 0 ]
   [[ "$output" == *"Configuration"* ]]
+}
+
+@test "set.sh preserves value with equals sign" {
+  run bash "$FRAMEWORK_DIR/lib/config/set.sh" "$CLI_DIR" "$FRAMEWORK_DIR" "MY_URL" "host=localhost:5432"
+  [ "$status" -eq 0 ]
+
+  run bash "$FRAMEWORK_DIR/lib/config/get.sh" "$CLI_DIR" "MY_URL"
+  [ "$status" -eq 0 ]
+  [ "$output" = "host=localhost:5432" ]
+}
+
+@test "set.sh does not corrupt other keys when updating" {
+  bash "$FRAMEWORK_DIR/lib/config/set.sh" "$CLI_DIR" "$FRAMEWORK_DIR" "APP_NAME" "updated"
+  run bash "$FRAMEWORK_DIR/lib/config/get.sh" "$CLI_DIR" "LOG_LEVEL"
+  [ "$status" -eq 0 ]
+  [ "$output" = "info" ]
+}
+
+@test "show.sh skips comment lines" {
+  run bash "$FRAMEWORK_DIR/lib/config/show.sh" "$CLI_DIR"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"# Test config"* ]]
+}
+
+@test "get.sh errors on missing .env" {
+  run bash "$FRAMEWORK_DIR/lib/config/get.sh" "$TEST_DIR/nope" "KEY"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"not found"* ]]
+}
+
+@test "show.sh errors on missing .env" {
+  run bash "$FRAMEWORK_DIR/lib/config/show.sh" "$TEST_DIR/nope"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"not found"* ]]
+}
+
+@test "set.sh errors on missing .env" {
+  run bash "$FRAMEWORK_DIR/lib/config/set.sh" "$TEST_DIR/nope" "$FRAMEWORK_DIR" "KEY" "val"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"not found"* ]]
+}
+
+@test "set.sh requires all arguments" {
+  run bash "$FRAMEWORK_DIR/lib/config/set.sh" "$CLI_DIR" "$FRAMEWORK_DIR" "" ""
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"usage"* ]]
+}
+
+@test "get.sh requires arguments" {
+  run bash "$FRAMEWORK_DIR/lib/config/get.sh" "" ""
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"usage"* ]]
+}
+
+@test "set.sh creates new key in .env" {
+  run bash "$FRAMEWORK_DIR/lib/config/set.sh" "$CLI_DIR" "$FRAMEWORK_DIR" "BRAND_NEW" "hello"
+  [ "$status" -eq 0 ]
+  grep -q "BRAND_NEW=hello" "$CLI_DIR/.env"
+}
+
+@test "show.sh displays aligned output" {
+  run bash "$FRAMEWORK_DIR/lib/config/show.sh" "$CLI_DIR"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"APP_NAME"* ]]
+  [[ "$output" == *"LOG_LEVEL"* ]]
 }

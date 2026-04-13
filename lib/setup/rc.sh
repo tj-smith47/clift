@@ -17,12 +17,18 @@ clift_rc_scrub() {
   sentinel="$(_clift_rc_sentinel "$name")"
   local tmp
   tmp="$(mktemp)"
-  awk -v s="$sentinel" '
+  if ! awk -v s="$sentinel" '
     skip > 0 { skip--; next }
     $0 == s  { skip = 1; next }
     { print }
-  ' "$rc_file" > "$tmp"
-  chmod "$(stat -c '%a' "$rc_file" 2>/dev/null || stat -f '%Lp' "$rc_file" 2>/dev/null || echo 644)" "$tmp"
+  ' "$rc_file" > "$tmp"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  if ! chmod "$(stat -c '%a' "$rc_file" 2>/dev/null || stat -f '%Lp' "$rc_file" 2>/dev/null || echo 644)" "$tmp"; then
+    rm -f "$tmp"
+    return 1
+  fi
   mv "$tmp" "$rc_file"
 }
 

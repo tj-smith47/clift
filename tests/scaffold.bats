@@ -65,6 +65,47 @@ teardown() {
   [ -f "$TEST_DIR/.clift/flags.json" ]
 }
 
+@test "new:subcmd rejects when parent command does not exist" {
+  run bash "$FRAMEWORK_DIR/lib/scaffold/scaffold.sh" "nope:sub" "A sub" "$TEST_DIR" "$FRAMEWORK_DIR"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"doesn't exist"* ]]
+}
+
+@test "new:cmd rejects duplicate top-level command" {
+  bash "$FRAMEWORK_DIR/lib/scaffold/scaffold.sh" "deploy" "Deploy" "$TEST_DIR" "$FRAMEWORK_DIR"
+  run bash "$FRAMEWORK_DIR/lib/scaffold/scaffold.sh" "deploy" "Deploy again" "$TEST_DIR" "$FRAMEWORK_DIR"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"already exists"* ]]
+}
+
+@test "new:cmd generated script is executable" {
+  bash "$FRAMEWORK_DIR/lib/scaffold/scaffold.sh" "hello" "Say hi" "$TEST_DIR" "$FRAMEWORK_DIR"
+  [ -x "$TEST_DIR/cmds/hello/hello.sh" ]
+}
+
+@test "new:cmd injects include without User commands marker (fallback)" {
+  # Remove the "# User commands" marker
+  _tmp="$(mktemp)"
+  grep -v "# User commands" "$TEST_DIR/Taskfile.yaml" > "$_tmp"
+  mv "$_tmp" "$TEST_DIR/Taskfile.yaml"
+
+  bash "$FRAMEWORK_DIR/lib/scaffold/scaffold.sh" "status" "Show status" "$TEST_DIR" "$FRAMEWORK_DIR"
+  [ -f "$TEST_DIR/cmds/status/Taskfile.yaml" ]
+  grep -q "status:" "$TEST_DIR/Taskfile.yaml"
+}
+
+@test "new:subcmd script is executable and has shebang" {
+  bash "$FRAMEWORK_DIR/lib/scaffold/scaffold.sh" "deploy" "Deploy" "$TEST_DIR" "$FRAMEWORK_DIR"
+  bash "$FRAMEWORK_DIR/lib/scaffold/scaffold.sh" "deploy:prod" "Deploy to prod" "$TEST_DIR" "$FRAMEWORK_DIR"
+  [ -x "$TEST_DIR/cmds/deploy/deploy.prod.sh" ]
+  head -1 "$TEST_DIR/cmds/deploy/deploy.prod.sh" | grep -q "bash"
+}
+
+@test "new:cmd scaffold sets correct task routing" {
+  bash "$FRAMEWORK_DIR/lib/scaffold/scaffold.sh" "build" "Build it" "$TEST_DIR" "$FRAMEWORK_DIR"
+  grep -q "router.sh" "$TEST_DIR/cmds/build/Taskfile.yaml"
+}
+
 @test "new:cmd rejects Taskfile with invalid FLAGS (via validator)" {
   mkdir -p "$TEST_DIR/cmds/bad"
   cat > "$TEST_DIR/cmds/bad/Taskfile.yaml" <<'YAML'

@@ -1,0 +1,24 @@
+version: '3'
+
+vars:
+  FLAGS:
+    - {name: service, short: s, type: string, required: true, desc: "Service name"}
+    - {name: follow, short: f, type: bool, desc: "Stream logs"}
+    - {name: lines, short: n, type: int, default: "50", desc: "Number of lines"}
+
+tasks:
+  default:
+    desc: "View service logs"
+    summary: |
+      View logs for a specific service.
+
+      Examples:
+        kube logs --service api
+        kube logs -s worker --lines 100
+        kube logs -s api --follow
+    vars:
+      FLAGS:
+        - {name: service, short: s, type: string, required: true, desc: "Service name"}
+        - {name: follow, short: f, type: bool, desc: "Stream logs"}
+        - {name: lines, short: n, type: int, default: "50", desc: "Number of lines"}
+    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"

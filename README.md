@@ -31,9 +31,10 @@
 
 # Clone the framework
 git clone <repo-url> ~/.clift
+export PATH="$HOME/.clift/bin:$PATH"
 
-# Bootstrap a new CLI (standard mode — Cobra-like UX)
-CLIFT_MODE=standard task --taskfile ~/.clift/Taskfile.yaml setup:cli -- ~/.config/mycli
+# Create a new CLI
+clift init ~/mycli
 
 # Source your shell and start using it
 source ~/.bashrc
@@ -41,6 +42,18 @@ mycli                         # see available commands
 mycli new cmd                 # scaffold your first command
 mycli greet --name world      # run it with flags
 mycli greet --help            # per-command help
+```
+
+All `clift init` options are available as flags for non-interactive use:
+
+```bash
+clift init ~/mycli --name myapp --version 1.0.0 --theme brackets --mode standard
+```
+
+See `clift help` for the full list. You can also use `task` directly:
+
+```bash
+task --taskfile ~/.clift/Taskfile.yaml setup:cli -- ~/mycli
 ```
 
 ## Features
@@ -142,11 +155,11 @@ See [docs/flags.md](docs/flags.md) for the full schema and [docs/scripts.md](doc
 ## Configuration
 
 ```bash
-mycli config:show              # display all config
-mycli config:get -- LOG_THEME  # get a single value
-mycli config:set -- LOG_THEME brackets-color
-mycli config:theme             # interactive theme picker
-mycli config:edit              # open .env in $EDITOR
+mycli config show              # display all config
+mycli config get LOG_THEME     # get a single value
+mycli config set LOG_THEME brackets-color
+mycli config theme             # interactive theme picker
+mycli config edit              # open .env in $EDITOR
 ```
 
 Configuration lives in `.env` at the CLI project root. Key variables:
@@ -251,10 +264,10 @@ LOG_CLR_DIM=\033[38;2;108;112;134m
 
 ```bash
 # Bash (add to ~/.bashrc)
-eval "$(mycli completion:bash)"
+eval "$(mycli completion bash)"
 
 # Zsh (add to ~/.zshrc)
-eval "$(mycli completion:zsh)"
+eval "$(mycli completion zsh)"
 ```
 
 ## Team Setup
@@ -290,23 +303,21 @@ clift CLIs can be versioned and distributed via [cfgd](https://github.com/tj-smi
 ### Enable During Setup
 
 ```bash
-CFGD_VERSIONING=true task --taskfile ~/.clift/Taskfile.yaml setup:cli -- ~/my-cli
+CFGD_VERSIONING=true clift init ~/my-cli
 ```
 
 This installs cfgd (if missing), configures the CLI as a cfgd module, and adds the `version:*` commands.
 
 ### Add to an Existing CLI
 
-From the framework directory:
-
 ```bash
-task setup:versioning -- ~/my-cli
+task --taskfile ~/.clift/Taskfile.yaml setup:versioning -- ~/my-cli
 ```
 
 Or from within the CLI itself (if version namespace is manually included):
 
 ```bash
-mycli version:setup
+mycli version setup
 ```
 
 ### Version Commands
@@ -316,14 +327,14 @@ Once versioning is enabled, these commands are available:
 | Command | Description |
 |---|---|
 | `version` | Show current version and cfgd status |
-| `version:setup` | Set up cfgd versioning (installs cfgd if needed) |
-| `version:upgrade` | Upgrade to the latest version via cfgd |
-| `version:update` | Alias for `version:upgrade` |
-| `version:set -- <ver>` | Pin to a specific version (e.g., `v1.2.3`) |
+| `version setup` | Set up cfgd versioning (installs cfgd if needed) |
+| `version upgrade` | Upgrade to the latest version via cfgd |
+| `version update` | Alias for `version upgrade` |
+| `version set <ver>` | Pin to a specific version (e.g., `v1.2.3`) |
 
 ### Standalone vs Config Repo Mode
 
-By default, `version:setup` treats the CLI as a **standalone module** in its own git repo. To add it to an existing cfgd config repo instead, set these environment variables:
+By default, `version setup` treats the CLI as a **standalone module** in its own git repo. To add it to an existing cfgd config repo instead, set these environment variables:
 
 | Variable | Description |
 |---|---|
@@ -331,7 +342,7 @@ By default, `version:setup` treats the CLI as a **standalone module** in its own
 | `CFGD_PROFILES` | Comma-separated profiles to add the module to (e.g., `dev,work`) |
 
 ```bash
-CFGD_CONFIG_DIR=~/dotfiles CFGD_PROFILES=dev mycli version:setup
+CFGD_CONFIG_DIR=~/dotfiles CFGD_PROFILES=dev mycli version setup
 ```
 
 ### Publishing a Version
@@ -343,7 +354,7 @@ git tag "mycli/v1.0.0"
 git push origin --tags
 ```
 
-Consumers upgrade with `mycli version:upgrade` or pin with `mycli version:set -- v1.0.0`.
+Consumers upgrade with `mycli version upgrade` or pin with `mycli version set v1.0.0`.
 
 ## cfgd Integration
 
@@ -399,6 +410,46 @@ If cfgd is not installed, nothing changes:
 - `deps.sh` checks for `jq` and `yq` (required) and `gum` (optional)
 - `mycli update` uses `git pull` as before
 - `.clift.yaml` documents dependencies for humans to install manually
+
+## Example
+
+See [`examples/kube/`](examples/kube/) for a realistic multi-command CLI with:
+
+- 3 commands: `deploy`, `status`, `logs`
+- Subcommand: `deploy rollback`
+- All flag types: `--target` (string), `--force` (bool), `--replicas` (int), `--tag` (list, repeatable)
+- Required flags (`--service` on `logs`)
+- Help, global flags, and themed output
+
+## Error UX
+
+clift provides production-grade error messages out of the box — no code required:
+
+```
+$ kube hllo
+error: unknown command 'hllo'
+  did you mean 'hello'?
+  run 'kube --help' for commands
+
+$ kube deploy -t prod
+error: subcommand must come before flags
+  did you mean: kube deploy prod -t
+
+$ kube deploy --replicas abc
+error: flag '--replicas' requires an integer, got 'abc'
+
+$ kube logs
+error: required flag '--service' not provided
+```
+
+## Development
+
+```bash
+bats tests/*.bats           # 224 tests
+scripts/coverage.sh          # line coverage via kcov (73%+)
+scripts/benchmark.sh         # overhead benchmark (~50ms)
+shellcheck lib/**/*.sh       # lint
+```
 
 ## License
 

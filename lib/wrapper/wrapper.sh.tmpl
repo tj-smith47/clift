@@ -51,6 +51,11 @@ esac
 # any nesting depth. We filter out framework-internal tasks (underscore
 # prefixed at any segment).
 TASKS_JSON="$CLI_DIR/.clift/tasks.json"
+if [[ ! -f "$TASKS_JSON" ]]; then
+  echo "error: task cache missing: $TASKS_JSON" >&2
+  echo "  try: rm -rf '$CLI_DIR/.clift' and re-run" >&2
+  exit 1
+fi
 {
   IFS= read -r -d '' known_tasks || true
   IFS= read -r -d '' root_cmds || true
