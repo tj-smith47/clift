@@ -13,14 +13,14 @@ export EXIT_ERROR=1
 export EXIT_USAGE=2
 export EXIT_NOT_FOUND=127
 
-# ANSI color codes
-_CLR_RESET='\033[0m'
-_CLR_GREEN='\033[0;32m'
-_CLR_YELLOW='\033[0;33m'
-_CLR_RED='\033[0;31m'
-_CLR_BLUE='\033[0;34m'
-_CLR_CYAN='\033[0;36m'
-_CLR_DIM='\033[2m'
+# ANSI color codes — overridable via LOG_CLR_* env vars for custom color schemes.
+_CLR_RESET="${LOG_CLR_RESET:-\033[0m}"
+_CLR_GREEN="${LOG_CLR_SUCCESS:-\033[0;32m}"
+_CLR_YELLOW="${LOG_CLR_WARN:-\033[0;33m}"
+_CLR_RED="${LOG_CLR_ERROR:-\033[0;31m}"
+_CLR_BLUE="${LOG_CLR_INFO:-\033[0;34m}"
+_CLR_CYAN="${LOG_CLR_DEBUG:-\033[0;36m}"
+_CLR_DIM="${LOG_CLR_DIM:-\033[2m}"
 
 # NO_COLOR standard: https://no-color.org
 if [[ -n "${NO_COLOR:-}" ]]; then

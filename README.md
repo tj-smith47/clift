@@ -179,6 +179,8 @@ log_suggest "hint text (dimmed, suppressed by --quiet)"
 die "fatal error" 1
 ```
 
+### Custom format strings
+
 For the `custom` theme, define format strings in your `.env`:
 
 ```bash
@@ -187,6 +189,42 @@ LOG_FMT_WARN="!! %s"
 LOG_FMT_ERROR="** %s"
 LOG_FMT_SUCCESS="++ %s"
 LOG_FMT_DEBUG=".. %s"
+```
+
+### Custom color schemes
+
+Any theme's colors can be overridden via `LOG_CLR_*` env vars in `.env`. Values are ANSI escape sequences.
+
+| Variable | Controls | Default |
+|---|---|---|
+| `LOG_CLR_INFO` | Info messages | Blue (`\033[0;34m`) |
+| `LOG_CLR_WARN` | Warnings | Yellow (`\033[0;33m`) |
+| `LOG_CLR_ERROR` | Errors | Red (`\033[0;31m`) |
+| `LOG_CLR_SUCCESS` | Success messages | Green (`\033[0;32m`) |
+| `LOG_CLR_DEBUG` | Debug messages | Cyan (`\033[0;36m`) |
+| `LOG_CLR_DIM` | Suggestions | Dim (`\033[2m`) |
+
+**Example: Dracula color scheme**
+
+```bash
+# .env — Dracula palette over the default icons-color theme
+LOG_CLR_INFO=\033[38;2;139;233;253m
+LOG_CLR_WARN=\033[38;2;255;184;108m
+LOG_CLR_ERROR=\033[38;2;255;85;85m
+LOG_CLR_SUCCESS=\033[38;2;80;250;123m
+LOG_CLR_DEBUG=\033[38;2;189;147;249m
+LOG_CLR_DIM=\033[38;2;98;114;164m
+```
+
+**Example: Catppuccin Mocha**
+
+```bash
+LOG_CLR_INFO=\033[38;2;137;180;250m
+LOG_CLR_WARN=\033[38;2;249;226;175m
+LOG_CLR_ERROR=\033[38;2;243;139;168m
+LOG_CLR_SUCCESS=\033[38;2;166;227;161m
+LOG_CLR_DEBUG=\033[38;2;203;166;247m
+LOG_CLR_DIM=\033[38;2;108;112;134m
 ```
 
 ## Shell Completions
