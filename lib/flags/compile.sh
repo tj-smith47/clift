@@ -96,15 +96,16 @@ done <<< "$unique_taskfiles"
 # Step 5: build flags.json entries in memory, emit once at the end.
 flags_entries='{}'
 
-while IFS= read -r task_row; do
-  [[ -z "$task_row" ]] && continue
+# Cache has_optin results per Taskfile to avoid redundant jq calls.
+declare -A _tf_optin_cache
 
-  task_name="$(jq -r '.name' <<< "$task_row")"
+while IFS=$'\x01' read -r -d '' task_name source_tf aliases_json; do
+  [[ -z "$task_name" ]] && continue
+
   # Skip framework-internal tasks (underscore prefix).
   [[ "$task_name" == _* ]] && continue
   [[ "$task_name" == *:_* ]] && continue
 
-  source_tf="$(jq -r '.location.taskfile' <<< "$task_row")"
   # Root-level helpers (version, default) are not dispatched through the router.
   [[ "$source_tf" == "$ROOT_TASKFILE" ]] && continue
   # Framework library taskfiles (lib/help/Taskfile.yaml, etc.).
@@ -124,17 +125,24 @@ while IFS= read -r task_row; do
 
   # Opt-in check: does this Taskfile declare any FLAGS (top-level or per-task)?
   # If not, the command is legacy and the router falls back to positional argv.
-  has_optin="$(jq -r '
-    (.toplevel != null) or
-    ([.tasks[]? | select(. != null)] | length > 0)
-  ' <<< "$tf_data")"
+  if [[ -n "${_tf_optin_cache[$source_tf]+x}" ]]; then
+    has_optin="${_tf_optin_cache[$source_tf]}"
+  else
+    has_optin="$(jq -r '
+      (.toplevel != null) or
+      ([.tasks[]? | select(. != null)] | length > 0)
+    ' <<< "$tf_data")"
+    _tf_optin_cache["$source_tf"]="$has_optin"
+  fi
 
   # Read aliases as NUL-separated list (safe for names with spaces/colons).
   # Aliases get the same flags entry as the canonical task name.
   aliases=()
-  while IFS= read -r -d '' a; do
-    [[ -n "$a" ]] && aliases+=("$a")
-  done < <(jq -j '(.aliases // []) | .[] + "\u0000"' <<< "$task_row")
+  if [[ "$aliases_json" != "[]" ]]; then
+    while IFS= read -r -d '' a; do
+      [[ -n "$a" ]] && aliases+=("$a")
+    done < <(jq -j '.[] + "\u0000"' <<< "$aliases_json")
+  fi
 
   if [[ "$has_optin" != "true" ]]; then
     flags_entries="$(jq --arg k "$task_name" '.[$k] = {legacy: true}' <<< "$flags_entries")"
@@ -189,7 +197,12 @@ while IFS= read -r task_row; do
   for alias in "${aliases[@]}"; do
     flags_entries="$(jq --arg k "$alias" --argjson v "$merged" '.[$k] = $v' <<< "$flags_entries")"
   done
-done < <(jq -c '.[]' <<< "$all_tasks_json")
+done < <(jq -j '
+  .[] |
+  .name + "\u0001" +
+  .location.taskfile + "\u0001" +
+  ((.aliases // []) | tojson) + "\u0000"
+' <<< "$all_tasks_json")
 
 echo "$flags_entries" > "${CACHE_DIR}/flags.json.tmp"
 mv "${CACHE_DIR}/flags.json.tmp" "${CACHE_DIR}/flags.json"
