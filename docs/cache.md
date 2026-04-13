@@ -5,7 +5,7 @@ Every built CLI has a precompiled cache at `${CLI_DIR}/.clift/` that powers the 
 ## Files
 
 - **`tasks.json`** -- output of `task --list-all --json --nested` at build time. Used by the wrapper for command-path resolution and by help/completion.
-- **`flags.json`** -- merged flag tables per task. Each key is a task name; each value is either an array of flag maps or `{"legacy": true}`.
+- **`flags.json`** -- merged flag tables per task. Each key is a task name; each value is either an array of flag maps or `{"passthrough": true}`.
 - **`checksum`** -- max mtime (integer seconds) across all relevant Taskfiles. Used to detect staleness.
 
 ## When it rebuilds

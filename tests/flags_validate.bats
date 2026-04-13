@@ -127,7 +127,7 @@ YAML
   [ "$status" -eq 0 ]
 }
 
-@test "missing FLAGS key passes (legacy Taskfile)" {
+@test "missing FLAGS key passes (passthrough Taskfile)" {
   cat > "$TEST_DIR/Taskfile.yaml" <<'YAML'
 version: '3'
 tasks:

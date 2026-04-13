@@ -22,10 +22,10 @@ User types: mycli deploy prod --force
 |   1. mode detection                          |
 |   2. reconstruct argv                        |
 |   3. load .clift/flags.json for this task    |
-|   4. legacy opt-out? exec with argv          |
+|   4. passthrough? exec with argv              |
 |   5. clift_parse_args -> CLIFT_FLAG_*        |
 |   6. intercept --help, --version             |
-|   7. legacy passthroughs                     |
+|   7. passthrough dispatch                    |
 |   8. exec cmds/deploy/deploy.prod.sh         |
 +-----------------------+----------------------+
                         |

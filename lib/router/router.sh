@@ -7,10 +7,10 @@
 #   1. Validate required env vars
 #   2. Dependency check
 #   3. Reconstruct argv: CLIFT_ARG_* (standard mode) or CLI_ARGS (task mode)
-#   4. Early legacy check: if no root Taskfile.yaml, skip cache/parser
+#   4. Early passthrough check: if no root Taskfile.yaml, skip cache/parser
 #   5. Ensure precompiled cache is fresh
 #   6. Load merged flag table for this task
-#   7. Legacy opt-out: if "legacy: true", exec script with positional argv
+#   7. Passthrough: if no FLAGS declared, exec script with positional argv
 #   8. Otherwise: clift_parse_args → export CLIFT_FLAG_* / CLIFT_POS_*
 #   9. Intercept --help, --version
 #  10. Emit legacy-compat VERBOSE / QUIET / NO_COLOR env vars
@@ -56,40 +56,40 @@ else
   fi
 fi
 
-# Step 3: Early legacy check — if the CLI has no root Taskfile (e.g., minimal
-# test fixture), treat everything as legacy: skip cache management and parser
-# entirely.
+# Step 3: Early passthrough check — if the CLI has no root Taskfile (e.g.,
+# minimal test fixture), treat everything as passthrough: skip cache management
+# and parser entirely.
 if [[ ! -f "$CLI_DIR/Taskfile.yaml" ]]; then
-  is_legacy_no_cache=true
+  is_passthrough_no_cache=true
 else
-  is_legacy_no_cache=false
+  is_passthrough_no_cache=false
 fi
 
 # Step 4: Ensure cache is fresh (only when we have a root Taskfile)
 source "${FRAMEWORK_DIR}/lib/cache.sh"
 
-if [[ "$is_legacy_no_cache" != "true" ]] && [[ -z "${CLIFT_CACHE_VERIFIED:-}" ]]; then
+if [[ "$is_passthrough_no_cache" != "true" ]] && [[ -z "${CLIFT_CACHE_VERIFIED:-}" ]]; then
   clift_ensure_cache "$CLI_DIR" "$FRAMEWORK_DIR"
 fi
 
 # Step 5: Load flag table for this task, merge with globals — single jq call.
 # Result is either "LEGACY" (no flags / not in cache) or the merged JSON array.
 FLAGS_FILE="$CLI_DIR/.clift/flags.json"
-if [[ "$is_legacy_no_cache" == "true" ]] || [[ ! -f "$FLAGS_FILE" ]]; then
+if [[ "$is_passthrough_no_cache" == "true" ]] || [[ ! -f "$FLAGS_FILE" ]]; then
   merged_table="LEGACY"
 else
   merged_table="$(jq -c --arg k "$TASK_NAME" \
     --slurpfile globals "${FRAMEWORK_DIR}/lib/flags/globals.json" '
     .[$k] // null |
-    if . == null or (type == "object" and .legacy == true) then "LEGACY"
+    if . == null or (type == "object" and .passthrough == true) then "PASSTHROUGH"
     else $globals[0] + .
     end
   ' "$FLAGS_FILE")"
 fi
 
-# Step 6: Legacy opt-out — if the task has no FLAG declarations, fall through
-# to a simple positional-argv exec, preserving backward compatibility.
-if [[ "$merged_table" == '"LEGACY"' ]] || [[ "$merged_table" == "LEGACY" ]]; then
+# Step 6: Passthrough — if the task has no FLAG declarations, exec the script
+# directly with positional argv. No parser, no CLIFT_FLAG_* env vars.
+if [[ "$merged_table" == '"PASSTHROUGH"' ]] || [[ "$merged_table" == "PASSTHROUGH" ]]; then
   source "${FRAMEWORK_DIR}/lib/log/log.sh"
   local_namespace="${TASK_NAME%%:*}"
   script_path="${CLI_DIR}/cmds/${local_namespace}/${local_namespace}.sh"
@@ -100,7 +100,7 @@ if [[ "$merged_table" == '"LEGACY"' ]] || [[ "$merged_table" == "LEGACY" ]]; the
   exec bash "$script_path" "${args[@]+"${args[@]}"}"
 fi
 
-# Step 7: Non-legacy — parse flags via the merged table.
+# Step 7: Parse flags via the merged table.
 
 tmp_table="$(mktemp)"
 trap 'rm -f "$tmp_table"' EXIT

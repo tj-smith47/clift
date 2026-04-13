@@ -150,7 +150,7 @@ while IFS=$'\x01' read -r -d '' task_name source_tf aliases_json; do
   fi
 
   # Opt-in check: does this Taskfile declare any FLAGS (top-level or per-task)?
-  # If not, the command is legacy and the router falls back to positional argv.
+  # If not, the command is passthrough and the router falls back to positional argv.
   if [[ -n "${_tf_optin_cache[$source_tf]+x}" ]]; then
     has_optin="${_tf_optin_cache[$source_tf]}"
   else
@@ -171,9 +171,9 @@ while IFS=$'\x01' read -r -d '' task_name source_tf aliases_json; do
   fi
 
   if [[ "$has_optin" != "true" ]]; then
-    printf '%s\t%s\n' "$task_name" '{"legacy":true}' >> "$entries_tmpfile"
+    printf '%s\t%s\n' "$task_name" '{"passthrough":true}' >> "$entries_tmpfile"
     for alias in "${aliases[@]+"${aliases[@]}"}"; do
-      printf '%s\t%s\n' "$alias" '{"legacy":true}' >> "$entries_tmpfile"
+      printf '%s\t%s\n' "$alias" '{"passthrough":true}' >> "$entries_tmpfile"
     done
     continue
   fi

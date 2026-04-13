@@ -131,7 +131,7 @@ teardown() {
   [[ "$output" == *"hello output"* ]]
 }
 
-@test "unknown flags rejected by parser in non-legacy mode" {
+@test "unknown flags rejected by parser in parsed mode" {
   CLI_ARGS="--name=test" run bash "$FRAMEWORK_DIR/lib/router/router.sh" "hello"
   [ "$status" -ne 0 ]
   [[ "$output" == *"unknown flag"* ]]
@@ -193,14 +193,14 @@ SCRIPT
   [[ "$output" == *"FLAG_NAME=alice"* ]]
 }
 
-@test "legacy graceful-degradation: no vars.FLAGS → CLI_ARGS path" {
+@test "passthrough: no vars.FLAGS → CLI_ARGS path" {
   rm -rf "$TEST_DIR"/*
   cat > "$TEST_DIR/Taskfile.yaml" <<'YAML'
 version: '3'
 dotenv: ['.env']
 includes:
-  legacy:
-    taskfile: ./cmds/legacy
+  plain:
+    taskfile: ./cmds/plain
 tasks:
   default:
     cmd: echo root
@@ -211,24 +211,24 @@ CLI_VERSION=1.0.0
 CLI_DIR=$TEST_DIR
 FRAMEWORK_DIR=$FRAMEWORK_DIR
 ENV
-  mkdir -p "$TEST_DIR/cmds/legacy"
-  cat > "$TEST_DIR/cmds/legacy/Taskfile.yaml" <<'YAML'
+  mkdir -p "$TEST_DIR/cmds/plain"
+  cat > "$TEST_DIR/cmds/plain/Taskfile.yaml" <<'YAML'
 version: '3'
 tasks:
   default:
-    cmd: echo legacy
+    cmd: echo plain
 YAML
-  cat > "$TEST_DIR/cmds/legacy/legacy.sh" <<'SCRIPT'
+  cat > "$TEST_DIR/cmds/plain/plain.sh" <<'SCRIPT'
 #!/usr/bin/env bash
 for a in "$@"; do echo "arg=$a"; done
 SCRIPT
-  chmod +x "$TEST_DIR/cmds/legacy/legacy.sh"
+  chmod +x "$TEST_DIR/cmds/plain/plain.sh"
 
   bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$TEST_DIR"
 
   CLI_ARGS='--foo bar' \
   CLI_DIR="$TEST_DIR" \
-  run bash "$FRAMEWORK_DIR/lib/router/router.sh" "legacy"
+  run bash "$FRAMEWORK_DIR/lib/router/router.sh" "plain"
   [ "$status" -eq 0 ]
   [[ "$output" == *"arg=--foo"* ]]
   [[ "$output" == *"arg=bar"* ]]

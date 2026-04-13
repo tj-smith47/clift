@@ -106,7 +106,7 @@ YAML
   [[ "$output" == *"shadows"* ]] || [[ "$output" == *"warning"* ]]
 }
 
-@test "legacy command (no vars.FLAGS) marked legacy" {
+@test "command without vars.FLAGS marked passthrough" {
   mkdir -p "$CLI_DIR/cmds/old"
   cat > "$CLI_DIR/cmds/old/Taskfile.yaml" <<'YAML'
 version: '3'
@@ -121,6 +121,6 @@ YAML
 
   run bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$CLI_DIR"
   [ "$status" -eq 0 ]
-  run jq -r '.["old:default"].legacy // .["old"].legacy // false' "$CLI_DIR/.clift/flags.json"
+  run jq -r '.["old:default"].passthrough // .["old"].passthrough // false' "$CLI_DIR/.clift/flags.json"
   [ "$output" = "true" ]
 }

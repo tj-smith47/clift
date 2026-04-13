@@ -71,7 +71,7 @@ if [[ -f "$FLAGS_JSON" ]]; then
     .[$cmd] // .[$cmd2] // null
   ' "$FLAGS_JSON")"
 
-  if [[ -n "$cmd_flags" && "$cmd_flags" != "null" && "$cmd_flags" != '{"legacy":true}' ]]; then
+  if [[ -n "$cmd_flags" && "$cmd_flags" != "null" && "$cmd_flags" != '{"passthrough":true}' ]]; then
     # Load root globals to split local vs global flags
     root_globals="$(cat "$_CLIFT_GLOBALS_JSON" 2>/dev/null || echo '[]')"
     # Split into local flags (not in root globals) and global flags (in root globals)
