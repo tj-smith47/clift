@@ -26,6 +26,10 @@ if [[ ! -f "$ROOT_TASKFILE" ]]; then
   exit 1
 fi
 
+# Dependency check (full — includes version metadata)
+source "$SCRIPT_DIR/../check/deps.sh"
+clift_check_deps_full
+
 mkdir -p "$CACHE_DIR"
 
 trap 'rm -f "${CACHE_DIR}/tasks.json.tmp" "${CACHE_DIR}/flags.json.tmp" "${CACHE_DIR}/checksum.tmp" "${CACHE_DIR}/entries.tmp"' EXIT

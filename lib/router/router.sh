@@ -35,8 +35,9 @@ if [[ -z "${CLI_DIR:-}" ]]; then
   exit 1
 fi
 
-# Step 1: Dependency check
+# Step 1: Dependency check (fast — command presence only)
 source "${FRAMEWORK_DIR}/lib/check/deps.sh"
+clift_check_deps_fast
 
 # Step 2: Reconstruct argv from either CLIFT_ARG_* (standard mode) or
 # CLI_ARGS (task mode, legacy)
