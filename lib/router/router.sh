@@ -75,19 +75,23 @@ fi
 # Step 5: Load merged flag table for this task from precompiled cache
 FLAGS_FILE="$CLI_DIR/.clift/flags.json"
 if [[ "$is_legacy_no_cache" == "true" ]] || [[ ! -f "$FLAGS_FILE" ]]; then
-  task_entry='{"legacy": true}'
+  task_entry='{"legacy":true}'
 else
-  task_entry="$(jq --arg k "$TASK_NAME" '.[$k] // null' "$FLAGS_FILE")"
+  task_entry="$(jq -c --arg k "$TASK_NAME" '.[$k] // null' "$FLAGS_FILE")"
   if [[ "$task_entry" == "null" ]]; then
     # Task not in cache (e.g., framework-internal task routed through router)
-    task_entry='{"legacy": true}'
+    task_entry='{"legacy":true}'
   fi
 fi
 
 # Step 6: Legacy opt-out — if the task has no FLAG declarations, fall through
 # to a simple positional-argv exec, preserving backward compatibility.
 # task_entry can be: an object with {legacy: true}, an array (flag table), or null.
-is_legacy="$(jq -r 'if type == "object" and .legacy == true then "true" else "false" end' <<< "$task_entry")"
+if [[ "$task_entry" == '{"legacy":true}' ]]; then
+  is_legacy=true
+else
+  is_legacy=false
+fi
 if [[ "$is_legacy" == "true" ]]; then
   source "${FRAMEWORK_DIR}/lib/log/log.sh"
   local_namespace="${TASK_NAME%%:*}"
