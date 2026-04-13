@@ -76,6 +76,13 @@ _is_task_prefix() {
   [[ -n "${_known_exact[$c]+x}" ]] || [[ -n "${_known_prefix[$c]+x}" ]]
 }
 
+# Join arguments with ':' without spawning a subshell.
+# Sets _JOINED instead of printing, so the caller reads $JOINED.
+_join_colon() {
+  local IFS=':'
+  _JOINED="${*}"
+}
+
 # Longest-prefix walk: consume non-flag tokens while each extended path is
 # still a prefix of some known task. Stop at the first flag or at the first
 # token that would make the path non-matching.
@@ -90,7 +97,8 @@ while (( i <= $# )); do
     break
   fi
   candidate_path=("${path[@]+"${path[@]}"}" "$tok")
-  joined="$(IFS=:; echo "${candidate_path[*]}")"
+  _join_colon "${candidate_path[@]}"
+  joined="$_JOINED"
   if _is_task_prefix "$joined"; then
     path=("${candidate_path[@]}")
     i=$((i+1))
@@ -99,7 +107,8 @@ while (( i <= $# )); do
   fi
 done
 
-matched_task="$(IFS=:; echo "${path[*]}")"
+_join_colon "${path[@]+"${path[@]}"}"
+matched_task="$_JOINED"
 
 # Empty path handling: either the first token was a flag (flags-before-command
 # error) or it was an unrecognized command (did-you-mean suggestion).
