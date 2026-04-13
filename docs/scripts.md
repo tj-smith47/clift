@@ -59,6 +59,3 @@ Commands whose Taskfile has **no** `vars.FLAGS` key are passthrough commands. Th
 
 This is a valid choice for simple commands that don't need flags, or for scripts in other languages that have their own argument parsing.
 
-## Migrating from legacy `parse_args`
-
-Old scripts that call `parse_args "$@" --flags "force"` still work in passthrough mode -- as long as their command Taskfile has **no** `vars.FLAGS` key. To migrate to the new contract, add `vars.FLAGS` to the Taskfile and update your script to read `CLIFT_FLAG_*` env vars.
