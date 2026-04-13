@@ -173,10 +173,15 @@ while IFS=$'\x01' read -r -d '' task_name source_tf aliases_json; do
     continue
   fi
 
-  merged="$(jq -cn \
+  # Combined merge + shadow check in a single jq call.
+  {
+    IFS= read -r -d '' merged || true
+    IFS= read -r -d '' shadow_check || true
+  } < <(jq -j -n \
     --argjson root "$root_flags" \
     --argjson tfdata "$tf_data" \
     --arg local_task "$local_task" \
+    --arg task_name "$task_name" \
     '
     def merge_in(acc; new):
       if new == null or new == [] then acc
@@ -188,30 +193,27 @@ while IFS=$'\x01' read -r -d '' task_name source_tf aliases_json; do
           )) + [$e]
         )
       end;
+
     merge_in(
       merge_in($root; $tfdata.toplevel);
       $tfdata.tasks[$local_task]
-    )
-    ')"
+    ) as $merged |
 
-  # Spec §4.3: warn if a command-level flag shadows a global short alias.
-  if [[ -n "${tf_data}" ]]; then
-    shadow_check="$(jq -r -n \
-      --argjson root "$root_flags" \
-      --argjson tfdata "$tf_data" \
-      --arg local_task "$local_task" \
-      --arg task_name "$task_name" \
-      '
-      ($root | map({(.short // ""): .name}) | add // {}) as $globals |
-      [($tfdata.toplevel // [])[], ($tfdata.tasks[$local_task] // [])[]] |
-      .[] |
-      select(.short != null and .short != "") |
-      select($globals[.short] != null) |
-      "warning: task \($task_name) shadows global short -\(.short) (was --\($globals[.short]), now --\(.name))"
-      ')"
-    if [[ -n "$shadow_check" ]]; then
-      echo "$shadow_check" >&2
-    fi
+    # Spec §4.3: warn if a command-level flag shadows a global short alias.
+    ($root | map({(.short // ""): .name}) | add // {}) as $globals |
+    ([
+      [($tfdata.toplevel // [])[], ($tfdata.tasks[$local_task] // [])[]]
+      | .[]
+      | select(.short != null and .short != "")
+      | select($globals[.short] != null)
+      | "warning: task \($task_name) shadows global short -\(.short) (was --\($globals[.short]), now --\(.name))"
+    ] | join("\n")) as $warnings |
+
+    ($merged | tojson) + "\u0000" + $warnings + "\u0000"
+    ')
+
+  if [[ -n "$shadow_check" ]]; then
+    echo "$shadow_check" >&2
   fi
 
   printf '%s\t%s\n' "$task_name" "$merged" >> "$entries_tmpfile"
