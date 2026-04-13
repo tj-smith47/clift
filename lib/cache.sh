@@ -10,17 +10,20 @@ _CLIFT_CACHE_LOADED=1
 # Prints a single integer (epoch seconds) to stdout.
 # Silently ignores non-existent paths (glob no-match).
 clift_max_mtime() {
-  local max=0
+  local -a files=()
+  local f
   for f in "$@"; do
-    [[ -f "$f" ]] || continue
-    local mt
-    # GNU stat: -c '%Y' prints mtime as epoch seconds
-    # BSD stat: -f '%m' prints mtime as epoch seconds
-    if mt="$(stat -c '%Y' "$f" 2>/dev/null)" || mt="$(stat -f '%m' "$f" 2>/dev/null)"; then
-      (( mt > max )) && max=$mt
-    fi
+    [[ -f "$f" ]] && files+=("$f")
   done
-  echo "$max"
+  (( ${#files[@]} == 0 )) && { echo 0; return; }
+
+  # Both GNU and BSD stat accept multiple files.
+  # Detect once, batch all files in one call.
+  if stat -c '%Y' /dev/null &>/dev/null; then
+    stat -c '%Y' "${files[@]}" | sort -rn | head -1
+  else
+    stat -f '%m' "${files[@]}" | sort -rn | head -1
+  fi
 }
 
 # Ensure the .clift/ cache is fresh. Rebuilds if checksum differs or is missing.
