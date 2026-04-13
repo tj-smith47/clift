@@ -8,12 +8,8 @@
 
 set -euo pipefail
 
-TASKFILE="${1:-}"
-
-if [[ -z "$TASKFILE" ]] || [[ ! -f "$TASKFILE" ]]; then
-  echo "error: validate.sh requires a valid Taskfile path" >&2
-  exit 1
-fi
+if [[ -n "${_CLIFT_VALIDATE_LOADED:-}" ]]; then return 0 2>/dev/null || true; fi
+_CLIFT_VALIDATE_LOADED=1
 
 # Reserved flag names — derived from the canonical globals.json
 _GLOBALS_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/globals.json"
@@ -198,33 +194,44 @@ _validate_layer() {
   return 0
 }
 
-# Read the entire Taskfile as JSON once. Every further query is a cheap
-# in-memory jq filter over this blob — no more per-task yq forks.
-# I7: a malformed Taskfile causes yq to fail here with its real error message
-# (set -e will propagate it) instead of silently validating as empty.
-TASKFILE_JSON="$(yq -o=json '.' "$TASKFILE")"
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  # Direct execution mode — validate the given file
 
-# Validate top-level vars.FLAGS. _validate_layer now takes JSON directly, so
-# the only fork here is the single jq call to extract the layer.
-top_layer_json="$(echo "$TASKFILE_JSON" | jq -c '.vars.FLAGS // null')"
-_validate_layer "$top_layer_json" "${TASKFILE}:vars.FLAGS" || exit 1
+  TASKFILE="${1:-}"
 
-# Validate every tasks.*.vars.FLAGS.
-# I7: only iterate if .tasks is actually an object. Missing / non-object is
-# treated as "no tasks" — this preserves "root-only Taskfile with no tasks"
-# as legal.
-tasks_type="$(echo "$TASKFILE_JSON" | jq -r '.tasks | type')"
-if [[ "$tasks_type" == "object" ]]; then
-  # Emit NUL-separated (name, flags_json) pairs from a single jq call. Task
-  # names round-trip as opaque strings, so colons/dots/spaces are safe
-  # (C1 fix: no path parser ever sees the task name).
-  while IFS= read -r -d '' task_name && IFS= read -r -d '' task_flags_json; do
-    [[ -z "$task_name" ]] && continue
-    _validate_layer "$task_flags_json" "${TASKFILE}:tasks.${task_name}.vars.FLAGS" || exit 1
-  done < <(echo "$TASKFILE_JSON" | jq -j '
-    .tasks | to_entries[] |
-    .key + "\u0000" + ((.value.vars.FLAGS // null) | tojson) + "\u0000"
-  ')
+  if [[ -z "$TASKFILE" ]] || [[ ! -f "$TASKFILE" ]]; then
+    echo "error: validate.sh requires a valid Taskfile path" >&2
+    exit 1
+  fi
+
+  # Read the entire Taskfile as JSON once. Every further query is a cheap
+  # in-memory jq filter over this blob — no more per-task yq forks.
+  # I7: a malformed Taskfile causes yq to fail here with its real error message
+  # (set -e will propagate it) instead of silently validating as empty.
+  TASKFILE_JSON="$(yq -o=json '.' "$TASKFILE")"
+
+  # Validate top-level vars.FLAGS. _validate_layer now takes JSON directly, so
+  # the only fork here is the single jq call to extract the layer.
+  top_layer_json="$(echo "$TASKFILE_JSON" | jq -c '.vars.FLAGS // null')"
+  _validate_layer "$top_layer_json" "${TASKFILE}:vars.FLAGS" || exit 1
+
+  # Validate every tasks.*.vars.FLAGS.
+  # I7: only iterate if .tasks is actually an object. Missing / non-object is
+  # treated as "no tasks" — this preserves "root-only Taskfile with no tasks"
+  # as legal.
+  tasks_type="$(echo "$TASKFILE_JSON" | jq -r '.tasks | type')"
+  if [[ "$tasks_type" == "object" ]]; then
+    # Emit NUL-separated (name, flags_json) pairs from a single jq call. Task
+    # names round-trip as opaque strings, so colons/dots/spaces are safe
+    # (C1 fix: no path parser ever sees the task name).
+    while IFS= read -r -d '' task_name && IFS= read -r -d '' task_flags_json; do
+      [[ -z "$task_name" ]] && continue
+      _validate_layer "$task_flags_json" "${TASKFILE}:tasks.${task_name}.vars.FLAGS" || exit 1
+    done < <(echo "$TASKFILE_JSON" | jq -j '
+      .tasks | to_entries[] |
+      .key + "\u0000" + ((.value.vars.FLAGS // null) | tojson) + "\u0000"
+    ')
+  fi
+
+  exit 0
 fi
-
-exit 0

@@ -41,9 +41,25 @@ trap 'rm -f "${CACHE_DIR}/tasks.json.tmp" "${CACHE_DIR}/flags.json.tmp" "${CACHE
 # the framework globals (help, verbose, quiet, no-color, version) which are
 # themselves the reserved names. Validating them against the reserved-name
 # blocklist is circular.
+source "$SCRIPT_DIR/validate.sh"
 for tf in "$CLI_DIR"/cmds/*/Taskfile.yaml; do
   [[ -f "$tf" ]] || continue
-  bash "$SCRIPT_DIR/validate.sh" "$tf"
+
+  local_tf_json="$(yq -o=json '.' "$tf")"
+
+  top_layer="$(echo "$local_tf_json" | jq -c '.vars.FLAGS // null')"
+  _validate_layer "$top_layer" "${tf}:vars.FLAGS" || exit 1
+
+  local_tasks_type="$(echo "$local_tf_json" | jq -r '.tasks | type')"
+  if [[ "$local_tasks_type" == "object" ]]; then
+    while IFS= read -r -d '' vt_name && IFS= read -r -d '' vt_flags; do
+      [[ -z "$vt_name" ]] && continue
+      _validate_layer "$vt_flags" "${tf}:tasks.${vt_name}.vars.FLAGS" || exit 1
+    done < <(echo "$local_tf_json" | jq -j '
+      .tasks | to_entries[] |
+      .key + "\u0000" + ((.value.vars.FLAGS // null) | tojson) + "\u0000"
+    ')
+  fi
 done
 
 # Step 2: capture task list via `task --list-all --json --nested`.
