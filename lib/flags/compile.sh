@@ -28,7 +28,7 @@ fi
 
 mkdir -p "$CACHE_DIR"
 
-trap 'rm -f "${CACHE_DIR}/tasks.json.tmp" "${CACHE_DIR}/flags.json.tmp" "${CACHE_DIR}/checksum.tmp"' EXIT
+trap 'rm -f "${CACHE_DIR}/tasks.json.tmp" "${CACHE_DIR}/flags.json.tmp" "${CACHE_DIR}/checksum.tmp" "${CACHE_DIR}/entries.tmp"' EXIT
 
 # Step 1: validate all command Taskfiles before emitting any cache. If any flag
 # schema is invalid, fail loudly and leave the cache untouched so a stale-but-valid
@@ -93,8 +93,9 @@ while IFS= read -r tf; do
   taskfile_data["$tf"]="$tf_json"
 done <<< "$unique_taskfiles"
 
-# Step 5: build flags.json entries in memory, emit once at the end.
-flags_entries='{}'
+# Step 5: build flags.json entries via temp file, assemble once at the end.
+entries_tmpfile="${CACHE_DIR}/entries.tmp"
+: > "$entries_tmpfile"
 
 # Cache has_optin results per Taskfile to avoid redundant jq calls.
 declare -A _tf_optin_cache
@@ -145,14 +146,14 @@ while IFS=$'\x01' read -r -d '' task_name source_tf aliases_json; do
   fi
 
   if [[ "$has_optin" != "true" ]]; then
-    flags_entries="$(jq --arg k "$task_name" '.[$k] = {legacy: true}' <<< "$flags_entries")"
+    printf '%s\t%s\n' "$task_name" '{"legacy":true}' >> "$entries_tmpfile"
     for alias in "${aliases[@]}"; do
-      flags_entries="$(jq --arg k "$alias" '.[$k] = {legacy: true}' <<< "$flags_entries")"
+      printf '%s\t%s\n' "$alias" '{"legacy":true}' >> "$entries_tmpfile"
     done
     continue
   fi
 
-  merged="$(jq -n \
+  merged="$(jq -cn \
     --argjson root "$root_flags" \
     --argjson tfdata "$tf_data" \
     --arg local_task "$local_task" \
@@ -193,9 +194,9 @@ while IFS=$'\x01' read -r -d '' task_name source_tf aliases_json; do
     fi
   fi
 
-  flags_entries="$(jq --arg k "$task_name" --argjson v "$merged" '.[$k] = $v' <<< "$flags_entries")"
+  printf '%s\t%s\n' "$task_name" "$merged" >> "$entries_tmpfile"
   for alias in "${aliases[@]}"; do
-    flags_entries="$(jq --arg k "$alias" --argjson v "$merged" '.[$k] = $v' <<< "$flags_entries")"
+    printf '%s\t%s\n' "$alias" "$merged" >> "$entries_tmpfile"
   done
 done < <(jq -j '
   .[] |
@@ -204,7 +205,12 @@ done < <(jq -j '
   ((.aliases // []) | tojson) + "\u0000"
 ' <<< "$all_tasks_json")
 
-echo "$flags_entries" > "${CACHE_DIR}/flags.json.tmp"
+# Assemble all entries into flags.json with a single jq call.
+# Tab-separated: key<TAB>json_value
+jq -R -n '
+  [inputs | split("\t") | {key: .[0], value: (.[1:] | join("\t") | fromjson)}]
+  | from_entries
+' "$entries_tmpfile" > "${CACHE_DIR}/flags.json.tmp"
 mv "${CACHE_DIR}/flags.json.tmp" "${CACHE_DIR}/flags.json"
 
 # Step 6: write checksum using portable mtime helper.
