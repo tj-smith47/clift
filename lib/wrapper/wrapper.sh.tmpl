@@ -47,6 +47,20 @@ TASKS_JSON="$CLI_DIR/.clift/tasks.json"
 known_tasks="$(jq -r '[.. | .tasks? // empty | .[] | .name] | .[]' "$TASKS_JSON" \
   | grep -v '^_' | grep -v ':_' || true)"
 
+# Build O(1) lookup tables for exact-match and prefix-match
+declare -A _known_exact=()
+declare -A _known_prefix=()
+while IFS= read -r _t; do
+  [[ -z "$_t" ]] && continue
+  _known_exact["$_t"]=1
+  # Register all prefixes of this task name
+  _pfx="$_t"
+  while [[ "$_pfx" == *:* ]]; do
+    _pfx="${_pfx%:*}"
+    _known_prefix["$_pfx"]=1
+  done
+done <<< "$known_tasks"
+
 # Root-level command names for did-you-mean suggestions. We want the root
 # task names (.tasks[].name) plus namespace keys (top-level includes). Using
 # `to_entries[] | .key` against BOTH task objects and the namespaces map —
@@ -58,15 +72,8 @@ root_cmds="$(jq -r '[.tasks[]?.name, (.namespaces // {} | keys[])] | .[]' "$TASK
 # Is $1 exactly a known task, or a strict prefix (colon-extended) of one?
 # Used to decide whether the longest-prefix walk can consume one more token.
 _is_task_prefix() {
-  local candidate="$1"
-  local t
-  while IFS= read -r t; do
-    [[ -z "$t" ]] && continue
-    if [[ "$t" == "$candidate" ]] || [[ "$t" == "${candidate}:"* ]]; then
-      return 0
-    fi
-  done <<< "$known_tasks"
-  return 1
+  local c="$1"
+  [[ -n "${_known_exact[$c]+x}" ]] || [[ -n "${_known_prefix[$c]+x}" ]]
 }
 
 # Longest-prefix walk: consume non-flag tokens while each extended path is
