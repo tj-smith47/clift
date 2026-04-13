@@ -102,8 +102,7 @@ tasks:
 YAML
   run bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$CLI_DIR"
   [ "$status" -eq 0 ]
-  # bats captures both stdout and stderr into $output
-  [[ "$output" == *"shadows"* ]] || [[ "$output" == *"warning"* ]]
+  [[ "$output" == *"shadows global short -t"* ]]
 }
 
 @test "compile requires valid CLI directory" {

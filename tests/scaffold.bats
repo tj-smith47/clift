@@ -106,6 +106,20 @@ teardown() {
   grep -q "router.sh" "$TEST_DIR/cmds/build/Taskfile.yaml"
 }
 
+@test "new:cmd requires all four arguments" {
+  run bash "$FRAMEWORK_DIR/lib/scaffold/scaffold.sh" "" "" "" ""
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"requires NAME, DESC, CLI_DIR, FRAMEWORK_DIR"* ]]
+}
+
+@test "new:subcmd appends task to existing Taskfile" {
+  bash "$FRAMEWORK_DIR/lib/scaffold/scaffold.sh" "deploy" "Deploy" "$TEST_DIR" "$FRAMEWORK_DIR"
+  bash "$FRAMEWORK_DIR/lib/scaffold/scaffold.sh" "deploy:prod" "Deploy to prod" "$TEST_DIR" "$FRAMEWORK_DIR"
+  # The prod subtask should be appended to the deploy Taskfile
+  grep -q "prod:" "$TEST_DIR/cmds/deploy/Taskfile.yaml"
+  grep -q "Deploy to prod" "$TEST_DIR/cmds/deploy/Taskfile.yaml"
+}
+
 @test "new:cmd rejects Taskfile with invalid FLAGS (via validator)" {
   mkdir -p "$TEST_DIR/cmds/bad"
   cat > "$TEST_DIR/cmds/bad/Taskfile.yaml" <<'YAML'

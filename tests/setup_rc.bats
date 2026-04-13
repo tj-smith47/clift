@@ -84,6 +84,16 @@ teardown() {
   [ "$perms" = "600" ]
 }
 
+@test "write adds blank line before entry if file doesn't end with one" {
+  source "$FRAMEWORK_DIR/lib/setup/rc.sh"
+  printf 'existing_line' > "$RC_FILE"  # no trailing newline
+  clift_rc_write "$RC_FILE" "mycli" "alias mycli='x'"
+  # Should have a blank line separating existing content from sentinel
+  local lines
+  lines=$(wc -l < "$RC_FILE")
+  [ "$lines" -ge 3 ]
+}
+
 @test "switching from alias to path export scrubs alias first" {
   source "$FRAMEWORK_DIR/lib/setup/rc.sh"
   clift_rc_write "$RC_FILE" "mycli" "alias mycli='x'"

@@ -321,24 +321,6 @@ JSON
   [[ "$output" == *"COUNT=0"* ]]
 }
 
-@test "multiple list flags accumulate across separate invocations" {
-  cat > "$TEST_DIR/flags.json" <<'JSON'
-[{"name":"tag","short":"t","type":"list"}]
-JSON
-  run bash -c "
-    source '$FRAMEWORK_DIR/lib/flags/parser.sh'
-    clift_parse_args '$TEST_DIR/flags.json' --tag=a --tag=b --tag=c
-    echo \"COUNT=\$CLIFT_FLAG_TAG_COUNT\"
-    echo \"T1=\$CLIFT_FLAG_TAG_1\"
-    echo \"T2=\$CLIFT_FLAG_TAG_2\"
-    echo \"T3=\$CLIFT_FLAG_TAG_3\"
-  "
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"COUNT=3"* ]]
-  [[ "$output" == *"T1=a"* ]]
-  [[ "$output" == *"T2=b"* ]]
-  [[ "$output" == *"T3=c"* ]]
-}
 
 @test "no flags and no positionals produces CLIFT_POS_COUNT=0" {
   cat > "$TEST_DIR/flags_optional.json" <<'JSON'

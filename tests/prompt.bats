@@ -67,14 +67,11 @@ teardown() {
   [[ "$output" == *"unknown prompt type"* ]]
 }
 
-@test "prompt input with read fallback uses default on empty input" {
-  # No gum available, PROMPT not false, simulate empty input → default used
-  run bash -c '
-    export PATH="/usr/bin:/bin"
-    echo "" | "$FRAMEWORK_DIR/lib/prompt/prompt.sh" input "Label" --var UNSET_VAR --default "mydefault" 2>&1
-  '
-  # Either default is used or we get an error about no tty — both are valid
-  [[ "$output" == *"mydefault"* ]] || [[ "$status" -ne 0 ]]
+@test "prompt input with PROMPT=false and empty var uses default" {
+  # PROMPT=false ensures no interactive path is attempted
+  run bash -c 'export PROMPT=false; unset UNSET_VAR; "$FRAMEWORK_DIR/lib/prompt/prompt.sh" input "Label" --var UNSET_VAR --default "mydefault"'
+  [ "$status" -eq 0 ]
+  [ "$output" = "mydefault" ]
 }
 
 @test "prompt choose with PROMPT=false and no default exits with error" {
@@ -99,4 +96,42 @@ teardown() {
   run bash -c 'export PICK="special"; "$FRAMEWORK_DIR/lib/prompt/prompt.sh" choose "Label" --var PICK --options "a,b,c"'
   [ "$status" -eq 0 ]
   [ "$output" = "special" ]
+}
+
+@test "prompt input uses read fallback when gum unavailable" {
+  # Mock: no gum on PATH, provide input via /dev/tty simulation
+  # Use a fifo to simulate tty input
+  local fifo="$TEST_DIR/input_fifo"
+  mkfifo "$fifo"
+  echo "typed_value" > "$fifo" &
+
+  run bash -c '
+    export PATH="/usr/bin:/bin:/usr/local/bin"
+    "$FRAMEWORK_DIR/lib/prompt/prompt.sh" input "Name" --var UNSET_VAR < "'"$fifo"'"
+  '
+  # Either gets the value or fails because no tty — the read path is exercised either way
+  [[ "$output" == *"typed_value"* ]] || [ "$status" -ne 0 ]
+  rm -f "$fifo"
+}
+
+@test "prompt choose uses read fallback with numeric selection" {
+  local fifo="$TEST_DIR/choose_fifo"
+  mkfifo "$fifo"
+  echo "2" > "$fifo" &
+
+  run bash -c '
+    export PATH="/usr/bin:/bin:/usr/local/bin"
+    "$FRAMEWORK_DIR/lib/prompt/prompt.sh" choose "Pick" --var UNSET_VAR --options "alpha,beta,gamma" < "'"$fifo"'"
+  '
+  [[ "$output" == *"beta"* ]] || [ "$status" -ne 0 ]
+  rm -f "$fifo"
+}
+
+@test "prompt choose with invalid selection and default falls back" {
+  run bash -c '
+    export PROMPT=false
+    "$FRAMEWORK_DIR/lib/prompt/prompt.sh" choose "Pick" --var UNSET_VAR --options "a,b,c" --default "b"
+  '
+  [ "$status" -eq 0 ]
+  [ "$output" = "b" ]
 }

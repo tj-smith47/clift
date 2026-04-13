@@ -106,15 +106,15 @@ teardown() {
   [[ "$output" == *"QUIET=true"* ]]
 }
 
-@test "unknown command shows error" {
+@test "unknown command shows Unknown command error" {
   run -127 bash "$FRAMEWORK_DIR/lib/router/router.sh" "nonexistent" 2>&1
-  [[ "$output" == *"Unknown command"* ]] || [[ "$output" == *"script not found"* ]]
+  [[ "$output" == *"Unknown command: nonexistent"* ]]
 }
 
 @test "router without task name exits with error" {
   run bash "$FRAMEWORK_DIR/lib/router/router.sh" 2>&1
   [ "$status" -eq 1 ]
-  [[ "$output" == *"error"* ]]
+  [[ "$output" == *"router.sh called without a task name"* ]]
 }
 
 @test "hello command produces expected output" {
@@ -232,6 +232,22 @@ SCRIPT
   [ "$status" -eq 0 ]
   [[ "$output" == *"arg=--foo"* ]]
   [[ "$output" == *"arg=bar"* ]]
+}
+
+@test "router without CLI_DIR exits with error" {
+  local fw="$FRAMEWORK_DIR"
+  run -1 bash -c "unset CLI_DIR; bash '$fw/lib/router/router.sh' 'hello' 2>&1"
+  [[ "$output" == *"CLI_DIR is not set"* ]]
+}
+
+@test "router handles no-Taskfile passthrough path" {
+  # Remove root Taskfile so is_passthrough_no_cache=true
+  rm -f "$TEST_DIR/Taskfile.yaml"
+  # The task will still be "hello" but there's no root taskfile
+  # Router should fall through to passthrough mode
+  CLI_ARGS="" run bash "$FRAMEWORK_DIR/lib/router/router.sh" "hello" 2>&1
+  # Should either exec the script directly or error about missing script
+  [[ "$output" == *"hello output"* ]] || [[ "$output" == *"Unknown command"* ]]
 }
 
 @test "--help flag dispatches to detail.sh" {

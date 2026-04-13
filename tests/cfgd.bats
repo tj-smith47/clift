@@ -66,6 +66,48 @@ load test_helper
   [ "$status" -eq 0 ]
 }
 
+@test "update shows already-up-to-date for current repo" {
+  local mock_fw="$TEST_DIR/framework"
+  mkdir -p "$mock_fw/lib/update"
+  cp "$FRAMEWORK_DIR/lib/update/update.sh" "$mock_fw/lib/update/update.sh"
+  cp -r "$FRAMEWORK_DIR/lib/log" "$mock_fw/lib/log"
+  git -C "$mock_fw" init -q
+  git -C "$mock_fw" -c user.email="t@t" -c user.name="T" commit --allow-empty -m "init" -q
+  # Create a fake remote that points at itself
+  git -C "$mock_fw" remote add origin "$mock_fw"
+  git -C "$mock_fw" fetch origin -q 2>/dev/null || true
+
+  run bash "$mock_fw/lib/update/update.sh" "$mock_fw" 2>&1
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Already up to date"* ]]
+}
+
+@test "update shows pending changes when behind remote" {
+  local mock_fw="$TEST_DIR/fw_behind"
+  mkdir -p "$mock_fw/lib/update"
+  cp "$FRAMEWORK_DIR/lib/update/update.sh" "$mock_fw/lib/update/update.sh"
+  cp -r "$FRAMEWORK_DIR/lib/log" "$mock_fw/lib/log"
+
+  # Create a "remote" repo with an extra commit
+  local remote_repo="$TEST_DIR/remote"
+  git init -q "$remote_repo"
+  git -C "$remote_repo" -c user.email="t@t" -c user.name="T" commit --allow-empty -m "init" -q
+  git -C "$remote_repo" -c user.email="t@t" -c user.name="T" commit --allow-empty -m "new feature" -q
+
+  # Clone it as the framework dir
+  git clone -q "$remote_repo" "$mock_fw/.git_tmp"
+  mv "$mock_fw/.git_tmp/.git" "$mock_fw/.git"
+  rm -rf "$mock_fw/.git_tmp"
+
+  # Reset local to be 1 commit behind
+  git -C "$mock_fw" reset --hard HEAD~1 -q
+
+  # The update flow will show pending changes but then prompt for confirmation
+  # which we can't answer — it will fail on the read, but we can verify the output
+  run bash -c 'bash "'"$mock_fw"'/lib/update/update.sh" "'"$mock_fw"'" 2>&1 < /dev/null' || true
+  [[ "$output" == *"update(s) available"* ]] || [[ "$output" == *"new feature"* ]]
+}
+
 @test "update requires FRAMEWORK_DIR" {
   run bash "$FRAMEWORK_DIR/lib/update/update.sh" ""
   [ "$status" -eq 1 ]

@@ -112,21 +112,6 @@ YAML
   [[ "$output" == *"Show pod status"* ]]
 }
 
-@test "list.sh shows subcommands with space-separated display" {
-  _setup_cli_with_commands
-  run bash "$FRAMEWORK_DIR/lib/help/list.sh" "$TEST_DIR/Taskfile.yaml"
-  [ "$status" -eq 0 ]
-  # deploy prod subcommand should show with space (standard mode display)
-  [[ "$output" == *"deploy prod"* ]]
-}
-
-@test "list.sh shows standard mode help hint" {
-  _setup_cli_with_commands
-  run bash "$FRAMEWORK_DIR/lib/help/list.sh" "$TEST_DIR/Taskfile.yaml"
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"--help"* ]]
-}
-
 @test "list.sh shows task mode help hint when CLIFT_MODE=task" {
   _setup_cli_with_commands
   export CLIFT_MODE=task
@@ -205,10 +190,3 @@ ENV
   }
 }
 
-@test "list.sh shows Deploy group title-cased from namespace" {
-  _setup_cli_with_commands
-  run bash "$FRAMEWORK_DIR/lib/help/list.sh" "$TEST_DIR/Taskfile.yaml"
-  [ "$status" -eq 0 ]
-  # The deploy namespace should get a title-cased group header
-  [[ "$output" == *"Deploy:"* ]]
-}

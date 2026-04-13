@@ -31,11 +31,15 @@ load test_helper
 @test "version shows managed status with .cfgd-managed marker" {
   export CFGD_VERSIONING=true
   touch "$CLI_DIR/.cfgd-managed"
-  # Only shows "Managed by cfgd" if cfgd binary exists
-  if command -v cfgd &>/dev/null; then
-    run bash "$FRAMEWORK_DIR/lib/version/version.sh" "$CLI_DIR" "$FRAMEWORK_DIR"
-    [[ "$output" == *"Managed by cfgd"* ]]
-  fi
+  # Mock cfgd so the code path is always exercised
+  mkdir -p "$TEST_DIR/bin"
+  echo '#!/bin/sh' > "$TEST_DIR/bin/cfgd"
+  chmod +x "$TEST_DIR/bin/cfgd"
+  export PATH="$TEST_DIR/bin:$PATH"
+
+  run bash "$FRAMEWORK_DIR/lib/version/version.sh" "$CLI_DIR" "$FRAMEWORK_DIR" 2>&1
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Managed by cfgd"* ]]
 }
 
 # --- upgrade.sh ---
@@ -93,10 +97,16 @@ load test_helper
 
 @test "version shows cfgd not installed warning when versioning enabled" {
   export CFGD_VERSIONING=true
-  export PATH="/usr/bin:/bin"
-  run bash "$FRAMEWORK_DIR/lib/version/version.sh" "$CLI_DIR" "$FRAMEWORK_DIR" 2>&1
+  # Ensure cfgd is NOT on PATH by using a restricted PATH
+  # that still includes jq/yq but not cfgd
+  run bash -c '
+    export CFGD_VERSIONING=true CLI_NAME=testcli CLI_VERSION=1.0.0
+    # Remove any mock cfgd from PATH — only keep system dirs
+    export PATH="/usr/bin:/bin:/usr/local/bin"
+    bash "$FRAMEWORK_DIR/lib/version/version.sh" "$CLI_DIR" "$FRAMEWORK_DIR" 2>&1
+  '
   [ "$status" -eq 0 ]
-  [[ "$output" == *"cfgd not installed"* ]] || [[ "$output" == *"version 1.0.0"* ]]
+  [[ "$output" == *"cfgd not installed"* ]]
 }
 
 @test "version shows cfgd versioning enabled but not applied" {
@@ -122,6 +132,112 @@ load test_helper
   run bash "$FRAMEWORK_DIR/lib/version/set.sh" "" ""
   [ "$status" -eq 1 ]
   [[ "$output" == *"required"* ]]
+}
+
+@test "version/setup.sh standalone mode configures module.yaml" {
+  mkdir -p "$TEST_DIR/standcli"
+  cat > "$TEST_DIR/standcli/.clift.yaml" <<'YAML'
+name: standcli
+version: 0.1.0
+YAML
+  cat > "$TEST_DIR/standcli/.env" <<'ENV'
+CLI_NAME=standcli
+CLI_VERSION=0.1.0
+ENV
+  cat > "$TEST_DIR/standcli/Taskfile.yaml" <<'YAML'
+version: '3'
+includes:
+  # User commands
+tasks:
+  default:
+    desc: "Show help"
+  version:
+    desc: "Print version"
+    cmd: echo "standcli version 0.1.0"
+YAML
+
+  # Mock cfgd
+  mkdir -p "$TEST_DIR/bin"
+  echo '#!/bin/sh' > "$TEST_DIR/bin/cfgd"
+  chmod +x "$TEST_DIR/bin/cfgd"
+  export PATH="$TEST_DIR/bin:$PATH"
+
+  # Init a git repo so _set_git_source can find a remote
+  git -C "$TEST_DIR/standcli" init -q
+  git -C "$TEST_DIR/standcli" -c user.email="t@t" -c user.name="T" commit --allow-empty -m "init" -q
+
+  CLI_NAME=standcli CLI_VERSION=0.1.0 \
+    run bash "$FRAMEWORK_DIR/lib/version/setup.sh" "$TEST_DIR/standcli" "$FRAMEWORK_DIR"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Standalone module configured"* ]]
+  # CFGD_VERSIONING should be set in .env
+  grep -q "CFGD_VERSIONING=true" "$TEST_DIR/standcli/.env"
+}
+
+@test "version/setup.sh updates existing CFGD_VERSIONING line in .env" {
+  mkdir -p "$TEST_DIR/updcli"
+  cat > "$TEST_DIR/updcli/.clift.yaml" <<'YAML'
+name: updcli
+version: 0.1.0
+YAML
+  cat > "$TEST_DIR/updcli/.env" <<'ENV'
+CLI_NAME=updcli
+CFGD_VERSIONING=false
+ENV
+  cat > "$TEST_DIR/updcli/Taskfile.yaml" <<'YAML'
+version: '3'
+includes:
+  # User commands
+tasks:
+  default:
+    desc: "Show help"
+  version:
+    desc: "Print version"
+    cmd: echo "updcli version 0.1.0"
+YAML
+
+  mkdir -p "$TEST_DIR/bin"
+  echo '#!/bin/sh' > "$TEST_DIR/bin/cfgd"
+  chmod +x "$TEST_DIR/bin/cfgd"
+  export PATH="$TEST_DIR/bin:$PATH"
+
+  CLI_NAME=updcli CLI_VERSION=0.1.0 \
+    run bash "$FRAMEWORK_DIR/lib/version/setup.sh" "$TEST_DIR/updcli" "$FRAMEWORK_DIR"
+  [ "$status" -eq 0 ]
+  # Should have updated the existing line, not appended a second
+  [ "$(grep -c 'CFGD_VERSIONING' "$TEST_DIR/updcli/.env")" -eq 1 ]
+  grep -q "CFGD_VERSIONING=true" "$TEST_DIR/updcli/.env"
+}
+
+@test "version/setup.sh injects version include before tasks: when no User commands marker" {
+  mkdir -p "$TEST_DIR/nomkr"
+  cat > "$TEST_DIR/nomkr/.clift.yaml" <<'YAML'
+name: nomkr
+version: 0.1.0
+YAML
+  cat > "$TEST_DIR/nomkr/.env" <<'ENV'
+CLI_NAME=nomkr
+ENV
+  cat > "$TEST_DIR/nomkr/Taskfile.yaml" <<'YAML'
+version: '3'
+includes:
+tasks:
+  default:
+    desc: "Show help"
+  version:
+    desc: "Print version"
+    cmd: echo "nomkr version 0.1.0"
+YAML
+
+  mkdir -p "$TEST_DIR/bin"
+  echo '#!/bin/sh' > "$TEST_DIR/bin/cfgd"
+  chmod +x "$TEST_DIR/bin/cfgd"
+  export PATH="$TEST_DIR/bin:$PATH"
+
+  CLI_NAME=nomkr CLI_VERSION=0.1.0 \
+    run bash "$FRAMEWORK_DIR/lib/version/setup.sh" "$TEST_DIR/nomkr" "$FRAMEWORK_DIR"
+  [ "$status" -eq 0 ]
+  grep -q "lib/version" "$TEST_DIR/nomkr/Taskfile.yaml"
 }
 
 @test "set uses cli-name/version ref convention" {

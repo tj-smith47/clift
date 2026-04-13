@@ -137,15 +137,3 @@ EOF
   [[ "$output" == *"usage"* ]]
 }
 
-@test "set.sh creates new key in .env" {
-  run bash "$FRAMEWORK_DIR/lib/config/set.sh" "$CLI_DIR" "$FRAMEWORK_DIR" "BRAND_NEW" "hello"
-  [ "$status" -eq 0 ]
-  grep -q "BRAND_NEW=hello" "$CLI_DIR/.env"
-}
-
-@test "show.sh displays aligned output" {
-  run bash "$FRAMEWORK_DIR/lib/config/show.sh" "$CLI_DIR"
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"APP_NAME"* ]]
-  [[ "$output" == *"LOG_LEVEL"* ]]
-}

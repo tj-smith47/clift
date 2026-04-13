@@ -55,7 +55,7 @@ teardown() {
 @test "missing arguments exits with error" {
   run bash "$FRAMEWORK_DIR/lib/completion/completion.sh"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"error"* ]]
+  [[ "$output" == *"requires FORMAT"* ]] || [[ "$output" == *"requires FORMAT, TASKFILE_PATH, and CLI_NAME"* ]]
 }
 
 @test "bash format includes function definition" {
@@ -124,9 +124,9 @@ teardown() {
   [[ "$output" == *"greet"* ]]
 }
 
-@test "standard mode bash flag completion uses jq on flags.json" {
+@test "standard mode bash flag completion reads from flags.json" {
   CLIFT_MODE=standard run bash "$FRAMEWORK_DIR/lib/completion/completion.sh" bash
   [ "$status" -eq 0 ]
   [[ "$output" == *"flags_json"* ]]
-  [[ "$output" == *'--\(.name)'* ]] || [[ "$output" == *"COMPREPLY"* ]]
+  [[ "$output" == *'--\(.name)'* ]]
 }

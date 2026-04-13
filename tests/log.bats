@@ -269,3 +269,29 @@ load test_helper
   [ "$status" -eq 0 ]
   [[ "$output" == ".. trace" ]]
 }
+
+@test "icons-color warn uses yellow prefix" {
+  run bash -c 'export LOG_THEME=icons-color; source "$FRAMEWORK_DIR/lib/log/log.sh"; log_warn "oops" 2>&1'
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"oops"* ]]
+  [[ "$output" =~ $'\033' ]]
+}
+
+@test "icons-color debug uses cyan prefix when VERBOSE" {
+  run bash -c 'export LOG_THEME=icons-color VERBOSE=true; source "$FRAMEWORK_DIR/lib/log/log.sh"; log_debug "dbg" 2>&1'
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"dbg"* ]]
+}
+
+@test "custom theme warn/error/success/debug with color" {
+  for level_func_fmt in "log_warn:LOG_FMT_WARN:!! %s" "log_error:LOG_FMT_ERROR:** %s" "log_success:LOG_FMT_SUCCESS:++ %s" "log_debug:LOG_FMT_DEBUG:.. %s"; do
+    IFS=: read -r func var fmt <<< "$level_func_fmt"
+    extra=""
+    [[ "$func" == "log_debug" ]] && extra="VERBOSE=true"
+    redir=""
+    [[ "$func" == "log_warn" || "$func" == "log_error" || "$func" == "log_debug" ]] && redir="2>&1"
+    run bash -c "export LOG_THEME=custom ${var}='${fmt}' LOG_COLOR=true ${extra}; source \"\$FRAMEWORK_DIR/lib/log/log.sh\"; ${func} 'test' ${redir}"
+    [ "$status" -eq 0 ]
+    [[ "$output" =~ $'\033' ]]
+  done
+}

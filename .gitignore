@@ -2,3 +2,4 @@
 .task/
 *.tmp
 .cfgd-managed
+coverage/

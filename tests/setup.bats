@@ -148,3 +148,67 @@ teardown() {
     "$TEST_DIR/mycli" "$FRAMEWORK_DIR" "mycli" "1.0.0" "minimal" "standard"
   [ -d "$TEST_DIR/mycli/.clift" ]
 }
+
+@test "setup.sh detects zsh shell for rc file" {
+  export SHELL=/bin/zsh
+  unset CLIFT_RC_FILE
+  bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
+    "$TEST_DIR/zshcli" "$FRAMEWORK_DIR" "zshcli" "1.0.0" "minimal" "standard"
+  grep -q "zshcli" "$HOME/.zshrc"
+}
+
+@test "setup.sh renders template placeholders correctly" {
+  bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
+    "$TEST_DIR/tmplcli" "$FRAMEWORK_DIR" "tmplcli" "0.5.0" "brackets" "standard"
+  # .env should have resolved placeholders, not raw %%TOKENS%%
+  ! grep -q '%%' "$TEST_DIR/tmplcli/.env"
+  grep -q "CLI_NAME=tmplcli" "$TEST_DIR/tmplcli/.env"
+  grep -q "CLI_VERSION=0.5.0" "$TEST_DIR/tmplcli/.env"
+  grep -q "LOG_THEME=brackets" "$TEST_DIR/tmplcli/.env"
+}
+
+@test "setup.sh does not overwrite existing Taskfile" {
+  mkdir -p "$TEST_DIR/existing"
+  echo "custom content" > "$TEST_DIR/existing/Taskfile.yaml"
+  bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
+    "$TEST_DIR/existing" "$FRAMEWORK_DIR" "existing" "1.0.0" "minimal" "standard"
+  # Taskfile should still have the custom content
+  grep -q "custom content" "$TEST_DIR/existing/Taskfile.yaml"
+}
+
+@test "setup.sh creates parent directory if needed" {
+  bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
+    "$TEST_DIR/deep/nested/cli" "$FRAMEWORK_DIR" "nested" "1.0.0" "minimal" "standard"
+  [ -f "$TEST_DIR/deep/nested/cli/.env" ]
+}
+
+@test "setup.sh success message shows standard mode next steps" {
+  run bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
+    "$TEST_DIR/nextstep" "$FRAMEWORK_DIR" "nextstep" "1.0.0" "minimal" "standard"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"nextstep new cmd"* ]]
+}
+
+@test "setup.sh with CFGD_VERSIONING triggers version setup" {
+  # Mock cfgd
+  mkdir -p "$TEST_DIR/bin"
+  cat > "$TEST_DIR/bin/cfgd" <<'SH'
+#!/bin/sh
+echo "mock-cfgd"
+SH
+  chmod +x "$TEST_DIR/bin/cfgd"
+  export PATH="$TEST_DIR/bin:$PATH"
+
+  CFGD_VERSIONING=true \
+  run bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
+    "$TEST_DIR/vcli" "$FRAMEWORK_DIR" "vcli" "1.0.0" "minimal" "standard" 2>&1
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"versioning"* ]]
+}
+
+@test "setup.sh success message shows task mode next steps" {
+  run bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
+    "$TEST_DIR/taskstep" "$FRAMEWORK_DIR" "taskstep" "1.0.0" "minimal" "task"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"new:cmd"* ]]
+}

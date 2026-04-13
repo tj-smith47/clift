@@ -1,6 +1,23 @@
 <h1 align="center">clift</h1>
 <p align="center"><em>Command Line Interface Framework in Task</em></p>
 <p align="center">A batteries-included, language-agnostic framework for building custom CLIs using <a href="https://taskfile.dev">go-task</a>.<br>You write your command logic in any language — clift provides the UX.</p>
+<p align="center">
+  <a href="https://github.com/tj-smith47/clift/actions"><img src="https://github.com/tj-smith47/clift/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/tj-smith47/clift/blob/badges/coverage.json"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/tj-smith47/clift/badges/coverage.json" alt="Coverage"></a>
+</p>
+
+<p align="center"><img src=".vhs/gifs/help.gif" alt="clift help demo" width="700"></p>
+
+<details>
+<summary>More demos</summary>
+
+| Demo | Description |
+|------|-------------|
+| <img src=".vhs/gifs/init.gif" width="500"> | `clift init` — create a new CLI |
+| <img src=".vhs/gifs/errors.gif" width="500"> | Error UX — typos, wrong types, missing flags |
+| <img src=".vhs/gifs/flags.gif" width="500"> | Flag parsing — string, bool, int, list |
+
+</details>
 
 ---
 
@@ -445,11 +462,28 @@ error: required flag '--service' not provided
 ## Development
 
 ```bash
-bats tests/*.bats           # 224 tests
-scripts/coverage.sh          # line coverage via kcov (73%+)
+bats tests/*.bats           # 325 tests
+scripts/coverage.sh          # line coverage via kcov (79%+)
 scripts/benchmark.sh         # overhead benchmark (~50ms)
 shellcheck lib/**/*.sh       # lint
 ```
+
+### Recording demo GIFs
+
+Demo GIFs in the README are recorded with [VHS](https://github.com/charmbracelet/vhs). Tape files live in `.vhs/`, GIFs are output to `.vhs/gifs/`.
+
+```bash
+# Install VHS (requires Go 1.22+)
+go install github.com/charmbracelet/vhs@latest
+
+# Record all demos (requires a TTY)
+scripts/record-demos.sh
+
+# Or record a single tape
+vhs .vhs/help.tape
+```
+
+After recording, commit the updated GIFs so they render on GitHub.
 
 ## License
 
