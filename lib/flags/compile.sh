@@ -32,18 +32,51 @@ clift_check_deps_full
 
 mkdir -p "$CACHE_DIR"
 
-trap 'rm -f "${CACHE_DIR}/tasks.json.tmp" "${CACHE_DIR}/flags.json.tmp" "${CACHE_DIR}/checksum.tmp" "${CACHE_DIR}/entries.tmp"' EXIT
+trap 'rm -f "${CACHE_DIR}/tasks.json.tmp" "${CACHE_DIR}/flags.json.tmp" "${CACHE_DIR}/checksum.tmp" "${CACHE_DIR}/entries.tmp" "${CACHE_DIR}/sources.tmp"' EXIT
 
-# Step 1: validate all command Taskfiles before emitting any cache. If any flag
+# Step 1: capture task list via `task --list-all --json --nested`.
+# Must run from within the CLI dir so Task resolves includes correctly.
+# This runs FIRST so we can derive the authoritative list of command Taskfile
+# paths from Task's own output — no hardcoded filename globs.
+( cd "$CLI_DIR" && task --list-all --json --nested ) > "${CACHE_DIR}/tasks.json.tmp"
+mv "${CACHE_DIR}/tasks.json.tmp" "${CACHE_DIR}/tasks.json"
+
+# Step 2: flatten the nested task list.
+# `--list-all --json --nested` has TWO sources of tasks:
+#   - .tasks[]                         (root-level tasks)
+#   - .namespaces.<ns>.tasks[]         (namespaced/included tasks, recursive
+#                                       for deeper nesting)
+# The recursive descent `.. | .tasks? // empty` flattens any depth. Each task
+# object carries `.location.taskfile` pointing at its source file — the
+# authoritative way to know which command a task belongs to, without ever
+# string-parsing task names.
+all_tasks_json="$(jq '[.. | .tasks? // empty | .[]]' "${CACHE_DIR}/tasks.json")"
+
+# Skip framework-internal taskfiles — their location.taskfile lives under
+# FRAMEWORK_DIR. The `:-__nomatch__` fallback keeps us safe under `set -u`
+# when FRAMEWORK_DIR isn't exported (e.g. when running outside a wrapper).
+FW_DIR="${FRAMEWORK_DIR:-__nomatch__}"
+
+unique_taskfiles="$(jq -r --arg fw "$FW_DIR" '
+  [ .[]
+    | .location.taskfile
+    | select(startswith($fw) | not)
+  ] | unique | .[]
+' <<< "$all_tasks_json")"
+
+# Step 3: validate all command Taskfiles before emitting any cache. If any flag
 # schema is invalid, fail loudly and leave the cache untouched so a stale-but-valid
 # build stays usable.
+# Uses the authoritative file list from Task's output — not a hardcoded glob —
+# so custom-named Taskfiles are included.
 # NOTE: the root Taskfile is intentionally skipped — its vars.FLAGS defines
 # the framework globals (help, verbose, quiet, no-color, version) which are
 # themselves the reserved names. Validating them against the reserved-name
 # blocklist is circular.
 source "$SCRIPT_DIR/validate.sh"
-for tf in "$CLI_DIR"/cmds/*/Taskfile.yaml; do
-  [[ -f "$tf" ]] || continue
+while IFS= read -r tf; do
+  [[ -z "$tf" ]] && continue
+  [[ "$tf" == "$ROOT_TASKFILE" ]] && continue
 
   local_tf_json="$(yq -o=json '.' "$tf")"
 
@@ -60,40 +93,12 @@ for tf in "$CLI_DIR"/cmds/*/Taskfile.yaml; do
       .key + "\u0000" + ((.value.vars.FLAGS // null) | tojson) + "\u0000"
     ')
   fi
-done
-
-# Step 2: capture task list via `task --list-all --json --nested`.
-# Must run from within the CLI dir so Task resolves includes correctly.
-( cd "$CLI_DIR" && task --list-all --json --nested ) > "${CACHE_DIR}/tasks.json.tmp"
-mv "${CACHE_DIR}/tasks.json.tmp" "${CACHE_DIR}/tasks.json"
-
-# Step 3: flatten the nested task list.
-# `--list-all --json --nested` has TWO sources of tasks:
-#   - .tasks[]                         (root-level tasks)
-#   - .namespaces.<ns>.tasks[]         (namespaced/included tasks, recursive
-#                                       for deeper nesting)
-# The recursive descent `.. | .tasks? // empty` flattens any depth. Each task
-# object carries `.location.taskfile` pointing at its source file — the
-# authoritative way to know which command a task belongs to, without ever
-# string-parsing task names.
-all_tasks_json="$(jq '[.. | .tasks? // empty | .[]]' "${CACHE_DIR}/tasks.json")"
+done <<< "$unique_taskfiles"
 
 # Step 4: batch-load each command Taskfile exactly ONCE.
 # At scale (100+ commands) we cannot afford per-task yq invocations. Read each
 # unique command Taskfile a single time and cache its FLAGS data in-memory as
 # a jq object keyed by absolute file path.
-
-# Skip framework-internal taskfiles — their location.taskfile lives under
-# FRAMEWORK_DIR. The `:-__nomatch__` fallback keeps us safe under `set -u`
-# when FRAMEWORK_DIR isn't exported (e.g. when running outside a wrapper).
-FW_DIR="${FRAMEWORK_DIR:-__nomatch__}"
-
-unique_taskfiles="$(jq -r --arg fw "$FW_DIR" '
-  [ .[]
-    | .location.taskfile
-    | select(startswith($fw) | not)
-  ] | unique | .[]
-' <<< "$all_tasks_json")"
 
 root_flags="$(yq -o=json '.vars.FLAGS // []' "$ROOT_TASKFILE")"
 
@@ -235,9 +240,17 @@ jq -R -n '
 ' "$entries_tmpfile" > "${CACHE_DIR}/flags.json.tmp"
 mv "${CACHE_DIR}/flags.json.tmp" "${CACHE_DIR}/flags.json"
 
-# Step 6: write checksum using portable mtime helper.
+# Step 6: write sources manifest + checksum using portable mtime helper.
+# The sources manifest lists every Taskfile the cache depends on so that the
+# staleness check in cache.sh tracks the right files — no hardcoded globs.
 source "$SCRIPT_DIR/../cache.sh"
-clift_max_mtime "$ROOT_TASKFILE" "$CLI_DIR"/cmds/*/Taskfile.yaml > "${CACHE_DIR}/checksum.tmp"
+{
+  echo "$ROOT_TASKFILE"
+  while IFS= read -r _sf; do
+    [[ -n "$_sf" ]] && echo "$_sf"
+  done <<< "$unique_taskfiles"
+} > "${CACHE_DIR}/sources"
+clift_max_mtime $(< "${CACHE_DIR}/sources") > "${CACHE_DIR}/checksum.tmp"
 mv "${CACHE_DIR}/checksum.tmp" "${CACHE_DIR}/checksum"
 
 exit 0

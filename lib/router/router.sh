@@ -72,27 +72,24 @@ if [[ "$is_legacy_no_cache" != "true" ]] && [[ -z "${CLIFT_CACHE_VERIFIED:-}" ]]
   clift_ensure_cache "$CLI_DIR" "$FRAMEWORK_DIR"
 fi
 
-# Step 5: Load merged flag table for this task from precompiled cache
+# Step 5: Load flag table for this task, merge with globals — single jq call.
+# Result is either "LEGACY" (no flags / not in cache) or the merged JSON array.
 FLAGS_FILE="$CLI_DIR/.clift/flags.json"
 if [[ "$is_legacy_no_cache" == "true" ]] || [[ ! -f "$FLAGS_FILE" ]]; then
-  task_entry='{"legacy":true}'
+  merged_table="LEGACY"
 else
-  task_entry="$(jq -c --arg k "$TASK_NAME" '.[$k] // null' "$FLAGS_FILE")"
-  if [[ "$task_entry" == "null" ]]; then
-    # Task not in cache (e.g., framework-internal task routed through router)
-    task_entry='{"legacy":true}'
-  fi
+  merged_table="$(jq -c --arg k "$TASK_NAME" \
+    --slurpfile globals "${FRAMEWORK_DIR}/lib/flags/globals.json" '
+    .[$k] // null |
+    if . == null or (type == "object" and .legacy == true) then "LEGACY"
+    else $globals[0] + .
+    end
+  ' "$FLAGS_FILE")"
 fi
 
 # Step 6: Legacy opt-out — if the task has no FLAG declarations, fall through
 # to a simple positional-argv exec, preserving backward compatibility.
-# task_entry can be: an object with {legacy: true}, an array (flag table), or null.
-if [[ "$task_entry" == '{"legacy":true}' ]]; then
-  is_legacy=true
-else
-  is_legacy=false
-fi
-if [[ "$is_legacy" == "true" ]]; then
+if [[ "$merged_table" == '"LEGACY"' ]] || [[ "$merged_table" == "LEGACY" ]]; then
   source "${FRAMEWORK_DIR}/lib/log/log.sh"
   local_namespace="${TASK_NAME%%:*}"
   script_path="${CLI_DIR}/cmds/${local_namespace}/${local_namespace}.sh"
@@ -103,11 +100,7 @@ if [[ "$is_legacy" == "true" ]]; then
   exec bash "$script_path" "${args[@]+"${args[@]}"}"
 fi
 
-# Step 7: Non-legacy — parse flags via the precompiled table.
-# Inject framework-global flags (version, verbose, quiet, no-color, help) into
-# the task's flag table so the parser recognises them. These names are reserved
-# in the validator and cannot be user-declared, so there is no collision risk.
-merged_table="$(jq -n --argjson user "$task_entry" --slurpfile globals "${FRAMEWORK_DIR}/lib/flags/globals.json" '$globals[0] + $user')"
+# Step 7: Non-legacy — parse flags via the merged table.
 
 tmp_table="$(mktemp)"
 trap 'rm -f "$tmp_table"' EXIT

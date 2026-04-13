@@ -31,19 +31,27 @@ clift_parse_args() {
   local table_json
   table_json="$(<"$flag_table_file")"
 
-  # Pre-build lookup tables AND collect known names + required flags in a single
-  # jq call — three birds, one fork.
-  # Output: three NUL-separated sections via process substitution (NUL bytes
+  # Pre-build lookup tables, known names, required flags, AND defaults in a
+  # single jq call — the only fork in the parser init path.
+  # Output: four NUL-separated sections via process substitution (NUL bytes
   # can't survive bash command substitution, so we read from an fd).
-  local _ft_lines="" known_names="" _required_names=""
+  #   1. name\x01short\x01type lines  (lookup tables)
+  #   2. space-joined known names      (error suggestions)
+  #   3. required flag names           (one per line)
+  #   4. name\x01type\x01default lines (non-bool defaults)
+  local _ft_lines="" known_names="" _required_names="" _defaults_tsv=""
   {
     IFS= read -r -d '' _ft_lines || true
     IFS= read -r -d '' known_names || true
     IFS= read -r -d '' _required_names || true
+    IFS= read -r -d '' _defaults_tsv || true
   } < <(jq -j '
     ([.[] | [.name, (.short // ""), .type] | join("\u0001")] | join("\n")) + "\u0000" +
     ([.[].name] | join(" ")) + "\u0000" +
-    ([.[] | select(.required == true) | .name] | join("\n")) + "\u0000"
+    ([.[] | select(.required == true) | .name] | join("\n")) + "\u0000" +
+    ([.[] | select(.default != null and .type != "bool")
+      | [.name, .type, (.default | tostring)] | join("\u0001")]
+      | join("\n")) + "\u0000"
   ' <<< "$table_json")
 
   declare -A _ft_type _ft_name_by_short
@@ -58,11 +66,6 @@ clift_parse_args() {
   # and start fresh — a user-supplied value REPLACES a default, not appends to
   # it. This matches Cobra semantics.
   declare -A _list_was_defaulted
-  local defaults_tsv
-  defaults_tsv="$(jq -r '
-    .[] | select(.default != null and .type != "bool")
-    | [.name, .type, (.default | tostring)] | join("\u0001")
-  ' <<< "$table_json")"
   while IFS=$'\x01' read -r dname dtype ddefault; do
     [[ -z "$dname" ]] && continue
     _clift_var_name "$dname"; local dvar="$_CLIFT_VAR"
@@ -78,7 +81,7 @@ clift_parse_args() {
     else
       export "${dvar}=${ddefault}"
     fi
-  done <<< "$defaults_tsv"
+  done <<< "$_defaults_tsv"
 
   # Helper: clear a list flag's defaulted values before appending a user value.
   # Only fires once per list flag per parse.

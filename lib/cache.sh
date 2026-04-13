@@ -39,9 +39,16 @@ clift_ensure_cache() {
   local cli_dir="$1" fw_dir="$2"
   local cache_dir="$cli_dir/.clift"
   local checksum_file="$cache_dir/checksum"
+  local sources_file="$cache_dir/sources"
 
+  # Read tracked source files from the manifest written by compile.sh.
+  # Falls back to the root Taskfile if no manifest exists yet (first run).
   local current
-  current="$(clift_max_mtime "$cli_dir/Taskfile.yaml" "$cli_dir"/cmds/*/Taskfile.yaml)"
+  if [[ -f "$sources_file" ]]; then
+    current="$(clift_max_mtime $(< "$sources_file"))"
+  else
+    current="$(clift_max_mtime "$cli_dir/Taskfile.yaml")"
+  fi
 
   if [[ ! -f "$checksum_file" ]] || [[ "$(<"$checksum_file")" != "$current" ]]; then
     bash "$fw_dir/lib/flags/compile.sh" "$cli_dir" >&2
