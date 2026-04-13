@@ -164,13 +164,18 @@ for r in "${remaining[@]+"${remaining[@]}"}"; do
   fi
 done
 
-# Intercept --help/-h BEFORE dispatch. This ensures help works for ALL
+# Intercept global flags BEFORE dispatch. This ensures they work for ALL
 # commands — both routed (user cmds) and non-routed (framework cmds like
 # config, completion, update) that bypass router.sh.
 for _ha in "${remaining[@]+"${remaining[@]}"}"; do
-  if [[ "$_ha" == "--help" || "$_ha" == "-h" ]]; then
-    exec bash "$FRAMEWORK_DIR/lib/help/detail.sh" "$matched_task" "$CLI_DIR/Taskfile.yaml"
-  fi
+  case "$_ha" in
+    --help|-h)
+      exec bash "$FRAMEWORK_DIR/lib/help/detail.sh" "$matched_task" "$CLI_DIR/Taskfile.yaml"
+      ;;
+    --verbose|-v) export VERBOSE=true ;;
+    --quiet|-q)   export QUIET=true ;;
+    --no-color)   export NO_COLOR=1 ;;
+  esac
 done
 
 # Dispatch via indexed env vars. Task can't forward positional args through

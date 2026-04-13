@@ -173,3 +173,55 @@ teardown() {
   [[ "$output" == *"testcli"* ]]
   [[ "$output" == *"hello"* ]]
 }
+
+@test "--verbose sets VERBOSE env for non-routed commands" {
+  # Replace hello's cmd to echo VERBOSE
+  cat > "$TEST_DIR/cmds/hello/Taskfile.yaml" <<'YAML'
+version: '3'
+vars:
+  FLAGS: []
+tasks:
+  default:
+    vars:
+      FLAGS: []
+    cmd: echo "VERBOSE=${VERBOSE:-unset}"
+YAML
+  bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$TEST_DIR"
+  run "$TEST_DIR/bin/$CLI_NAME" hello --verbose
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"VERBOSE=true"* ]]
+}
+
+@test "--quiet sets QUIET env for non-routed commands" {
+  cat > "$TEST_DIR/cmds/hello/Taskfile.yaml" <<'YAML'
+version: '3'
+vars:
+  FLAGS: []
+tasks:
+  default:
+    vars:
+      FLAGS: []
+    cmd: echo "QUIET=${QUIET:-unset}"
+YAML
+  bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$TEST_DIR"
+  run "$TEST_DIR/bin/$CLI_NAME" hello --quiet
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"QUIET=true"* ]]
+}
+
+@test "--no-color sets NO_COLOR env for non-routed commands" {
+  cat > "$TEST_DIR/cmds/hello/Taskfile.yaml" <<'YAML'
+version: '3'
+vars:
+  FLAGS: []
+tasks:
+  default:
+    vars:
+      FLAGS: []
+    cmd: echo "NO_COLOR=${NO_COLOR:-unset}"
+YAML
+  bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$TEST_DIR"
+  run "$TEST_DIR/bin/$CLI_NAME" hello --no-color
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"NO_COLOR=1"* ]]
+}
