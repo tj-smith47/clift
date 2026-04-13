@@ -29,18 +29,24 @@ clift_parse_args() {
   fi
 
   local table_json
-  table_json="$(cat "$flag_table_file")"
+  table_json="$(<"$flag_table_file")"
 
-  # Pre-compute known names for error suggestions
-  local known_names
-  known_names="$(jq -r '[.[].name] | join(" ")' <<< "$table_json")"
+  # Pre-build lookup tables AND collect known names + required flags in a single
+  # jq call — three birds, one fork.
+  # Output: three NUL-separated sections via process substitution (NUL bytes
+  # can't survive bash command substitution, so we read from an fd).
+  local _ft_lines="" known_names="" _required_names=""
+  {
+    IFS= read -r -d '' _ft_lines || true
+    IFS= read -r -d '' known_names || true
+    IFS= read -r -d '' _required_names || true
+  } < <(jq -j '
+    ([.[] | [.name, (.short // ""), .type] | join("\u0001")] | join("\n")) + "\u0000" +
+    ([.[].name] | join(" ")) + "\u0000" +
+    ([.[] | select(.required == true) | .name] | join("\n")) + "\u0000"
+  ' <<< "$table_json")
 
-  # Pre-build lookup tables: one jq call → pure-bash lookups in the hot loop.
-  # Maps: name→type, short→name.
-  # Uses \x01 (SOH) as field separator so empty short fields survive read splitting.
   declare -A _ft_type _ft_name_by_short
-  local _ft_lines
-  _ft_lines="$(jq -r '.[] | [.name, (.short // ""), .type] | join("\u0001")' <<< "$table_json")"
   while IFS=$'\x01' read -r _fn _fs _ftype; do
     [[ -z "$_fn" ]] && continue
     _ft_type["$_fn"]="$_ftype"
@@ -277,24 +283,22 @@ clift_parse_args() {
     shift
   done
 
-  # Emit positionals
+  # Emit positionals (safe expansion for bash < 4.4 with set -u)
   export "CLIFT_POS_COUNT=${#positionals[@]}"
   local pi=0
-  for p in "${positionals[@]}"; do
+  for p in "${positionals[@]+"${positionals[@]}"}"; do
     pi=$((pi+1))
     export "CLIFT_POS_${pi}=${p}"
   done
 
-  # Required-flag validation
-  local required_names
-  required_names="$(jq -r '.[] | select(.required == true) | .name' <<< "$table_json")"
+  # Required-flag validation (uses pre-computed list from initial jq batch)
   while IFS= read -r rname; do
     [[ -z "$rname" ]] && continue
     if [[ " $seen_names " != *" $rname "* ]]; then
       clift_err_missing_required "$rname"
       return 1
     fi
-  done <<< "$required_names"
+  done <<< "$_required_names"
 
   return 0
 }

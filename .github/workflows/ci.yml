@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run ShellCheck
-        uses: ludeeus/action-shellcheck@master
+        uses: ludeeus/action-shellcheck@2.0.0
         with:
           scandir: lib
           severity: info
@@ -30,7 +30,7 @@ jobs:
           # Install Task
           sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
           # Install BATS
-          git clone https://github.com/bats-core/bats-core.git /tmp/bats
+          git clone --branch v1.11.1 --depth 1 https://github.com/bats-core/bats-core.git /tmp/bats
           sudo /tmp/bats/install.sh /usr/local
       - name: Run tests
         run: bats tests/

@@ -70,14 +70,7 @@ YAML
   bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$TEST_DIR"
 
   # Generate wrapper script from template
-  mkdir -p "$TEST_DIR/bin"
-  sed \
-    -e "s|%%FRAMEWORK_DIR%%|$FRAMEWORK_DIR|g" \
-    -e "s|%%CLI_DIR%%|$TEST_DIR|g" \
-    -e "s|%%CLI_NAME%%|$CLI_NAME|g" \
-    -e "s|%%CLI_VERSION%%|$CLI_VERSION|g" \
-    "$FRAMEWORK_DIR/lib/wrapper/wrapper.sh.tmpl" > "$TEST_DIR/bin/$CLI_NAME"
-  chmod +x "$TEST_DIR/bin/$CLI_NAME"
+  build_test_wrapper
 }
 
 teardown() {

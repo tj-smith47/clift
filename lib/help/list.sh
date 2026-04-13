@@ -26,7 +26,7 @@ TASKFILE_DIR="$(dirname "$TASKFILE_PATH")"
 TASKS_CACHE="${TASKFILE_DIR}/.clift/tasks.json"
 
 if [[ -f "$TASKS_CACHE" ]]; then
-  json="$(cat "$TASKS_CACHE")"
+  json="$(<"$TASKS_CACHE")"
 else
   json=$(task --list-all --json --nested --taskfile "$TASKFILE_PATH" 2>/dev/null) || {
     echo "error: failed to read task list" >&2
@@ -102,7 +102,7 @@ all_entries=$(echo "$json" | jq -r '
 # Helper: render Global Flags section from root Taskfile vars.FLAGS
 _render_global_flags() {
   local gf
-  gf="$(cat "${FRAMEWORK_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}/lib/flags/globals.json" 2>/dev/null || echo '[]')"
+  gf="$(cat "$_CLIFT_GLOBALS_JSON" 2>/dev/null || echo '[]')"
   if [[ -n "$gf" && "$gf" != "[]" && "$gf" != "null" ]]; then
     echo "Global Flags:"
     clift_render_flags "$gf"

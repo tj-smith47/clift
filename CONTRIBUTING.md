@@ -53,7 +53,7 @@ See [docs/cache.md](docs/cache.md) for details.
 
 ## Submitting Changes
 
-1. Create a branch from `main`
+1. Create a branch from `master`
 2. Make your changes
 3. Ensure `bats tests/` passes
 4. Ensure `shellcheck lib/**/*.sh` is clean

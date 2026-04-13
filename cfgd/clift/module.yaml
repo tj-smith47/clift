@@ -20,7 +20,7 @@ spec:
     - name: gum
 
   files:
-    - source: https://github.com/YOUR_ORG/clift.git@main
+    - source: https://github.com/tj-smith47/clift.git@main
       target: ~/.local/share/clift
 
   env:

@@ -36,6 +36,10 @@ case "$1" in
     echo "$CLI_NAME version $CLI_VERSION"
     exit 0
     ;;
+  --)
+    # Bare -- with no command is an error; skip it so the walk sees no tokens
+    shift
+    ;;
 esac
 
 # Load known task names and root command names from the precompiled cache.

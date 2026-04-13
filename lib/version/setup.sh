@@ -18,6 +18,8 @@ fi
 
 source "${FRAMEWORK_DIR}/lib/log/log.sh"
 
+trap 'rm -f "${_tmp:-}"' EXIT
+
 cli_name="${CLI_NAME:-$(yq '.name' "${CLI_DIR}/.clift.yaml" 2>/dev/null)}"
 cli_version="${CLI_VERSION:-$(yq '.version' "${CLI_DIR}/.clift.yaml" 2>/dev/null)}"
 
@@ -95,7 +97,7 @@ if [[ -n "$cfgd_config_dir" ]]; then
   if [[ -n "$cfgd_profiles" ]]; then
     IFS=',' read -ra profiles <<< "$cfgd_profiles"
     for profile in "${profiles[@]}"; do
-      profile=$(echo "$profile" | xargs)
+      profile="${profile# }"; profile="${profile% }"
       profile_file="${cfgd_config_dir}/profiles/${profile}.yaml"
       if [[ -f "$profile_file" ]]; then
         yq -i ".spec.modules += [\"${cli_name}\"] | .spec.modules |= unique" "$profile_file"

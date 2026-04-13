@@ -279,7 +279,7 @@ Consumers upgrade with `mycli version:upgrade` or pin with `mycli version:set --
 
 ## cfgd Integration
 
-[cfgd](https://github.com/...) is a declarative machine configuration tool. When available, clift uses it as a backend for dependency management, updates, and drift detection. **cfgd is never required.** Everything works without it.
+[cfgd](https://github.com/tj-smith47/cfgd) is a declarative machine configuration tool. When available, clift uses it as a backend for dependency management, updates, and drift detection. **cfgd is never required.** Everything works without it.
 
 ### Framework Module
 
@@ -328,7 +328,7 @@ What happens on drift depends on your `driftPolicy` (`Auto`, `NotifyOnly`, or `P
 ### Without cfgd
 
 If cfgd is not installed, nothing changes:
-- `deps.sh` checks for `jq` and `gum` directly
+- `deps.sh` checks for `jq` and `yq` (required) and `gum` (optional)
 - `mycli update` uses `git pull` as before
 - `.clift.yaml` documents dependencies for humans to install manually
 

@@ -16,10 +16,10 @@ fi
 
 source "${FRAMEWORK_DIR}/lib/log/log.sh"
 
-# Validate command name: lowercase, starts with letter, colons for subcommands
-NAME_RE='^[a-z][a-z0-9-]*(:[a-z][a-z0-9-]*)*$'
+# Validate command name: lowercase, starts with letter, colons for subcommands, no dashes
+NAME_RE='^[a-z][a-z0-9]*(:[a-z][a-z0-9]*)*$'
 if [[ ! "$CMD_NAME" =~ $NAME_RE ]]; then
-  log_error "Invalid: command names must match ${NAME_RE} (lowercase, start with letter, colons for sub)"
+  log_error "Invalid: command names must be lowercase alphanumeric, use colons for subcommands (no dashes)"
   exit 1
 fi
 

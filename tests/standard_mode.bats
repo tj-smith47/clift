@@ -32,8 +32,10 @@ teardown() {
   # The scaffold produces two FLAGS: [] lines -- one top-level (command layer)
   # and one under tasks.default.vars (task layer). Replace only the first
   # occurrence (the top-level one) so the flag applies to the command.
-  sed -i '0,/FLAGS: \[\]/{s/FLAGS: \[\]/FLAGS:\n    - {name: name, short: n, type: string, default: world}/}' \
-    "$cli/cmds/greet/Taskfile.yaml"
+  _tmp="$(mktemp)"
+  sed '0,/FLAGS: \[\]/{s/FLAGS: \[\]/FLAGS:\n    - {name: name, short: n, type: string, default: world}/}' \
+    "$cli/cmds/greet/Taskfile.yaml" > "$_tmp"
+  mv "$_tmp" "$cli/cmds/greet/Taskfile.yaml"
 
   # Rewrite the generated script to print the flag
   cat > "$cli/cmds/greet/greet.sh" <<'SCRIPT'

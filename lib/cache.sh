@@ -18,8 +18,15 @@ clift_max_mtime() {
   (( ${#files[@]} == 0 )) && { echo 0; return; }
 
   # Both GNU and BSD stat accept multiple files.
-  # Detect once, batch all files in one call.
-  if stat -c '%Y' /dev/null &>/dev/null; then
+  # Detect once per shell session, batch all files in one call.
+  if [[ -z "${_CLIFT_STAT_FMT:-}" ]]; then
+    if stat -c '%Y' /dev/null &>/dev/null; then
+      _CLIFT_STAT_FMT="gnu"
+    else
+      _CLIFT_STAT_FMT="bsd"
+    fi
+  fi
+  if [[ "$_CLIFT_STAT_FMT" == "gnu" ]]; then
     stat -c '%Y' "${files[@]}" | sort -rn | head -1
   else
     stat -f '%m' "${files[@]}" | sort -rn | head -1
@@ -36,7 +43,7 @@ clift_ensure_cache() {
   local current
   current="$(clift_max_mtime "$cli_dir/Taskfile.yaml" "$cli_dir"/cmds/*/Taskfile.yaml)"
 
-  if [[ ! -f "$checksum_file" ]] || [[ "$(cat "$checksum_file")" != "$current" ]]; then
+  if [[ ! -f "$checksum_file" ]] || [[ "$(<"$checksum_file")" != "$current" ]]; then
     bash "$fw_dir/lib/flags/compile.sh" "$cli_dir" >&2
   fi
 }

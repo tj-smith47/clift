@@ -76,7 +76,9 @@ tasks:
   default:
     cmd: echo bad
 YAML
-  sed -i 's|# User commands|\0\n  bad:\n    taskfile: ./cmds/bad|' "$TEST_DIR/Taskfile.yaml"
+  _tmp="$(mktemp)"
+  sed 's|# User commands|\0\n  bad:\n    taskfile: ./cmds/bad|' "$TEST_DIR/Taskfile.yaml" > "$_tmp"
+  mv "$_tmp" "$TEST_DIR/Taskfile.yaml"
   run bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$TEST_DIR"
   [ "$status" -ne 0 ]
 }

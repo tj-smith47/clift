@@ -22,7 +22,7 @@ TASKFILE_DIR="$(dirname "$TASKFILE_PATH")"
 TASKS_CACHE="${TASKFILE_DIR}/.clift/tasks.json"
 
 if [[ -f "$TASKS_CACHE" ]]; then
-  json="$(cat "$TASKS_CACHE")"
+  json="$(<"$TASKS_CACHE")"
 else
   json=$(task --list-all --json --taskfile "$TASKFILE_PATH" 2>/dev/null) || {
     echo "error: failed to read task list" >&2
@@ -73,7 +73,7 @@ if [[ -f "$FLAGS_JSON" ]]; then
 
   if [[ -n "$cmd_flags" && "$cmd_flags" != "null" && "$cmd_flags" != '{"legacy":true}' ]]; then
     # Load root globals to split local vs global flags
-    root_globals="$(cat "${FRAMEWORK_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}/lib/flags/globals.json" 2>/dev/null || echo '[]')"
+    root_globals="$(cat "$_CLIFT_GLOBALS_JSON" 2>/dev/null || echo '[]')"
     # Split into local flags (not in root globals) and global flags (in root globals)
     {
       IFS=$'\t' read -r local_flags global_flags

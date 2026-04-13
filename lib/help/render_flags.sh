@@ -6,6 +6,9 @@
 if [[ -n "${_CLIFT_RENDER_FLAGS_LOADED:-}" ]]; then return 0; fi
 _CLIFT_RENDER_FLAGS_LOADED=1
 
+# Resolve the path to globals.json once at source time.
+_CLIFT_GLOBALS_JSON="${FRAMEWORK_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}/lib/flags/globals.json"
+
 # Renders a JSON array of flag objects into aligned columns on stdout.
 # Each flag gets: short, long, type hint, description, default/required.
 clift_render_flags() {

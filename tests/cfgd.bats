@@ -3,19 +3,29 @@
 load test_helper
 
 @test "update detects .cfgd-managed and refuses git pull" {
-  touch "$FRAMEWORK_DIR/.cfgd-managed"
-  run bash "$FRAMEWORK_DIR/lib/update/update.sh" "$FRAMEWORK_DIR"
-  rm -f "$FRAMEWORK_DIR/.cfgd-managed"
+  # Create a mock framework dir in TEST_DIR to avoid touching the real repo
+  local mock_fw="$TEST_DIR/framework"
+  mkdir -p "$mock_fw/lib/update"
+  cp "$FRAMEWORK_DIR/lib/update/update.sh" "$mock_fw/lib/update/update.sh"
+  cp -r "$FRAMEWORK_DIR/lib/log" "$mock_fw/lib/log"
+  touch "$mock_fw/.cfgd-managed"
+  run bash "$mock_fw/lib/update/update.sh" "$mock_fw"
   [ "$status" -eq 0 ]
   [[ "$output" == *"managed by cfgd"* ]]
   [[ "$output" == *"cfgd module upgrade clift"* ]]
 }
 
 @test "update proceeds normally without .cfgd-managed" {
-  # Without .cfgd-managed, update should reach the git check phase
-  # It will proceed to fetch (which may succeed or fail depending on network)
-  # Just verify it doesn't mention cfgd
-  run bash "$FRAMEWORK_DIR/lib/update/update.sh" "$FRAMEWORK_DIR" 2>&1
+  # Without .cfgd-managed, update should reach the git check phase.
+  # Use a mock framework dir to avoid real git fetches.
+  local mock_fw="$TEST_DIR/framework"
+  mkdir -p "$mock_fw/lib/update"
+  cp "$FRAMEWORK_DIR/lib/update/update.sh" "$mock_fw/lib/update/update.sh"
+  cp -r "$FRAMEWORK_DIR/lib/log" "$mock_fw/lib/log"
+  # init a git repo so update.sh's git commands don't fail immediately
+  git -C "$mock_fw" init -q
+  git -C "$mock_fw" -c user.email="test@test.com" -c user.name="Test" commit --allow-empty -m "init" -q
+  run bash "$mock_fw/lib/update/update.sh" "$mock_fw" 2>&1
   [[ "$output" != *"managed by cfgd"* ]]
 }
 

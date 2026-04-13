@@ -49,11 +49,10 @@ if [[ -n "${CLIFT_ARG_COUNT:-}" ]]; then
     args+=("${!var}")
   done
 else
-  # Task mode — legacy CLI_ARGS word-splitting path
+  # Task mode — legacy CLI_ARGS word-splitting path.
+  # Uses read -ra instead of eval to avoid command injection from user input.
   if [[ -n "${CLI_ARGS:-}" ]]; then
-    # shellcheck disable=SC2086
-    eval "set -- ${CLI_ARGS}"
-    args=("$@")
+    read -ra args <<< "$CLI_ARGS"
   fi
 fi
 
@@ -108,8 +107,7 @@ fi
 # Inject framework-global flags (version, verbose, quiet, no-color, help) into
 # the task's flag table so the parser recognises them. These names are reserved
 # in the validator and cannot be user-declared, so there is no collision risk.
-FRAMEWORK_GLOBALS="$(cat "${FRAMEWORK_DIR}/lib/flags/globals.json")"
-merged_table="$(jq -n --argjson user "$task_entry" --argjson globals "$FRAMEWORK_GLOBALS" '$globals + $user')"
+merged_table="$(jq -n --argjson user "$task_entry" --slurpfile globals "${FRAMEWORK_DIR}/lib/flags/globals.json" '$globals[0] + $user')"
 
 tmp_table="$(mktemp)"
 trap 'rm -f "$tmp_table"' EXIT

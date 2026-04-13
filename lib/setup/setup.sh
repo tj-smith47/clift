@@ -23,12 +23,22 @@ if [[ "$TARGET" == *.yaml ]] || [[ "$TARGET" == *.yml ]]; then
   TARGET="$(dirname "$TARGET")"
 fi
 
-# Resolve to absolute path
-TARGET="$(cd "$(dirname "$TARGET")" 2>/dev/null && pwd)/$(basename "$TARGET")" || TARGET="$(realpath -m "$TARGET")"
+# Resolve to absolute path (portable — no realpath -m which is GNU-only)
+if parent="$(cd "$(dirname "$TARGET")" 2>/dev/null && pwd)"; then
+  TARGET="${parent}/$(basename "$TARGET")"
+else
+  mkdir -p "$(dirname "$TARGET")"
+  TARGET="$(cd "$(dirname "$TARGET")" && pwd)/$(basename "$TARGET")"
+fi
 
 # Default CLI_NAME to directory basename
 if [[ -z "$CLI_NAME" ]]; then
   CLI_NAME="$(basename "$TARGET")"
+fi
+
+# Validate CLI_NAME is a safe shell identifier
+if [[ ! "$CLI_NAME" =~ ^[a-z][a-z0-9_-]*$ ]]; then
+  die "CLI_NAME must be lowercase alphanumeric (got '${CLI_NAME}')"
 fi
 
 # Check for existing installation — offer per-field reconfigure

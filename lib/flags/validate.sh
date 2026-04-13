@@ -13,7 +13,8 @@ _CLIFT_VALIDATE_LOADED=1
 
 # Reserved flag names — derived from the canonical globals.json
 _GLOBALS_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/globals.json"
-mapfile -t RESERVED_NAMES < <(jq -r '.[].name' "$_GLOBALS_FILE")
+RESERVED_NAMES=()
+while IFS= read -r _rn; do RESERVED_NAMES+=("$_rn"); done < <(jq -r '.[].name' "$_GLOBALS_FILE")
 
 # Name regex: lowercase, starts with letter, dashes allowed, NO underscores
 NAME_RE='^[a-z][a-z0-9-]*$'

@@ -79,9 +79,10 @@ _${CLI_NAME}() {
   flags_json="\$cli_dir/.clift/flags.json"
 
   # Build colon-joined command path from words before cursor
+  # zsh words[] is 1-indexed; words[1] is the command name itself, so start at 2
   local cmd_path=""
   local i
-  for (( i=1; i<CURRENT; i++ )); do
+  for (( i=2; i<CURRENT; i++ )); do
     local w="\${words[\$i]}"
     [[ "\$w" == -* ]] && continue
     if [[ -z "\$cmd_path" ]]; then
@@ -90,6 +91,21 @@ _${CLI_NAME}() {
       cmd_path="\${cmd_path}:\${w}"
     fi
   done
+
+  # Complete flags
+  if [[ "\${words[\$CURRENT]}" == -* ]] && [[ -f "\$flags_json" ]]; then
+    local lookup="\${cmd_path}:default"
+    [[ -z "\$cmd_path" ]] && lookup=""
+    local -a flags
+    flags=(\$(jq -r --arg cmd "\$lookup" --arg cmd2 "\$cmd_path" '
+      (.[\$cmd] // .[\$cmd2] // [])
+      | if type == "array" then
+          .[] | "--\(.name)", (if .short then "-\(.short)" else empty end)
+        else empty end
+    ' "\$flags_json" 2>/dev/null))
+    _describe 'flag' flags
+    return
+  fi
 
   local prefix="\$cmd_path"
   [[ -n "\$prefix" ]] && prefix="\${prefix}:"

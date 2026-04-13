@@ -115,7 +115,9 @@ tasks:
     cmd: echo old
 YAML
   # Add the include in the root Taskfile
-  sed -i 's|includes:|includes:\n  old:\n    taskfile: ./cmds/old|' "$CLI_DIR/Taskfile.yaml"
+  _tmp="$(mktemp)"
+  sed 's|includes:|includes:\n  old:\n    taskfile: ./cmds/old|' "$CLI_DIR/Taskfile.yaml" > "$_tmp"
+  mv "$_tmp" "$CLI_DIR/Taskfile.yaml"
 
   run bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$CLI_DIR"
   [ "$status" -eq 0 ]

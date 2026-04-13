@@ -9,6 +9,12 @@ _CLIFT_DEPS_LOADED=1
 
 # Fast check — called by router on every invocation
 clift_check_deps_fast() {
+  # Hard dependency: bash 4.0+ (associative arrays, mapfile, ${var^^})
+  if (( BASH_VERSINFO[0] < 4 )); then
+    echo "error: bash 4.0+ is required (found ${BASH_VERSION}). Install a newer bash via your package manager." >&2
+    return 1
+  fi
+
   # Hard dependency: jq
   if ! command -v jq &>/dev/null; then
     echo "error: jq is required but not installed. See https://jqlang.github.io/jq/download/" >&2

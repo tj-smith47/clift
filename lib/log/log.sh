@@ -4,6 +4,9 @@
 # Reads LOG_THEME, LOG_COLOR, NO_COLOR, VERBOSE, QUIET from environment.
 # Themes: icons, icons-color, brackets, brackets-color, minimal, minimal-color, custom
 
+if [[ -n "${_CLIFT_LOG_LOADED:-}" ]]; then return 0 2>/dev/null || true; fi
+_CLIFT_LOG_LOADED=1
+
 # Exit code constants
 export EXIT_OK=0
 export EXIT_ERROR=1
@@ -114,6 +117,6 @@ log_warn()    { _log_format warn "$@" >&2; }
 log_error()   { _log_format error "$@" >&2; }
 log_success() { [[ "${QUIET:-}" == "true" ]] && return 0; _log_format success "$@"; }
 log_debug()   { [[ "${VERBOSE:-}" != "true" ]] && return 0; _log_format debug "$@" >&2; }
-log_suggest() { printf "${_CLR_DIM}  %s${_CLR_RESET}\n" "$*" >&2; }
+log_suggest() { [[ "${QUIET:-}" == "true" ]] && return 0; printf "${_CLR_DIM}  %s${_CLR_RESET}\n" "$*" >&2; }
 
 die() { log_error "$1"; exit "${2:-1}"; }

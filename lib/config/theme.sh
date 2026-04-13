@@ -18,10 +18,12 @@ ENV_FILE="${CLI_DIR}/.env"
 
 THEMES="icons,icons-color,brackets,brackets-color,minimal,minimal-color,custom"
 
+# Unset LOG_THEME so prompt.sh --var doesn't short-circuit to the current value
+unset LOG_THEME
 NEW_THEME=$("${FRAMEWORK_DIR}/lib/prompt/prompt.sh" choose 'Select log theme' --var LOG_THEME --options "$THEMES")
 
 # Update LOG_THEME in .env
-if grep -q "^LOG_THEME=" "$ENV_FILE"; then
+if [[ -f "$ENV_FILE" ]] && grep -q "^LOG_THEME=" "$ENV_FILE"; then
   _tmp="$(mktemp)"
   sed "s|^LOG_THEME=.*|LOG_THEME=${NEW_THEME}|" "$ENV_FILE" > "$_tmp"
   mv "$_tmp" "$ENV_FILE"
