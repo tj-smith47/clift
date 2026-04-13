@@ -166,6 +166,39 @@ YAML
   [[ "$output" == *"passthrough"* ]]
 }
 
+@test "detail.sh lists subcommands when command has children" {
+  # Add subcommands to greet
+  cat >> "$TEST_DIR/cmds/greet/Taskfile.yaml" <<'YAML'
+
+  loud:
+    desc: "Greet loudly"
+    vars:
+      FLAGS: []
+    cmd: echo greet-loud
+  quiet:
+    desc: "Greet quietly"
+    vars:
+      FLAGS: []
+    cmd: echo greet-quiet
+YAML
+  bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$TEST_DIR"
+
+  run bash "$FRAMEWORK_DIR/lib/help/detail.sh" "greet" "$TEST_DIR/Taskfile.yaml"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Available commands:"* ]]
+  [[ "$output" == *"greet loud"* ]]
+  [[ "$output" == *"greet quiet"* ]]
+  [[ "$output" == *"Greet loudly"* ]]
+  [[ "$output" == *"Greet quietly"* ]]
+}
+
+@test "detail.sh omits subcommand listing for leaf commands" {
+  run bash "$FRAMEWORK_DIR/lib/help/detail.sh" "greet" "$TEST_DIR/Taskfile.yaml"
+  [ "$status" -eq 0 ]
+  # No subcommands beyond default, so no "Available commands:" section
+  [[ "$output" != *"Available commands:"* ]]
+}
+
 @test "render_flags formats flag with short alias and type hint" {
   source "$FRAMEWORK_DIR/lib/help/render_flags.sh"
   run clift_render_flags '[{"name":"target","short":"t","type":"string","default":"staging","desc":"Target env"}]'

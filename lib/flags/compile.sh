@@ -38,7 +38,10 @@ trap 'rm -f "${CACHE_DIR}/tasks.json.tmp" "${CACHE_DIR}/flags.json.tmp" "${CACHE
 # Must run from within the CLI dir so Task resolves includes correctly.
 # This runs FIRST so we can derive the authoritative list of command Taskfile
 # paths from Task's own output — no hardcoded filename globs.
-( cd "$CLI_DIR" && task --list-all --json --nested ) > "${CACHE_DIR}/tasks.json.tmp"
+if ! ( cd "$CLI_DIR" && task --list-all --json --nested ) > "${CACHE_DIR}/tasks.json.tmp" 2>/dev/null; then
+  echo "error: failed to list tasks for ${CLI_DIR}" >&2
+  exit 1
+fi
 mv "${CACHE_DIR}/tasks.json.tmp" "${CACHE_DIR}/tasks.json"
 
 # Step 2: flatten the nested task list.

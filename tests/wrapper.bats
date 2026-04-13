@@ -140,3 +140,36 @@ teardown() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"$CLI_NAME version $CLI_VERSION"* ]]
 }
+
+@test "--help on single-level command shows help" {
+  run "$TEST_DIR/bin/$CLI_NAME" hello --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"hello"* ]]
+  # Should NOT contain "hello-ran" — the command should not execute
+  [[ "$output" != *"hello-ran"* ]]
+}
+
+@test "-h on single-level command shows help" {
+  run "$TEST_DIR/bin/$CLI_NAME" hello -h
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"hello"* ]]
+  [[ "$output" != *"hello-ran"* ]]
+}
+
+@test "--help on two-level command shows help" {
+  run "$TEST_DIR/bin/$CLI_NAME" deploy prod --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"deploy"* ]]
+  [[ "$output" != *"deploy-prod"* ]]
+}
+
+@test "--help works for non-routed commands" {
+  # The hello command in this fixture doesn't route through router.sh
+  # (it uses a bare cmd: echo). Before the fix, --help would have been
+  # passed as a raw arg and the command would have run.
+  run "$TEST_DIR/bin/$CLI_NAME" hello --help
+  [ "$status" -eq 0 ]
+  # detail.sh output contains the CLI name and command
+  [[ "$output" == *"testcli"* ]]
+  [[ "$output" == *"hello"* ]]
+}

@@ -133,6 +133,19 @@ YAML
   [ "$status" -ne 0 ]
 }
 
+@test "compile suppresses task stderr on failure" {
+  # Point at a directory where task will fail — no valid Taskfile content
+  local bad_dir="$(mktemp -d)"
+  echo "not: valid: yaml: {{" > "$bad_dir/Taskfile.yaml"
+  run bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$bad_dir"
+  [ "$status" -ne 0 ]
+  # Should show clift's error message, NOT task's internal stderr
+  [[ "$output" == *"error:"* ]]
+  # Should NOT contain raw task framework messages
+  [[ "$output" != *"task:"* ]] || [[ "$output" != *"Task:"* ]]
+  rm -rf "$bad_dir"
+}
+
 @test "command without vars.FLAGS marked passthrough" {
   mkdir -p "$CLI_DIR/cmds/old"
   cat > "$CLI_DIR/cmds/old/Taskfile.yaml" <<'YAML'

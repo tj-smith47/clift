@@ -164,6 +164,15 @@ for r in "${remaining[@]+"${remaining[@]}"}"; do
   fi
 done
 
+# Intercept --help/-h BEFORE dispatch. This ensures help works for ALL
+# commands — both routed (user cmds) and non-routed (framework cmds like
+# config, completion, update) that bypass router.sh.
+for _ha in "${remaining[@]+"${remaining[@]}"}"; do
+  if [[ "$_ha" == "--help" || "$_ha" == "-h" ]]; then
+    exec bash "$FRAMEWORK_DIR/lib/help/detail.sh" "$matched_task" "$CLI_DIR/Taskfile.yaml"
+  fi
+done
+
 # Dispatch via indexed env vars. Task can't forward positional args through
 # aliased tasks, so we pass argv out-of-band. The router/parser reassembles
 # the argv from CLIFT_ARG_COUNT + CLIFT_ARG_1..N.

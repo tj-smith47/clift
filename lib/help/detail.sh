@@ -65,6 +65,32 @@ else
   echo "No detailed help available for '${COMMAND}'."
 fi
 
+# List subcommands if this command has children (e.g. deploy has deploy:prod)
+subcmds="$(echo "$json" | jq -r --arg cmd "$COMMAND" '
+  [.. | .tasks? // empty | .[]
+   | select(.name | startswith($cmd + ":"))
+   | select(.name != ($cmd + ":default"))
+   | select(.name | test(":[_]") | not)
+   | {
+       display: (
+         if (.location.taskfile // "" | contains("/cmds/")) then
+           (.name | gsub(":"; " "))
+         else .name end
+       ),
+       desc: (.desc // "")
+     }
+  ] | unique_by(.display) | sort_by(.display)
+  | .[] | "\(.display)\t\(.desc)"
+' 2>/dev/null)"
+
+if [[ -n "$subcmds" ]]; then
+  echo ""
+  echo "Available commands:"
+  echo "$subcmds" | column -t -s $'\t' | sed 's/^/  /'
+  echo ""
+  echo "Run '${CLI_NAME} ${display_name} <command> --help' for more information."
+fi
+
 # Render flag sections from precompiled .clift/flags.json
 FLAGS_JSON="${TASKFILE_DIR}/.clift/flags.json"
 
