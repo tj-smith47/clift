@@ -126,7 +126,7 @@ bash "${FRAMEWORK_DIR}/lib/flags/validate.sh" "$TASKFILE_PATH" || {
 }
 
 # Refresh the precompilation cache
-FRAMEWORK_DIR="${FRAMEWORK_DIR}" bash "${FRAMEWORK_DIR}/lib/flags/compile.sh" "$CLI_DIR" || {
+bash "${FRAMEWORK_DIR}/lib/flags/compile.sh" "$CLI_DIR" || {
   log_error "Cache rebuild failed"
   exit 1
 }

@@ -95,7 +95,7 @@ clift_parse_args() {
         unset "${var}_${i}"
       done
       export "${var}_COUNT=0"
-      unset _list_was_defaulted["$name"]
+      unset "_list_was_defaulted[$name]"
     fi
   }
 

@@ -6,7 +6,7 @@ Flags are declared inside your command's `Taskfile.yaml` under `vars.FLAGS`.
 
 Three layers, merged at precompile time:
 
-1. **Root Taskfile** -- framework globals (`--help`, `--verbose`, `--quiet`, `--no-color`, `--version`). Shipped with every CLI.
+1. **Framework globals** (`lib/flags/globals.json`) -- `--help`, `--verbose`, `--quiet`, `--no-color`, `--version`. Merged into every parsed command at compile time (from the root Taskfile's `vars.FLAGS`) and at runtime (from `globals.json`).
 2. **Command Taskfile** -- top-level `vars.FLAGS`. Applies to the command and all its subcommands.
 3. **Subcommand** -- `tasks.<sub>.vars.FLAGS`. Applies to that one subcommand.
 

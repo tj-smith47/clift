@@ -7,29 +7,31 @@ You write your command logic in any language -- shell, Python, Go, whatever -- a
 ## Quick Start
 
 ```bash
-# Prerequisites: task (go-task), jq, yq
+# Prerequisites: bash 4+, task (go-task), jq, yq
 # Optional: gum (for pretty prompts)
 
 # Clone the framework
 git clone <repo-url> ~/.clift
 
-# Bootstrap a new CLI
-task --taskfile ~/.clift/Taskfile.yaml setup:cli -- ~/.config/mycli
+# Bootstrap a new CLI (standard mode — Cobra-like UX)
+CLIFT_MODE=standard task --taskfile ~/.clift/Taskfile.yaml setup:cli -- ~/.config/mycli
 
 # Source your shell and start using it
 source ~/.bashrc
-mycli                    # see available commands
-mycli new:cmd            # create your first command
+mycli                         # see available commands
+mycli new cmd                 # scaffold your first command
+mycli greet --name world      # run it with flags
+mycli greet --help            # per-command help
 ```
 
 ## Modes
 
 clift CLIs support two argument-format styles, chosen at setup time:
 
-- **Task mode (default)** -- `mycli cmd:subcmd -- --flag value`
-- **Standard mode** -- `mycli cmd subcmd --flag value` (Cobra-like)
+- **Standard mode** -- `mycli cmd subcmd --flag value` (Cobra-like, recommended)
+- **Task mode** -- `mycli cmd:subcmd -- --flag value` (raw go-task semantics)
 
-Set `CLIFT_MODE=standard` before `task setup:cli` to opt in. See [docs/modes.md](docs/modes.md).
+Standard mode gives you space-separated subcommands, `--flag` parsing, did-you-mean errors, and shell completions with flag support. See [docs/modes.md](docs/modes.md).
 
 ## Features
 
@@ -49,10 +51,13 @@ Set `CLIFT_MODE=standard` before `task setup:cli` to opt in. See [docs/modes.md]
 
 | Dependency | Required | Purpose |
 |---|---|---|
+| bash 4.0+ | Yes | Associative arrays, `${var^^}`, used throughout |
 | [Task](https://taskfile.dev) v3.0+ | Yes | Task runner that powers the CLI |
 | [jq](https://jqlang.github.io/jq/) | Yes | JSON processing for help and config |
 | [yq](https://github.com/mikefarah/yq) | Yes | YAML processing for metadata |
 | [gum](https://github.com/charmbracelet/gum) | No | Enhanced interactive prompts (falls back to `read`) |
+
+> **macOS note:** macOS ships bash 3.2. Install bash 4+ via `brew install bash`.
 
 ## How It Works
 
@@ -68,29 +73,26 @@ clift is a framework repo that provides shared libraries (`lib/`) for help, logg
       greet.sh        # your command logic (any language)
 ```
 
-Your CLI is a shell alias that invokes `task` with your project's Taskfile. The framework's router handles global flags, logging setup, and dispatching to your command scripts. Commands are Taskfile includes -- each command lives in `cmds/<name>/` with its own Taskfile and script.
+In task mode, your CLI is a shell alias that invokes `task`. In standard mode, it's a wrapper script on PATH that provides Cobra-style `mycli cmd subcmd --flag` UX. The framework's router handles global flags, logging setup, and dispatching to your command scripts. Commands are Taskfile includes -- each command lives in `cmds/<name>/` with its own Taskfile and script.
 
 ## Creating Commands
 
 ```bash
-mycli new:cmd
+mycli new cmd
 # Prompts for: command name, short description
 # Generates: cmds/<name>/Taskfile.yaml + <name>.sh
 ```
 
-The generated script comes pre-wired with logging and argument parsing:
+The generated script comes pre-wired with logging and the flag env var contract:
 
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
 
 source "${FRAMEWORK_DIR}/lib/log/log.sh"
-source "${FRAMEWORK_DIR}/lib/args/args.sh"
 
-# Parse arguments
-source <(parse_args "$@" --flags "")
-
-# Command logic here
+# Flag values arrive as CLIFT_FLAG_<NAME> (uppercased, dashes→underscores).
+# Positional args: CLIFT_POS_1, CLIFT_POS_2, ... CLIFT_POS_COUNT.
 log_info "Hello from mycommand"
 ```
 
@@ -98,17 +100,24 @@ Subcommands work via task namespacing. A command `deploy` can have subcommands `
 
 ## Argument Parsing
 
-Source `args.sh` and use `parse_args` in your command scripts:
+Declare flags in your command's `Taskfile.yaml` under `vars.FLAGS`. The router parses them before your script runs and exports them as env vars:
+
+```yaml
+# cmds/deploy/Taskfile.yaml
+vars:
+  FLAGS:
+    - {name: target, short: t, type: string, default: staging, desc: "Target env"}
+    - {name: force, short: f, type: bool, desc: "Skip confirmation"}
+```
 
 ```bash
-source "${FRAMEWORK_DIR}/lib/args/args.sh"
-source <(parse_args "$@" --flags "force,dry_run")
-
-# --name=world     -> NAME=world
-# --force          -> FORCE=true  (boolean, declared in --flags)
-# hello            -> ARG_1=hello (positional)
-# ARG_COUNT is always set
+# cmds/deploy/deploy.sh
+target="${CLIFT_FLAG_TARGET}"       # "staging" (default applied)
+if [[ "${CLIFT_FLAG_FORCE:-}" == "true" ]]; then ...
+file="${CLIFT_POS_1:?missing file}" # positional args
 ```
+
+See [docs/flags.md](docs/flags.md) for the full schema and [docs/scripts.md](docs/scripts.md) for the env var contract.
 
 ## Configuration
 
@@ -150,8 +159,8 @@ Seven built-in themes control how log messages are formatted:
 
 | Theme | Example output |
 |---|---|
-| `icons` | `-> message` |
-| `icons-color` | `-> message` (colored) |
+| `icons` | `→ message` |
+| `icons-color` | `→ message` (colored) |
 | `brackets` | `[INFO] message` |
 | `brackets-color` | `[INFO] message` (colored) |
 | `minimal` | `message` |
@@ -166,6 +175,7 @@ log_warn "warning"
 log_error "something broke"
 log_success "done"
 log_debug "only shown with --verbose"
+log_suggest "hint text (dimmed, suppressed by --quiet)"
 die "fatal error" 1
 ```
 

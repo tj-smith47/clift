@@ -250,6 +250,8 @@ source "$SCRIPT_DIR/../cache.sh"
     [[ -n "$_sf" ]] && echo "$_sf"
   done <<< "$unique_taskfiles"
 } > "${CACHE_DIR}/sources"
+# Word splitting is intentional: one file path per line from the sources manifest.
+# shellcheck disable=SC2046
 clift_max_mtime $(< "${CACHE_DIR}/sources") > "${CACHE_DIR}/checksum.tmp"
 mv "${CACHE_DIR}/checksum.tmp" "${CACHE_DIR}/checksum"
 

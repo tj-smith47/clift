@@ -10,9 +10,11 @@ Each task has exactly one script file:
 
 Rule: replace `:` with `.` in the task name. The first colon segment is the directory. No case statements, no shared dispatch.
 
+> **Note:** The one-script-per-task naming convention applies only to commands with `vars.FLAGS` (parsed mode). Passthrough commands (no `vars.FLAGS`) always resolve to the base script: `cmds/<cmd>/<cmd>.sh`.
+
 ## Env var contract
 
-When your script runs, these env vars are set by the router:
+When your script runs (in parsed mode), these env vars are set by the router:
 
 | Var | Content |
 |---|---|
@@ -21,8 +23,7 @@ When your script runs, these env vars are set by the router:
 | `CLIFT_POS_COUNT` | Number of positional args. |
 | `CLIFT_TASK` | Full task name (e.g. `deploy:prod`). Informational. |
 | `CLIFT_FLAG_<NAME>_1`, `..._COUNT` | List-typed flags. |
-
-Legacy passthroughs (for `log.sh` and theming): `VERBOSE`, `QUIET`, `NO_COLOR`.
+| `VERBOSE`, `QUIET`, `NO_COLOR` | Backward-compat env vars set from `--verbose`, `--quiet`, `--no-color` flags. Read by `log.sh` for theming. |
 
 ## Example script
 
@@ -52,6 +53,12 @@ done
 log_info "deploying ${file} to ${target}"
 ```
 
+## Passthrough mode
+
+Commands whose Taskfile has **no** `vars.FLAGS` key are passthrough commands. The router skips the parser entirely and execs the script with raw positional args (`$1`, `$2`, etc.). No `CLIFT_FLAG_*` env vars, no `--help` interception, no did-you-mean. The script handles its own arguments.
+
+This is a valid choice for simple commands that don't need flags, or for scripts in other languages that have their own argument parsing.
+
 ## Migrating from legacy `parse_args`
 
-Old scripts that call `parse_args "$@" --flags "force"` still work via the graceful-degradation path -- as long as their command Taskfile has **no** `vars.FLAGS` key. If you want to use the new contract, add `vars.FLAGS` to the Taskfile and update your script to read `CLIFT_FLAG_*` env vars. The graceful-degradation path is for pre-spec commands only.
+Old scripts that call `parse_args "$@" --flags "force"` still work in passthrough mode -- as long as their command Taskfile has **no** `vars.FLAGS` key. To migrate to the new contract, add `vars.FLAGS` to the Taskfile and update your script to read `CLIFT_FLAG_*` env vars.

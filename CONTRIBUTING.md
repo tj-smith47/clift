@@ -7,10 +7,11 @@ git clone <repo-url> && cd clift
 ```
 
 Requirements:
+- bash 4.0+ (macOS ships 3.2 -- `brew install bash`)
 - [Task](https://taskfile.dev) v3.0+
 - [jq](https://jqlang.github.io/jq/)
 - [yq](https://github.com/mikefarah/yq)
-- [BATS](https://github.com/bats-core/bats-core) (for running tests)
+- [BATS](https://github.com/bats-core/bats-core) 1.5.0+ (for running tests)
 - [ShellCheck](https://www.shellcheck.net/) (for linting)
 
 ## Running Tests
@@ -61,7 +62,4 @@ See [docs/cache.md](docs/cache.md) for details.
 
 ## Planned Features
 
-The following are planned but not yet implemented:
-
-- **cfgd integration** — dependency management via cfgd (module definitions shipped, script integration done)
-- **Version tagging workflow** — assisted release tagging
+- **Version tagging workflow** — assisted release tagging for cfgd-versioned CLIs
