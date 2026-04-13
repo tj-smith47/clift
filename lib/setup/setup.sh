@@ -177,7 +177,7 @@ else
 fi
 
 # Precompile cache (may fail for fresh CLIs with no user commands yet)
-FRAMEWORK_DIR="${FRAMEWORK_DIR}" bash "${FRAMEWORK_DIR}/lib/flags/compile.sh" "$TARGET" 2>/dev/null || true
+bash "${FRAMEWORK_DIR}/lib/flags/compile.sh" "$TARGET" 2>/dev/null || true
 
 echo ""
 if [[ "$RECONFIGURE" == "true" ]]; then

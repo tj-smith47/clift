@@ -45,6 +45,7 @@ clift_ensure_cache() {
   # Falls back to the root Taskfile if no manifest exists yet (first run).
   local current
   if [[ -f "$sources_file" ]]; then
+    # shellcheck disable=SC2046
     current="$(clift_max_mtime $(< "$sources_file"))"
   else
     current="$(clift_max_mtime "$cli_dir/Taskfile.yaml")"
