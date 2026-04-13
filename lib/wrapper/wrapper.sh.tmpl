@@ -38,14 +38,25 @@ case "$1" in
     ;;
 esac
 
-# Load known task names from the precompiled cache.
+# Load known task names and root command names from the precompiled cache.
+# Single jq call extracts both: (1) all task names recursively (filtering out
+# framework-internal underscore-prefixed tasks), and (2) root-level command
+# names for did-you-mean suggestions.
 # `task --list-all --json --nested` has two sources of tasks: .tasks[] and
 # .namespaces.<ns>.tasks[] (recursive). The recursive-descent query flattens
 # any nesting depth. We filter out framework-internal tasks (underscore
 # prefixed at any segment).
 TASKS_JSON="$CLI_DIR/.clift/tasks.json"
-known_tasks="$(jq -r '[.. | .tasks? // empty | .[] | .name] | .[]' "$TASKS_JSON" \
-  | grep -v '^_' | grep -v ':_' || true)"
+{
+  IFS= read -r -d '' known_tasks || true
+  IFS= read -r -d '' root_cmds || true
+} < <(jq -j '
+  ([.. | .tasks? // empty | .[] | .name | select(test("^_|:_") | not)]
+    | join("\n")) + "\u0000" +
+  ([.tasks[]?.name // empty, (.namespaces // {} | keys)[]]
+    | map(select(startswith("_") | not))
+    | unique | join(" ")) + "\u0000"
+' "$TASKS_JSON")
 
 # Build O(1) lookup tables for exact-match and prefix-match
 declare -A _known_exact=()
@@ -61,13 +72,12 @@ while IFS= read -r _t; do
   done
 done <<< "$known_tasks"
 
-# Root-level command names for did-you-mean suggestions. We want the root
-# task names (.tasks[].name) plus namespace keys (top-level includes). Using
-# `to_entries[] | .key` against BOTH task objects and the namespaces map —
-# the plan's original query — would leak field names like "name"/"task"/"desc"
-# from the task objects into the candidate list, so we select by shape instead.
-root_cmds="$(jq -r '[.tasks[]?.name, (.namespaces // {} | keys[])] | .[]' "$TASKS_JSON" 2>/dev/null \
-  | grep -v '^_' | sort -u | tr '\n' ' ')"
+# root_cmds is space-separated and used by did-you-mean error suggestion
+# function. It contains root task names (.tasks[].name) plus namespace keys
+# (top-level includes). Using `to_entries[] | .key` against BOTH task objects
+# and the namespaces map — the plan's original query — would leak field names
+# like "name"/"task"/"desc" from the task objects into the candidate list, so
+# we select by shape instead.
 
 # Is $1 exactly a known task, or a strict prefix (colon-extended) of one?
 # Used to decide whether the longest-prefix walk can consume one more token.
