@@ -43,27 +43,19 @@ mycli greet --name world      # run it with flags
 mycli greet --help            # per-command help
 ```
 
-## Modes
-
-clift CLIs support two argument-format styles, chosen at setup time:
-
-- **Standard mode** -- `mycli cmd subcmd --flag value` (Cobra-like, recommended)
-- **Task mode** -- `mycli cmd:subcmd -- --flag value` (raw go-task semantics)
-
-Standard mode gives you space-separated subcommands, `--flag` parsing, did-you-mean errors, and shell completions with flag support. See [docs/modes.md](docs/modes.md).
-
 ## Features
 
 - Cobra-style help system with grouped commands
-- Themed logging (7 built-in themes + custom)
-- Argument parsing (flags, booleans, positionals)
+- Themed logging (7 built-in themes + custom color schemes)
+- Typed flag parsing (bool, string, int, list) with defaults, required flags, and short aliases
+- Did-you-mean error suggestions (Levenshtein)
 - Interactive prompts (gum with read fallback)
 - Config management (get/set/show/edit/theme)
-- Command scaffolding with `new:cmd`
+- Command scaffolding with `new cmd`
 - Global flags: `--verbose`, `--quiet`, `--no-color`, `--help`, `--version`
-- Shell completions (bash, zsh)
+- Shell completions with flag support (bash, zsh)
 - Framework self-update
-- Optional versioning via cfgd (upgrade, pin, distribute)
+- Optional versioning and distribution via [cfgd](https://github.com/tj-smith47/cfgd)
 - `NO_COLOR` standard support
 
 ## Requirements
@@ -92,7 +84,16 @@ clift is a framework repo that provides shared libraries (`lib/`) for help, logg
       greet.{sh,py,go,rs,…}  # your command logic, any language
 ```
 
-In task mode, your CLI is a shell alias that invokes `task`. In standard mode, it's a wrapper script on PATH that provides Cobra-style `mycli cmd subcmd --flag` UX. The framework's router handles global flags, logging setup, and dispatching to your command scripts. Commands are Taskfile includes -- each command lives in `cmds/<name>/` with its own Taskfile and script.
+In standard mode, your CLI is a wrapper script on PATH that provides Cobra-style `mycli cmd subcmd --flag` UX. In task mode, it's a shell alias that invokes `task` directly. The framework's router handles global flags, logging setup, and dispatching to your command scripts. Commands are Taskfile includes -- each command lives in `cmds/<name>/` with its own Taskfile and script.
+
+## Modes
+
+clift CLIs support two argument-format styles, chosen at setup time:
+
+- **Standard mode** -- `mycli cmd subcmd --flag value` (Cobra-like, recommended)
+- **Task mode** -- `mycli cmd:subcmd -- --flag value` (raw go-task semantics)
+
+Standard mode gives you space-separated subcommands, `--flag` parsing, did-you-mean errors, and shell completions with flag support. See [docs/modes.md](docs/modes.md).
 
 ## Creating Commands
 
