@@ -1,5 +1,11 @@
 version: '3'
 
+silent: true
+output:
+  group:
+    begin: ''
+    end: ''
+set: [errexit, pipefail]
 dotenv: ['.env']
 
 vars:
@@ -26,6 +32,8 @@ includes:
     taskfile: '{{.FRAMEWORK_DIR}}/lib/update'
     vars: {FRAMEWORK_DIR: '{{.FRAMEWORK_DIR}}'}
   # User commands
+  cluster:
+    taskfile: ./cmds/cluster
   deploy:
     taskfile: ./cmds/deploy
   status:

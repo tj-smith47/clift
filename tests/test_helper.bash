@@ -50,6 +50,12 @@ create_test_cli() {
 
   cat > "$CLI_DIR/Taskfile.yaml" <<'YAML'
 version: '3'
+silent: true
+output:
+  group:
+    begin: ''
+    end: ''
+set: [errexit, pipefail]
 dotenv: ['.env']
 vars:
   FLAGS:
@@ -84,34 +90,26 @@ YAML
 
     mkdir -p "$CLI_DIR/cmds/${cmd_name}"
 
-    local flags_line="FLAGS: []"
-    local task_flags_line="FLAGS: []"
-    if [[ -n "$cmd_flags" ]]; then
-      flags_line="FLAGS:"
-      task_flags_line="FLAGS:"
-    fi
-
-    cat > "$CLI_DIR/cmds/${cmd_name}/Taskfile.yaml" <<YAML
-version: '3'
-vars:
-  ${flags_line}
-YAML
-
-    if [[ -n "$cmd_flags" ]]; then
-      echo "    ${cmd_flags}" >> "$CLI_DIR/cmds/${cmd_name}/Taskfile.yaml"
-    fi
-
-    cat >> "$CLI_DIR/cmds/${cmd_name}/Taskfile.yaml" <<YAML
-tasks:
-  default:
-    vars:
-      ${task_flags_line}
-    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
-YAML
-
-    if [[ -n "$cmd_flags" ]]; then
-      echo "      ${cmd_flags}" >> "$CLI_DIR/cmds/${cmd_name}/Taskfile.yaml"
-    fi
+    {
+      echo "version: '3'"
+      echo "vars:"
+      if [[ -n "$cmd_flags" ]]; then
+        echo "  FLAGS:"
+        echo "    ${cmd_flags}"
+      else
+        echo "  FLAGS: []"
+      fi
+      echo "tasks:"
+      echo "  default:"
+      echo "    vars:"
+      if [[ -n "$cmd_flags" ]]; then
+        echo "      FLAGS:"
+        echo "        ${cmd_flags}"
+      else
+        echo "      FLAGS: []"
+      fi
+      echo "    cmd: \"CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'\""
+    } > "$CLI_DIR/cmds/${cmd_name}/Taskfile.yaml"
   else
     cat >> "$CLI_DIR/Taskfile.yaml" <<'YAML'
 tasks:

@@ -48,12 +48,22 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y jq bc kcov
+          sudo apt-get install -y jq bc
           sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
           sudo chmod +x /usr/local/bin/yq
           sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
           git clone --branch v1.11.1 --depth 1 https://github.com/bats-core/bats-core.git /tmp/bats
           sudo /tmp/bats/install.sh /usr/local
+      - name: Install kcov
+        run: |
+          sudo apt-get install -y \
+            binutils-dev libcurl4-openssl-dev zlib1g-dev libdw-dev \
+            libiberty-dev cmake g++
+          git clone --depth 1 --branch v43 https://github.com/SimonKagstrom/kcov.git /tmp/kcov
+          cmake -S /tmp/kcov -B /tmp/kcov/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/kcov/build --parallel
+          sudo cmake --install /tmp/kcov/build
+          kcov --version
       - name: Run coverage
         run: scripts/coverage.sh
       - name: Publish coverage badge

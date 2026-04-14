@@ -6,7 +6,7 @@
   <a href="https://github.com/tj-smith47/clift/blob/badges/coverage.json"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/tj-smith47/clift/badges/coverage.json" alt="Coverage"></a>
 </p>
 
-<p align="center"><img src=".vhs/gifs/help.gif" alt="clift help demo" width="700"></p>
+<p align="center"><img src=".vhs/gifs/hero.gif" alt="clift in action" width="700"></p>
 
 <details>
 <summary>More demos</summary>
@@ -489,7 +489,7 @@ go install github.com/charmbracelet/vhs@latest
 scripts/record-demos.sh
 
 # Or record a single tape
-vhs .vhs/help.tape
+vhs .vhs/hero.tape
 ```
 
 After recording, commit the updated GIFs so they render on GitHub.

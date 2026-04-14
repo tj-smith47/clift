@@ -5,6 +5,13 @@
 # Usage: scripts/record-demos.sh
 #
 # Outputs: .vhs/gifs/*.gif (committed to repo, referenced by README)
+#
+# Isolation contract:
+#   - HOME is redirected to a tempdir for the duration of recording, so VHS's
+#     spawned bash sources a stub ~/.bashrc (neutral prompt, no aliases, no
+#     hostname, no history) rather than the developer's real one.
+#   - KUBECONFIG is preserved so the hero tape can query a live cluster.
+#   - Original HOME is restored on EXIT/INT/TERM.
 
 set -euo pipefail
 
@@ -21,17 +28,34 @@ export VHS_NO_SANDBOX=true
 
 mkdir -p "$FRAMEWORK_DIR/.vhs/gifs"
 
-# Build the kube example in a temp dir — avoids polluting the repo and
-# avoids the reconfigure prompt (no pre-existing .env in the copy).
 DEMO_DIR="$(mktemp -d)"
-trap 'rm -rf "$DEMO_DIR"' EXIT
+ORIG_HOME="$HOME"
+trap 'rm -rf "$DEMO_DIR"; export HOME="$ORIG_HOME"' EXIT INT TERM
 
-# Redirect rc writes to temp dir but do NOT override HOME — VHS/Chrome
-# need the real HOME for their caches.
+# Resolve the user's kubeconfig BEFORE we swap HOME — kubectl defaults to
+# $HOME/.kube/config when KUBECONFIG is unset, and the stub HOME won't have
+# one. Copy the path forward explicitly so the hero tape still works.
+if [[ -z "${KUBECONFIG:-}" && -f "$ORIG_HOME/.kube/config" ]]; then
+  export KUBECONFIG="$ORIG_HOME/.kube/config"
+fi
+
+# Stub bashrc: neutral prompt, no history, no aliases, no user customization.
+# Anything VHS's bash might source gets pointed here.
+cat > "$DEMO_DIR/.bashrc" <<'STUB'
+# Recording stub — no user customization leaks into committed .gif files.
+set +H
+unset PROMPT_COMMAND
+export PS1='$ '
+export HISTFILE=/dev/null
+export HISTSIZE=0
+STUB
+cp "$DEMO_DIR/.bashrc" "$DEMO_DIR/.bash_profile"
+
+# Swap HOME for the duration. Framework rc-file writes go to the stub too.
+export HOME="$DEMO_DIR"
 export CLIFT_RC_FILE="$DEMO_DIR/.bashrc"
 export PROMPT=false
 export RECONFIGURE_YES=1
-touch "$DEMO_DIR/.bashrc"
 
 # Copy only the command sources, not build artifacts
 mkdir -p "$DEMO_DIR/kube/cmds"
@@ -44,7 +68,7 @@ bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
 
 export PATH="$DEMO_DIR/kube/bin:$FRAMEWORK_DIR/bin:$PATH"
 
-echo "Recording tapes..."
+echo "Recording tapes (HOME=$HOME)..."
 for tape in "$FRAMEWORK_DIR"/.vhs/*.tape; do
   name="$(basename "$tape" .tape)"
   echo "  Recording $name..."

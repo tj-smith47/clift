@@ -1,0 +1,23 @@
+version: '3'
+
+vars:
+  FLAGS:
+    - {name: namespace, short: n, type: string, default: "kube-system", desc: "Namespace to query"}
+    - {name: wide, short: w, type: bool, desc: "Show extended info"}
+
+tasks:
+  default:
+    desc: "Show live cluster status (uses your current kubeconfig)"
+    summary: |
+      Query the currently-selected cluster and print a concise status overview.
+      Uses kubectl under the hood; the gum spinner runs while kubectl completes.
+
+      Examples:
+        kube cluster
+        kube cluster --namespace kube-system
+        kube cluster --wide
+    vars:
+      FLAGS:
+        - {name: namespace, short: n, type: string, default: "kube-system", desc: "Namespace to query"}
+        - {name: wide, short: w, type: bool, desc: "Show extended info"}
+    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
