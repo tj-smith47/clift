@@ -1,0 +1,36 @@
+# Demo resources for VHS recordings. Applied idempotently by
+# scripts/record-demos.sh against the recorder's current kubecontext.
+# The namespace name `clift-demo` is deliberately generic so nothing in
+# the recording identifies the underlying cluster.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: clift-demo
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: clift-demo
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.27-alpine
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 50m
+              memory: 32Mi

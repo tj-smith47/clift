@@ -14,6 +14,7 @@
 | Demo | Description |
 |------|-------------|
 | <img src=".vhs/gifs/init.gif" width="500"> | `clift init` — create a new CLI |
+| <img src=".vhs/gifs/help.gif" width="500"> | Help at every level |
 | <img src=".vhs/gifs/errors.gif" width="500"> | Error UX — typos, wrong types, missing flags |
 | <img src=".vhs/gifs/flags.gif" width="500"> | Flag parsing — string, bool, int, list |
 

@@ -68,6 +68,18 @@ bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
 
 export PATH="$DEMO_DIR/kube/bin:$FRAMEWORK_DIR/bin:$PATH"
 
+# Apply the dummy demo resources used by the hero tape. Idempotent —
+# safe to run repeatedly against any cluster. The `clift-demo` namespace
+# and its `web` deployment are deliberately generic so nothing in the
+# recording identifies the underlying cluster.
+if command -v kubectl &>/dev/null; then
+  echo "Applying demo resources (namespace clift-demo)..."
+  kubectl apply -f "$FRAMEWORK_DIR/examples/kube/demo-resources.yaml" >/dev/null
+  kubectl -n clift-demo rollout status deployment/web --timeout=60s >/dev/null
+else
+  echo "warn: kubectl not found — the hero tape requires a reachable cluster" >&2
+fi
+
 echo "Recording tapes (HOME=$HOME)..."
 for tape in "$FRAMEWORK_DIR"/.vhs/*.tape; do
   name="$(basename "$tape" .tape)"

@@ -32,14 +32,14 @@ includes:
     taskfile: '{{.FRAMEWORK_DIR}}/lib/update'
     vars: {FRAMEWORK_DIR: '{{.FRAMEWORK_DIR}}'}
   # User commands
-  cluster:
-    taskfile: ./cmds/cluster
   deploy:
     taskfile: ./cmds/deploy
-  status:
-    taskfile: ./cmds/status
   logs:
     taskfile: ./cmds/logs
+  restart:
+    taskfile: ./cmds/restart
+  status:
+    taskfile: ./cmds/status
 
 tasks:
   default:

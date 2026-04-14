@@ -1,24 +1,29 @@
-# clift hero demo — a real command running against a real cluster.
-# The gum spinner shows during the live kubectl call; output lands after.
-# Prerequisite: run scripts/record-demos.sh (sets up kube on PATH with a
-# clean bashrc so no machine info leaks into the recording).
+# clift hero demo — why wrap kubectl?
+# Left column: the multi-step kubectl recipe.
+# Right column: the same job, one clift command, one spinner, one success line.
+# Both run against the `clift-demo` namespace applied by record-demos.sh —
+# no personal cluster content ever appears in the recording.
 # Run standalone: vhs .vhs/hero.tape
 
 Output .vhs/gifs/hero.gif
 
 Set Shell "bash"
 Set FontSize 16
-Set Width 900
-Set Height 600
+Set Width 960
+Set Height 720
 Set Padding 20
-Set TypingSpeed 75ms
+Set TypingSpeed 70ms
 
-# The headline shot: one command, one spinner, one result.
-Type "kube cluster"
+# The kubectl way — verbose, two commands, explicit namespace each time.
+Type "kubectl rollout restart deployment/web -n clift-demo"
 Enter
-Sleep 5s
+Sleep 2s
 
-# Flag in action — narrow the scope, show it re-queries.
-Type "clear && kube cluster --namespace kube-system --wide"
+Type "kubectl rollout status deployment/web -n clift-demo --timeout 60s"
 Enter
-Sleep 5s
+Sleep 6s
+
+# The clift way — same work, one line, spinner UX, success log.
+Type "clear && kube restart web"
+Enter
+Sleep 8s
