@@ -3,8 +3,21 @@ version: '3'
 tasks:
   bash:
     desc: "Generate bash completions"
+    summary: |
+      Emit a bash completion script for this CLI to stdout. Source it
+      from your shell rc, or pipe into a completions directory.
+
+      Examples:
+        {{.CLI_NAME}} completion bash > ~/.local/share/bash-completion/completions/{{.CLI_NAME}}
+        source <({{.CLI_NAME}} completion bash)
     cmd: "'{{.FRAMEWORK_DIR}}/lib/completion/completion.sh' bash '{{.CLI_DIR}}/Taskfile.yaml' '{{.CLI_NAME}}'"
 
   zsh:
     desc: "Generate zsh completions"
+    summary: |
+      Emit a zsh completion script for this CLI to stdout. Write to any
+      directory in $fpath.
+
+      Examples:
+        {{.CLI_NAME}} completion zsh > "${fpath[1]}/_{{.CLI_NAME}}"
     cmd: "'{{.FRAMEWORK_DIR}}/lib/completion/completion.sh' zsh '{{.CLI_DIR}}/Taskfile.yaml' '{{.CLI_NAME}}'"

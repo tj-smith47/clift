@@ -3,17 +3,39 @@ version: '3'
 tasks:
   default:
     desc: "Show version and cfgd status"
+    summary: |
+      Print the CLI's current version and cfgd tracking status, if any.
+
+      Examples:
+        {{.CLI_NAME}} version
     cmd: "'{{.FRAMEWORK_DIR}}/lib/version/version.sh' '{{.CLI_DIR}}' '{{.FRAMEWORK_DIR}}'"
 
   setup:
     desc: "Set up cfgd versioning"
+    summary: |
+      One-time initialisation of cfgd version tracking for this CLI.
+      Enables `version upgrade` and `version set`.
+
+      Examples:
+        {{.CLI_NAME}} version setup
     cmd: "'{{.FRAMEWORK_DIR}}/lib/version/setup.sh' '{{.CLI_DIR}}' '{{.FRAMEWORK_DIR}}'"
 
   upgrade:
     desc: "Upgrade to latest version via cfgd"
     aliases: [update]
+    summary: |
+      Pull the latest tagged release through cfgd. Requires `version setup`
+      to have been run once.
+
+      Examples:
+        {{.CLI_NAME}} version upgrade
     cmd: "'{{.FRAMEWORK_DIR}}/lib/version/upgrade.sh' '{{.CLI_DIR}}' '{{.FRAMEWORK_DIR}}'"
 
   set:
     desc: "Pin to a specific version"
+    summary: |
+      Pin the CLI to a specific tagged version via cfgd.
+
+      Examples:
+        {{.CLI_NAME}} version set 1.2.3
     cmd: "'{{.FRAMEWORK_DIR}}/lib/version/set.sh' '{{.CLI_DIR}}' '{{.FRAMEWORK_DIR}}' {{.CLI_ARGS}}"

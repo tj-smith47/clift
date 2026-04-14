@@ -3,4 +3,10 @@ version: '3'
 tasks:
   default:
     desc: "Update clift framework"
+    summary: |
+      Pull the latest clift framework into the directory pointed to by
+      $FRAMEWORK_DIR. Your CLI's cmds/ and config are not touched.
+
+      Examples:
+        {{.CLI_NAME}} update
     cmd: "'{{.FRAMEWORK_DIR}}/lib/update/update.sh' '{{.FRAMEWORK_DIR}}'"

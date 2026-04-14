@@ -3,20 +3,48 @@ version: '3'
 tasks:
   show:
     desc: "Show current configuration"
+    summary: |
+      Print the CLI's current configuration — log theme, version, and any
+      values set via `config set`. Reads from .clift.yaml.
+
+      Examples:
+        {{.CLI_NAME}} config show
     cmd: "'{{.FRAMEWORK_DIR}}/lib/config/show.sh' '{{.CLI_DIR}}'"
 
   theme:
     desc: "Change log theme"
+    summary: |
+      Interactively pick a log theme (affects log.sh output formatting).
+      Previews each option before committing.
+
+      Examples:
+        {{.CLI_NAME}} config theme
     cmd: "'{{.FRAMEWORK_DIR}}/lib/config/theme.sh' '{{.CLI_DIR}}' '{{.FRAMEWORK_DIR}}'"
 
   edit:
     desc: "Edit configuration in $EDITOR"
+    summary: |
+      Open .clift.yaml in $EDITOR. Falls back to $VISUAL, then `vi`.
+
+      Examples:
+        {{.CLI_NAME}} config edit
     cmd: "'{{.FRAMEWORK_DIR}}/lib/config/edit.sh' '{{.CLI_DIR}}'"
 
   get:
     desc: "Get a configuration value"
+    summary: |
+      Print the value of a single key from .clift.yaml. Exits nonzero if
+      the key is absent.
+
+      Examples:
+        {{.CLI_NAME}} config get log_theme
     cmd: "'{{.FRAMEWORK_DIR}}/lib/config/get.sh' '{{.CLI_DIR}}' {{.CLI_ARGS}}"
 
   set:
     desc: "Set a configuration value"
+    summary: |
+      Set a key=value pair in .clift.yaml.
+
+      Examples:
+        {{.CLI_NAME}} config set log_theme=icons-mono
     cmd: "'{{.FRAMEWORK_DIR}}/lib/config/set.sh' '{{.CLI_DIR}}' '{{.FRAMEWORK_DIR}}' {{.CLI_ARGS}}"

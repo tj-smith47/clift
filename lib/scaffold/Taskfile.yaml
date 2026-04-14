@@ -4,6 +4,16 @@ tasks:
   cmd:
     desc: "Scaffold a new command"
     aliases: [':new:command']
+    summary: |
+      Create a new command directory under cmds/ with a Taskfile.yaml and
+      a .sh script skeleton. Prompts for name and description if omitted.
+      Use colons for subcommands: `new cmd NAME=deploy:prod` creates a
+      deploy:prod subcommand inside an existing `deploy` command.
+
+      Examples:
+        {{.CLI_NAME}} new cmd
+        {{.CLI_NAME}} new cmd NAME=build DESC="Build the project"
+        {{.CLI_NAME}} new cmd NAME=deploy:prod DESC="Deploy to prod"
     vars:
       _NAME:
         sh: "{{.FRAMEWORK_DIR}}/lib/prompt/prompt.sh input 'Command name' --var NAME"
