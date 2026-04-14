@@ -52,9 +52,10 @@ teardown() { common_teardown; }
 
 @test "index.json captures vars.HIDDEN: true from command Taskfile" {
   create_test_cli "greet"
-  # Inject HIDDEN: true into the command's top-level vars
-  sed -i.bak 's/^vars:/vars:\n  HIDDEN: true/' "$CLI_DIR/cmds/greet/Taskfile.yaml"
-  rm -f "$CLI_DIR/cmds/greet/Taskfile.yaml.bak"
+  # Inject HIDDEN: true into the command's top-level vars (portable: awk + mv)
+  local tf="$CLI_DIR/cmds/greet/Taskfile.yaml"
+  awk '/^vars:/{print; print "  HIDDEN: true"; next} {print}' "$tf" > "$tf.new"
+  mv "$tf.new" "$tf"
 
   bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$CLI_DIR"
   run jq -r '.tasks["greet"].hidden' "$CLI_DIR/.clift/index.json"
@@ -88,7 +89,7 @@ SH
   [[ "$output" == *"NAME=alice"* ]]
 }
 
-@test "sources manifest triggers rebuild when vars.HIDDEN changes" {
+@test "recompile picks up vars.HIDDEN changes" {
   create_test_cli "greet"
   bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$CLI_DIR"
 
@@ -96,13 +97,13 @@ SH
   run jq -r '.tasks["greet"].hidden' "$CLI_DIR/.clift/index.json"
   [[ "$output" == "false" ]]
 
-  # Mutate the command Taskfile; bump mtime so staleness detection fires.
-  sleep 1
-  sed -i.bak 's/^vars:/vars:\n  HIDDEN: true/' "$CLI_DIR/cmds/greet/Taskfile.yaml"
-  rm -f "$CLI_DIR/cmds/greet/Taskfile.yaml.bak"
-  touch "$CLI_DIR/cmds/greet/Taskfile.yaml"
+  # Mutate the command Taskfile (portable: awk + mv).
+  local tf="$CLI_DIR/cmds/greet/Taskfile.yaml"
+  awk '/^vars:/{print; print "  HIDDEN: true"; next} {print}' "$tf" > "$tf.new"
+  mv "$tf.new" "$tf"
 
-  # Recompile (simulating the cache.sh staleness path)
+  # Recompile directly — this test pins "compile re-reads the source", not
+  # the cache.sh staleness/mtime path (covered elsewhere).
   bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$CLI_DIR"
   run jq -r '.tasks["greet"].hidden' "$CLI_DIR/.clift/index.json"
   [[ "$output" == "true" ]]

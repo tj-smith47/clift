@@ -7,7 +7,7 @@ set -euo pipefail
 
 FORMAT="${1:-}"
 
-# Standard-mode completion: reads from .clift/tasks.json + .clift/flags.json
+# Standard-mode completion: reads from .clift/tasks.json + .clift/index.json
 # instead of invoking `task --list-all --json` at generation time.
 if [[ "${CLIFT_MODE:-task}" == "standard" ]]; then
   CLI_NAME="${CLI_NAME:-mycli}"
