@@ -13,8 +13,11 @@ _CLIFT_GLOBALS_JSON="${FRAMEWORK_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../..
 # Each flag gets: short, long, type hint, description, default/required.
 clift_render_flags() {
   local flags_json="$1"
+  # Filters out flags with `hidden: true` — they still parse and execute but
+  # are omitted from all help/completion surfaces.
   echo "$flags_json" | jq -r '
     .[] |
+    select(.hidden != true) |
     (if .short then "-\(.short), " else "    " end) +
     "--\(.name)" +
     ((.aliases // []) | map(", --" + .) | join("")) +

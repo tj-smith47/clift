@@ -32,7 +32,7 @@ clift_check_deps_full
 
 mkdir -p "$CACHE_DIR"
 
-trap 'rm -f "${CACHE_DIR}/tasks.json.tmp" "${CACHE_DIR}/flags.json.tmp" "${CACHE_DIR}/checksum.tmp" "${CACHE_DIR}/entries.tmp" "${CACHE_DIR}/sources.tmp"' EXIT
+trap 'rm -f "${CACHE_DIR}/tasks.json.tmp" "${CACHE_DIR}/flags.json.tmp" "${CACHE_DIR}/index.json.tmp" "${CACHE_DIR}/checksum.tmp" "${CACHE_DIR}/entries.tmp" "${CACHE_DIR}/sources.tmp"' EXIT
 
 # Step 1: capture task list via `task --list-all --json --nested`.
 # Must run from within the CLI dir so Task resolves includes correctly.
@@ -118,10 +118,17 @@ while IFS= read -r tf; do
   # Single yq call per Taskfile extracts EVERYTHING we need:
   #   - top-level vars.FLAGS
   #   - per-task vars.FLAGS keyed by task name
+  #   - top-level vars.HIDDEN (bool) — hides the whole command
+  #   - per-task vars.HIDDEN keyed by task name
+  # Casing: vars.HIDDEN is ALL_CAPS to match the existing vars.FLAGS /
+  # vars.PERSISTENT_FLAGS "section marker" convention. Per-flag `hidden:` is
+  # lowercase because it's a flag attribute, not a section marker.
   tf_json="$(yq -o=json '
     {
       "toplevel": (.vars.FLAGS // null),
-      "tasks": (.tasks // {} | with_entries(.value = (.value.vars.FLAGS // null)))
+      "tasks": (.tasks // {} | with_entries(.value = (.value.vars.FLAGS // null))),
+      "hidden_top": (.vars.HIDDEN // false),
+      "hidden_tasks": (.tasks // {} | with_entries(.value = (.value.vars.HIDDEN // false)))
     }
   ' "$tf")" || {
     echo "error: failed to parse Taskfile: ${tf}" >&2
@@ -130,14 +137,19 @@ while IFS= read -r tf; do
   taskfile_data["$tf"]="$tf_json"
 done <<< "$unique_taskfiles"
 
-# Step 5: build flags.json entries via temp file, assemble once at the end.
+# Step 5: build index.json entries via temp file, assemble once at the end.
+# Each TSV row is: task_name<TAB>json_value where json_value has shape:
+#   {flags: [...] | {passthrough:true}, aliases: [...], hidden: bool, summary: str}
+# Aliases of a task share the same per-task record (same flags/hidden/summary,
+# but their `aliases` field is the empty list — only the canonical name lists
+# its aliases).
 entries_tmpfile="${CACHE_DIR}/entries.tmp"
 : > "$entries_tmpfile"
 
 # Cache has_optin results per Taskfile to avoid redundant jq calls.
 declare -A _tf_optin_cache
 
-while IFS=$'\x01' read -r -d '' task_name source_tf aliases_json; do
+while IFS=$'\x01' read -r -d '' task_name source_tf aliases_json summary; do
   [[ -z "$task_name" ]] && continue
 
   # Skip framework-internal tasks (underscore prefix).
@@ -161,6 +173,15 @@ while IFS=$'\x01' read -r -d '' task_name source_tf aliases_json; do
     local_task="${task_name#*:}"
   fi
 
+  # Resolve `hidden` with per-task precedence over top-level (matches FLAGS
+  # merge order). A per-task `vars.HIDDEN: true` hides only that subtask; a
+  # top-level one hides the whole command. Either true wins.
+  hidden_bool="$(jq -r --arg lt "$local_task" '
+    (.hidden_top // false) as $top |
+    (.hidden_tasks[$lt] // false) as $per |
+    ($top or $per)
+  ' <<< "$tf_data")"
+
   # Opt-in check: does this Taskfile declare any FLAGS (top-level or per-task)?
   # If not, the command is passthrough and the router falls back to positional argv.
   if [[ -n "${_tf_optin_cache[$source_tf]+x}" ]]; then
@@ -174,7 +195,6 @@ while IFS=$'\x01' read -r -d '' task_name source_tf aliases_json; do
   fi
 
   # Read aliases as NUL-separated list (safe for names with spaces/colons).
-  # Aliases get the same flags entry as the canonical task name.
   aliases=()
   if [[ "$aliases_json" != "[]" ]]; then
     while IFS= read -r -d '' a; do
@@ -183,9 +203,19 @@ while IFS=$'\x01' read -r -d '' task_name source_tf aliases_json; do
   fi
 
   if [[ "$has_optin" != "true" ]]; then
-    printf '%s\t%s\n' "$task_name" '{"passthrough":true}' >> "$entries_tmpfile"
+    # Passthrough: no flag table, but hidden/summary still apply.
+    canonical_entry="$(jq -c -n \
+      --argjson aliases "$aliases_json" \
+      --argjson hidden "$hidden_bool" \
+      --arg summary "$summary" \
+      '{flags: {passthrough: true}, aliases: $aliases, hidden: $hidden, summary: $summary}')"
+    printf '%s\t%s\n' "$task_name" "$canonical_entry" >> "$entries_tmpfile"
     for alias in "${aliases[@]+"${aliases[@]}"}"; do
-      printf '%s\t%s\n' "$alias" '{"passthrough":true}' >> "$entries_tmpfile"
+      alias_entry="$(jq -c -n \
+        --argjson hidden "$hidden_bool" \
+        --arg summary "$summary" \
+        '{flags: {passthrough: true}, aliases: [], hidden: $hidden, summary: $summary}')"
+      printf '%s\t%s\n' "$alias" "$alias_entry" >> "$entries_tmpfile"
     done
     continue
   fi
@@ -233,23 +263,43 @@ while IFS=$'\x01' read -r -d '' task_name source_tf aliases_json; do
     echo "$shadow_check" >&2
   fi
 
-  printf '%s\t%s\n' "$task_name" "$merged" >> "$entries_tmpfile"
+  canonical_entry="$(jq -c -n \
+    --argjson flags "$merged" \
+    --argjson aliases "$aliases_json" \
+    --argjson hidden "$hidden_bool" \
+    --arg summary "$summary" \
+    '{flags: $flags, aliases: $aliases, hidden: $hidden, summary: $summary}')"
+  printf '%s\t%s\n' "$task_name" "$canonical_entry" >> "$entries_tmpfile"
   for alias in "${aliases[@]+"${aliases[@]}"}"; do
-    printf '%s\t%s\n' "$alias" "$merged" >> "$entries_tmpfile"
+    alias_entry="$(jq -c -n \
+      --argjson flags "$merged" \
+      --argjson hidden "$hidden_bool" \
+      --arg summary "$summary" \
+      '{flags: $flags, aliases: [], hidden: $hidden, summary: $summary}')"
+    printf '%s\t%s\n' "$alias" "$alias_entry" >> "$entries_tmpfile"
   done
 done < <(jq -j '
   .[] |
   .name + "\u0001" +
   .location.taskfile + "\u0001" +
-  ((.aliases // []) | tojson) + "\u0000"
+  ((.aliases // []) | tojson) + "\u0001" +
+  (.summary // "") + "\u0000"
 ' <<< "$all_tasks_json")
 
-# Assemble all entries into flags.json with a single jq call.
+# Assemble entries into index.json with a single jq pass, then derive flags.json
+# as a {task: flags} view for backwards compat with out-of-tree consumers.
 # Tab-separated: key<TAB>json_value
 jq -R -n '
   [inputs | split("\t") | {key: .[0], value: (.[1:] | join("\t") | fromjson)}]
   | from_entries
-' "$entries_tmpfile" > "${CACHE_DIR}/flags.json.tmp"
+  | {tasks: .}
+' "$entries_tmpfile" > "${CACHE_DIR}/index.json.tmp"
+mv "${CACHE_DIR}/index.json.tmp" "${CACHE_DIR}/index.json"
+
+# Derive flags.json (flat {task: flags} view) from index.json. This is a
+# compatibility shim; internal consumers now read index.json directly.
+jq -c '.tasks | with_entries(.value = .value.flags)' \
+  "${CACHE_DIR}/index.json" > "${CACHE_DIR}/flags.json.tmp"
 mv "${CACHE_DIR}/flags.json.tmp" "${CACHE_DIR}/flags.json"
 
 # Step 6: write sources manifest + checksum using portable mtime helper.

@@ -26,6 +26,7 @@ Each flag is a map:
 | `desc` | no | string | Help text |
 | `required` | no | bool | Error if absent; cannot combine with `default` |
 | `deprecated` | no | string | Deprecation message. Using the flag emits `warning: --<name> is deprecated: <msg>` to stderr once per invocation and marks the flag `(deprecated)` in help output. Empty string is treated as "not deprecated". |
+| `hidden` | no | bool | If `true`, the flag is omitted from `--help` and shell completion but still parses normally when invoked. Useful for internal/experimental flags. |
 
 ## Reserved names
 
@@ -72,6 +73,14 @@ Script reads: `CLIFT_FLAG_TAG_1`, `CLIFT_FLAG_TAG_2`, ..., `CLIFT_FLAG_TAG_COUNT
 ```
 
 Users can invoke any of `--format`, `--output`, or `--fmt` -- all resolve to the same canonical flag, so the script reads `${CLIFT_FLAG_FORMAT}` regardless of which spelling was used. Aliases share the same `CLIFT_FLAG_<NAME>` env var as the canonical name. Aliases are rendered alongside the canonical long flag in `--help` output.
+
+### Hidden
+
+```yaml
+- {name: secret, type: string, hidden: true, desc: "Internal flag"}
+```
+
+`--secret=x` is accepted by the parser and surfaces as `CLIFT_FLAG_SECRET`, but is absent from `--help` and completion. Use for flags you don't want to advertise (experiments, deprecated shims before removal, internal tooling hooks).
 
 ### Deprecated
 

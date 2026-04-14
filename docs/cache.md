@@ -4,8 +4,22 @@ Every built CLI has a precompiled cache at `${CLI_DIR}/.clift/` that powers the 
 
 ## Files
 
-- **`tasks.json`** -- output of `task --list-all --json --nested` at build time. Used by the wrapper for command-path resolution and by help/completion.
-- **`flags.json`** -- merged flag tables per task. Each key is a task name; each value is either an array of flag maps or `{"passthrough": true}` (for commands without `vars.FLAGS`).
+- **`tasks.json`** -- output of `task --list-all --json --nested` at build time. Used by the wrapper for command-path resolution.
+- **`index.json`** -- consolidated per-task cache. Shape:
+  ```json
+  {
+    "tasks": {
+      "<name>": {
+        "flags":   [...] | {"passthrough": true},
+        "aliases": ["d", "dep"],
+        "hidden":  false,
+        "summary": "..."
+      }
+    }
+  }
+  ```
+  The router, help, and completion all read from here.
+- **`flags.json`** -- legacy flat view `{task: flags}` derived from `index.json` at build time. Kept as a compatibility shim for out-of-tree consumers; new framework code should read `index.json`.
 - **`sources`** -- newline-separated list of every Taskfile the cache depends on. Written by `compile.sh`, read by `cache.sh` for mtime-based staleness checks. This is how the runtime knows which files to track without hardcoded globs.
 - **`checksum`** -- max mtime (integer seconds) across all files listed in `sources`. Used to detect staleness.
 

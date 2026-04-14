@@ -74,17 +74,18 @@ fi
 
 # Step 5: Load flag table for this task, merge with globals — single jq call.
 # Result is either "LEGACY" (no flags / not in cache) or the merged JSON array.
-FLAGS_FILE="$CLI_DIR/.clift/flags.json"
-if [[ "$is_passthrough_no_cache" == "true" ]] || [[ ! -f "$FLAGS_FILE" ]]; then
+# Reads from the consolidated .clift/index.json (shape: {tasks: {<name>: {flags, aliases, hidden, summary}}}).
+INDEX_FILE="$CLI_DIR/.clift/index.json"
+if [[ "$is_passthrough_no_cache" == "true" ]] || [[ ! -f "$INDEX_FILE" ]]; then
   merged_table="LEGACY"
 else
   merged_table="$(jq -c --arg k "$TASK_NAME" \
     --slurpfile globals "${FRAMEWORK_DIR}/lib/flags/globals.json" '
-    .[$k] // null |
+    .tasks[$k].flags // null |
     if . == null or (type == "object" and .passthrough == true) then "PASSTHROUGH"
     else $globals[0] + .
     end
-  ' "$FLAGS_FILE")"
+  ' "$INDEX_FILE")"
 fi
 
 # Step 6: Passthrough — if the task has no FLAG declarations, exec the script

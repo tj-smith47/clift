@@ -59,3 +59,24 @@ Commands whose Taskfile has **no** `vars.FLAGS` key are passthrough commands. Th
 
 This is a valid choice for simple commands that don't need flags, or for scripts in other languages that have their own argument parsing.
 
+## Hidden commands
+
+Add `vars.HIDDEN: true` to a command's Taskfile to omit it from `--help` listings and shell completion while keeping it fully executable:
+
+```yaml
+# cmds/internal/Taskfile.yaml
+version: '3'
+vars:
+  HIDDEN: true
+  FLAGS: []
+tasks:
+  default:
+    cmd: "'{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
+```
+
+Use for debug tooling, deprecated commands during a removal window, or internal hooks. Typing `mycli internal` still works — the dispatcher never filters hidden commands.
+
+### Casing rationale
+
+`vars.HIDDEN` is ALL_CAPS to match the existing `vars.FLAGS` / `vars.PERSISTENT_FLAGS` **section marker** convention. Per-flag `hidden:` (see `docs/flags.md`) is lowercase because it's a flag **attribute**, not a section. The asymmetry is intentional.
+

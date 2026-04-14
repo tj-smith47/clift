@@ -23,7 +23,7 @@ User types: mycli deploy prod --force
 |   2. reconstruct argv (CLIFT_ARG_* or args)  |
 |   3. early passthrough (no root Taskfile?)    |
 |   4. ensure cache fresh                      |
-|   5. load flags.json + merge globals (1 jq)  |
+|   5. load index.json flags + merge globals   |
 |   6. passthrough? exec script with raw argv  |
 |   7. clift_parse_args -> CLIFT_FLAG_*        |
 |   8. intercept --help, --version             |
@@ -47,7 +47,7 @@ User types: mycli deploy prod --force
 - **`lib/cache.sh`** -- portable mtime + staleness check (reads `.clift/sources`)
 - **`lib/check/deps.sh`** -- dependency validation (bash 4.0+, jq, yq)
 - **`lib/scaffold/scaffold.sh`** -- command scaffolding (`new:cmd`)
-- **`lib/help/`** -- list and detail renderers, consume `.clift/flags.json`
+- **`lib/help/`** -- list and detail renderers, consume `.clift/index.json`
 - **`lib/completion/`** -- shell completion generator (bash + zsh, with flag completion)
 
 ## Invariants

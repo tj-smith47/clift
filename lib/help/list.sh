@@ -34,12 +34,26 @@ else
   }
 fi
 
+# Load hidden-command map from index.json so we can filter commands marked
+# with `vars.HIDDEN: true`. Missing index is treated as "nothing hidden".
+INDEX_CACHE="${TASKFILE_DIR}/.clift/index.json"
+hidden_map='{}'
+if [[ -f "$INDEX_CACHE" ]]; then
+  hidden_map="$(jq -c '.tasks // {} | with_entries(.value = (.value.hidden // false))' "$INDEX_CACHE" 2>/dev/null || echo '{}')"
+fi
+
 # Flatten into group<TAB>display_name<TAB>desc lines (one row per top-level
 # command). Root tasks emit directly. Namespaces collapse into a single row:
 # desc comes from the namespace's `default` task, else the first task, else
 # "(group)" as a last resort. A root task's `vars.group` can override which
 # section it appears under; namespaces always fall under "Commands".
-all_entries=$(echo "$json" | jq -r '
+all_entries=$(echo "$json" | jq -r --argjson hidden "$hidden_map" '
+  # A command is hidden if EITHER its bare name OR its "<name>:default" key is
+  # marked hidden:true in index.json. Root-level single tasks use the bare key;
+  # namespaced groups with a default subtask use "<ns>:default".
+  def is_hidden($disp):
+    ($hidden[$disp] // false) or ($hidden[$disp + ":default"] // false);
+
   (
     (.tasks // [])[]
     | select(.name != "default")
@@ -55,6 +69,7 @@ all_entries=$(echo "$json" | jq -r '
       }
     | .display_name = (.name | gsub(":default$"; ""))
     | select(.display_name != "")
+    | select(is_hidden(.display_name) | not)
     | .group = (
         if (.group_var != "" and .group_var != "null") then .group_var
         else "Commands"
@@ -66,6 +81,7 @@ all_entries=$(echo "$json" | jq -r '
     (.namespaces // {}) | to_entries[]
     | select(.key | startswith("_") | not)
     | .key as $ns
+    | select(is_hidden($ns) | not)
     | (
         [ (.value.tasks // [])[]
           | select(.name | test(":[_]") | not)

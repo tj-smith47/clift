@@ -91,14 +91,14 @@ if [[ -n "$subcmds" ]]; then
   echo "Run '${CLI_NAME} ${display_name} <command> --help' for more information."
 fi
 
-# Render flag sections from precompiled .clift/flags.json
-FLAGS_JSON="${TASKFILE_DIR}/.clift/flags.json"
+# Render flag sections from precompiled .clift/index.json (tasks[k].flags)
+INDEX_JSON="${TASKFILE_DIR}/.clift/index.json"
 
-if [[ -f "$FLAGS_JSON" ]]; then
+if [[ -f "$INDEX_JSON" ]]; then
   # Look up this command's merged flags. Try "cmd:default" first, then "cmd".
   cmd_flags="$(jq -c --arg cmd "${COMMAND}:default" --arg cmd2 "$COMMAND" '
-    .[$cmd] // .[$cmd2] // null
-  ' "$FLAGS_JSON")"
+    .tasks[$cmd].flags // .tasks[$cmd2].flags // null
+  ' "$INDEX_JSON")"
 
   if [[ -n "$cmd_flags" && "$cmd_flags" != "null" && "$cmd_flags" != '{"passthrough":true}' ]]; then
     # Load root globals to split local vs global flags

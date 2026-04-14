@@ -92,10 +92,10 @@ teardown() {
   [[ "$output" == *".clift/tasks.json"* ]]
 }
 
-@test "standard mode zsh completion references flags.json" {
+@test "standard mode zsh completion references index.json" {
   CLIFT_MODE=standard run bash "$FRAMEWORK_DIR/lib/completion/completion.sh" zsh
   [ "$status" -eq 0 ]
-  [[ "$output" == *"flags_json"* ]]
+  [[ "$output" == *"index_json"* ]]
 }
 
 @test "standard mode unknown format rejected" {
@@ -124,9 +124,9 @@ teardown() {
   [[ "$output" == *"greet"* ]]
 }
 
-@test "standard mode bash flag completion reads from flags.json" {
+@test "standard mode bash flag completion reads from index.json" {
   CLIFT_MODE=standard run bash "$FRAMEWORK_DIR/lib/completion/completion.sh" bash
   [ "$status" -eq 0 ]
-  [[ "$output" == *"flags_json"* ]]
+  [[ "$output" == *"index_json"* ]]
   [[ "$output" == *'--\(.name)'* ]]
 }

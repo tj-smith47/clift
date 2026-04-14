@@ -25,7 +25,7 @@ _${CLI_NAME}_completions() {
   cli_dir="\$(dirname "\$(command -v ${CLI_NAME})")"
   cli_dir="\$(cd "\$cli_dir/.." && pwd)"
   local tasks_json="\$cli_dir/.clift/tasks.json"
-  local flags_json="\$cli_dir/.clift/flags.json"
+  local index_json="\$cli_dir/.clift/index.json"
 
   local cur="\${COMP_WORDS[\$COMP_CWORD]}"
 
@@ -42,24 +42,34 @@ _${CLI_NAME}_completions() {
     fi
   done
 
-  # Complete flags
-  if [[ "\$cur" == -* ]] && [[ -f "\$flags_json" ]]; then
+  # Complete flags — hidden flags are filtered out
+  if [[ "\$cur" == -* ]] && [[ -f "\$index_json" ]]; then
     local lookup="\${cmd_path}:default"
     [[ -z "\$cmd_path" ]] && lookup=""
     local flags
     flags="\$(jq -r --arg cmd "\$lookup" --arg cmd2 "\$cmd_path" '
-      (.[\$cmd] // .[\$cmd2] // [])
+      (.tasks[\$cmd].flags // .tasks[\$cmd2].flags // [])
       | if type == "array" then
-          .[] | "--\(.name)", (if .short then "-\(.short)" else empty end)
+          .[] | select(.hidden != true) | "--\(.name)", (if .short then "-\(.short)" else empty end)
         else empty end
-    ' "\$flags_json" 2>/dev/null)"
+    ' "\$index_json" 2>/dev/null)"
     COMPREPLY=(\$(compgen -W "\$flags" -- "\$cur"))
     return
   fi
 
-  # Complete subcommands: offer the next segment after cmd_path
+  # Complete subcommands: offer the next segment after cmd_path.
+  # Hidden commands (vars.HIDDEN: true) are filtered out via index.json lookup.
   local all_tasks
-  all_tasks="\$(jq -r '[.. | .tasks? // empty | .[]] | .[] | select(.name != "default") | select(.name | startswith("_") | not) | .name | gsub(":default\$"; "")' "\$tasks_json" 2>/dev/null)"
+  all_tasks="\$(jq -r --slurpfile idx "\$index_json" '
+    ([\$idx[0].tasks // {} | to_entries[] | select(.value.hidden == true) | .key] // []) as \$hidden |
+    [.. | .tasks? // empty | .[]] | .[]
+    | select(.name != "default")
+    | select(.name | startswith("_") | not)
+    | .name as \$n
+    | (\$n | gsub(":default\$"; "")) as \$disp
+    | select((\$hidden | index(\$n)) == null and (\$hidden | index(\$disp)) == null)
+    | \$disp
+  ' "\$tasks_json" 2>/dev/null)"
   local prefix="\$cmd_path"
   [[ -n "\$prefix" ]] && prefix="\${prefix}:"
   local candidates
@@ -73,10 +83,10 @@ BASH_STD
       cat <<ZSH_STD
 #compdef ${CLI_NAME}
 _${CLI_NAME}() {
-  local cli_dir tasks_json flags_json
+  local cli_dir tasks_json index_json
   cli_dir="\${commands[${CLI_NAME}]:h:h}"
   tasks_json="\$cli_dir/.clift/tasks.json"
-  flags_json="\$cli_dir/.clift/flags.json"
+  index_json="\$cli_dir/.clift/index.json"
 
   # Build colon-joined command path from words before cursor
   # zsh words[] is 1-indexed; words[1] is the command name itself, so start at 2
@@ -92,17 +102,17 @@ _${CLI_NAME}() {
     fi
   done
 
-  # Complete flags
-  if [[ "\${words[\$CURRENT]}" == -* ]] && [[ -f "\$flags_json" ]]; then
+  # Complete flags — hidden flags are filtered out
+  if [[ "\${words[\$CURRENT]}" == -* ]] && [[ -f "\$index_json" ]]; then
     local lookup="\${cmd_path}:default"
     [[ -z "\$cmd_path" ]] && lookup=""
     local -a flags
     flags=(\$(jq -r --arg cmd "\$lookup" --arg cmd2 "\$cmd_path" '
-      (.[\$cmd] // .[\$cmd2] // [])
+      (.tasks[\$cmd].flags // .tasks[\$cmd2].flags // [])
       | if type == "array" then
-          .[] | "--\(.name)", (if .short then "-\(.short)" else empty end)
+          .[] | select(.hidden != true) | "--\(.name)", (if .short then "-\(.short)" else empty end)
         else empty end
-    ' "\$flags_json" 2>/dev/null))
+    ' "\$index_json" 2>/dev/null))
     _describe 'flag' flags
     return
   fi
@@ -110,8 +120,18 @@ _${CLI_NAME}() {
   local prefix="\$cmd_path"
   [[ -n "\$prefix" ]] && prefix="\${prefix}:"
 
+  # Subcommands: filter out hidden commands via index.json
   local -a subcmds
-  subcmds=(\$(jq -r '[.. | .tasks? // empty | .[]] | .[] | select(.name != "default") | select(.name | startswith("_") | not) | .name | gsub(":default\$"; "")' "\$tasks_json" 2>/dev/null | grep "^\${prefix}" | sed "s|^\${prefix}||" | cut -d: -f1 | sort -u))
+  subcmds=(\$(jq -r --slurpfile idx "\$index_json" '
+    ([\$idx[0].tasks // {} | to_entries[] | select(.value.hidden == true) | .key] // []) as \$hidden |
+    [.. | .tasks? // empty | .[]] | .[]
+    | select(.name != "default")
+    | select(.name | startswith("_") | not)
+    | .name as \$n
+    | (\$n | gsub(":default\$"; "")) as \$disp
+    | select((\$hidden | index(\$n)) == null and (\$hidden | index(\$disp)) == null)
+    | \$disp
+  ' "\$tasks_json" 2>/dev/null | grep "^\${prefix}" | sed "s|^\${prefix}||" | cut -d: -f1 | sort -u))
   _describe 'command' subcmds
 }
 compdef _${CLI_NAME} ${CLI_NAME}
