@@ -1,0 +1,16 @@
+version: '3'
+
+tasks:
+  default:
+    desc: "Import go-task tasks as clift commands"
+    summary: |
+      Wrap existing go-task tasks as clift commands without rewriting them.
+      Each task gets a generated cmds/<name>/ directory and a thin wrapper
+      that execs the original task via go-task — all task semantics (deps,
+      sources, status, generates) are preserved.
+
+      Examples:
+        {{.CLI_NAME}} import                      # from Taskfile.user.yaml if present
+        {{.CLI_NAME}} import --from ./tasks.yaml
+        {{.CLI_NAME}} import --dry-run
+    cmd: "'{{.FRAMEWORK_DIR}}/lib/import/import.sh' '{{.CLI_DIR}}' '{{.FRAMEWORK_DIR}}' {{.CLI_ARGS}}"
