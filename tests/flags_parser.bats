@@ -344,3 +344,39 @@ JSON
   [ "$status" -eq 0 ]
   [[ "$output" == *"TARGET=myhost"* ]]
 }
+
+@test "missing flag table file errors" {
+  run bash -c "
+    source '$FRAMEWORK_DIR/lib/flags/parser.sh'
+    clift_parse_args '/nonexistent/flags.json' --force
+  "
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"flag table file not found"* ]]
+}
+
+@test "unknown short flag -x=value errors with did-you-mean" {
+  run bash -c "
+    source '$FRAMEWORK_DIR/lib/flags/parser.sh'
+    clift_parse_args '$TEST_DIR/flags.json' -x=foo
+  "
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"unknown flag"* ]]
+}
+
+@test "unknown standalone short flag errors" {
+  run bash -c "
+    source '$FRAMEWORK_DIR/lib/flags/parser.sh'
+    clift_parse_args '$TEST_DIR/flags.json' -z
+  "
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"unknown flag"* ]]
+}
+
+@test "short non-bool flag missing value at end of argv" {
+  run bash -c "
+    source '$FRAMEWORK_DIR/lib/flags/parser.sh'
+    clift_parse_args '$TEST_DIR/flags.json' -t
+  "
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"requires a value"* ]]
+}

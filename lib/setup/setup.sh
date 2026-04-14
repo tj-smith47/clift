@@ -40,10 +40,21 @@ fi
 
 # Resolve to absolute path (portable — no realpath -m which is GNU-only)
 if parent="$(cd "$(dirname "$TARGET")" 2>/dev/null && pwd)"; then
-  TARGET="${parent}/$(basename "$TARGET")"
+  _base="$(basename "$TARGET")"
+  if [[ "$_base" == "." ]]; then
+    TARGET="$parent"
+  else
+    TARGET="${parent}/${_base}"
+  fi
 else
   mkdir -p "$(dirname "$TARGET")"
-  TARGET="$(cd "$(dirname "$TARGET")" && pwd)/$(basename "$TARGET")"
+  _base="$(basename "$TARGET")"
+  parent="$(cd "$(dirname "$TARGET")" && pwd)"
+  if [[ "$_base" == "." ]]; then
+    TARGET="$parent"
+  else
+    TARGET="${parent}/${_base}"
+  fi
 fi
 
 # Default CLI_NAME to directory basename
@@ -132,15 +143,15 @@ if [[ ! -f "$TASKFILE" ]]; then
   _render_template "${FRAMEWORK_DIR}/templates/cli/Taskfile.yaml.tmpl" "$TASKFILE"
 fi
 
-# Render cfgd module.yaml (only if not exists)
+# Render cfgd module.yaml only when cfgd versioning is requested
 MODULE_FILE="${TARGET}/module.yaml"
-if [[ ! -f "$MODULE_FILE" ]]; then
+if [[ "${CFGD_VERSIONING:-}" == "true" ]] && [[ ! -f "$MODULE_FILE" ]]; then
   _render_template "${FRAMEWORK_DIR}/templates/cli/module.yaml.tmpl" "$MODULE_FILE"
 fi
 
-# Copy CI workflow (only if not exists)
+# Copy CI workflow only when requested
 CI_DIR="${TARGET}/.github/workflows"
-if [[ ! -f "${CI_DIR}/ci.yml" ]]; then
+if [[ "${CLIFT_CI:-}" == "true" ]] && [[ ! -f "${CI_DIR}/ci.yml" ]]; then
   mkdir -p "$CI_DIR"
   cp "${FRAMEWORK_DIR}/templates/cli/.github/workflows/ci.yml" "${CI_DIR}/ci.yml"
 fi
@@ -165,14 +176,27 @@ if [[ "$CLIFT_MODE" == "task" ]] && [[ -f "${TARGET}/bin/${CLI_NAME}" ]]; then
   rm -f "${TARGET}/bin/${CLI_NAME}"
 fi
 
+# Replace $HOME prefix with literal $HOME for portable rc entries
+_portable_path() {
+  local p="$1"
+  if [[ -n "${HOME:-}" ]] && [[ "$p" == "$HOME"* ]]; then
+    echo "\$HOME${p#"$HOME"}"
+  else
+    echo "$p"
+  fi
+}
+
 if [[ "$CLIFT_MODE" == "task" ]]; then
-  ALIAS_LINE="alias ${CLI_NAME}='FRAMEWORK_DIR=\"${FRAMEWORK_DIR}\" task --taskfile \"${TARGET}/Taskfile.yaml\"'"
+  _ptarget="$(_portable_path "$TARGET")"
+  _pfw="$(_portable_path "$FRAMEWORK_DIR")"
+  ALIAS_LINE="alias ${CLI_NAME}='FRAMEWORK_DIR=\"${_pfw}\" task --taskfile \"${_ptarget}/Taskfile.yaml\"'"
   clift_rc_write "$RC_FILE" "$CLI_NAME" "$ALIAS_LINE"
 else
   mkdir -p "${TARGET}/bin"
   _render_template "${FRAMEWORK_DIR}/lib/wrapper/wrapper.sh.tmpl" "${TARGET}/bin/${CLI_NAME}"
   chmod +x "${TARGET}/bin/${CLI_NAME}"
-  PATH_LINE="export PATH=\"${TARGET}/bin:\$PATH\""
+  _pbin="$(_portable_path "${TARGET}/bin")"
+  PATH_LINE="export PATH=\"${_pbin}:\$PATH\""
   clift_rc_write "$RC_FILE" "$CLI_NAME" "$PATH_LINE"
 fi
 

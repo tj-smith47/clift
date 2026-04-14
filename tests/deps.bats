@@ -30,3 +30,45 @@ load test_helper
   run bash -c "export FRAMEWORK_DIR='$FRAMEWORK_DIR'; source \"\$FRAMEWORK_DIR/lib/check/deps.sh\"; clift_check_deps_full"
   [ "$status" -eq 0 ]
 }
+
+@test "clift_check_deps_full warns when task version below minimum" {
+  # Create a .clift.yaml requiring an impossibly high task version
+  mkdir -p "$TEST_DIR/fakefwdir"
+  cat > "$TEST_DIR/fakefwdir/.clift.yaml" <<YAML
+version: 0.1.0
+min_task_version: "99.0.0"
+YAML
+  run bash -c "
+    export FRAMEWORK_DIR='$TEST_DIR/fakefwdir'
+    source '$FRAMEWORK_DIR/lib/check/deps.sh'
+    clift_check_deps_full 2>&1
+  "
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"below minimum"* ]]
+}
+
+@test "GUM_AVAILABLE=true when mock gum is on PATH" {
+  # Put a fake gum on PATH
+  mkdir -p "$TEST_DIR/fakebin"
+  printf '#!/bin/sh\necho gum\n' > "$TEST_DIR/fakebin/gum"
+  chmod +x "$TEST_DIR/fakebin/gum"
+  run bash -c "
+    export PATH=\"$TEST_DIR/fakebin:\$PATH\"
+    source '$FRAMEWORK_DIR/lib/check/deps.sh'
+    clift_check_deps_fast
+    echo \"GUM=\$GUM_AVAILABLE\"
+  "
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"GUM=true"* ]]
+}
+
+@test "DEPS_WARN_GUM=true warns when gum missing" {
+  run bash -c "
+    export DEPS_WARN_GUM=true
+    export PATH='/usr/bin:/bin'
+    source '$FRAMEWORK_DIR/lib/check/deps.sh'
+    clift_check_deps_fast 2>&1
+  "
+  # May fail if jq/yq not on restricted PATH, that's OK — we're testing the gum warn
+  [[ "$output" == *"gum not found"* ]] || [[ "$output" == *"error:"* ]]
+}

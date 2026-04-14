@@ -34,10 +34,14 @@ _usage() {
   echo "                               minimal, minimal-color, custom"
   echo "  --mode    MODE      Entry point style (default: standard)"
   echo "                      Options: standard (Cobra-like), task (go-task native)"
+  echo "  --cfgd              Generate cfgd module.yaml for version management"
+  echo "  --ci                Generate GitHub Actions shellcheck workflow"
   echo ""
-  echo "Environment variables (override flags):"
+  echo "Environment variables (equivalent to flags):"
   echo "  CLI_NAME, CLI_VERSION, LOG_THEME, CLIFT_MODE"
-  echo "  PROMPT=false        Skip all interactive prompts"
+  echo "  CFGD_VERSIONING=true  (equivalent to --cfgd)"
+  echo "  CLIFT_CI=true         (equivalent to --ci)"
+  echo "  PROMPT=false          Skip all interactive prompts"
   echo ""
   echo "Examples:"
   echo "  clift init ~/mycli"
@@ -51,7 +55,7 @@ _usage() {
 }
 
 _init() {
-  local path="" name="" version="" theme="" mode=""
+  local path="" name="" version="" theme="" mode="" cfgd="" ci=""
 
   # Parse flags
   while (( $# > 0 )); do
@@ -60,6 +64,8 @@ _init() {
       --version) version="$2"; shift 2 ;;
       --theme)   theme="$2";   shift 2 ;;
       --mode)    mode="$2";    shift 2 ;;
+      --cfgd)    cfgd="true";  shift ;;
+      --ci)      ci="true";    shift ;;
       --help|-h) _usage; exit 0 ;;
       -*)
         echo "error: unknown flag '$1'" >&2
@@ -98,12 +104,18 @@ _init() {
     *) die "Mode must be 'task' or 'standard' (got '$mode')" ;;
   esac
 
+  # Flags override corresponding env vars for opt-in features
+  cfgd="${cfgd:-${CFGD_VERSIONING:-}}"
+  ci="${ci:-${CLIFT_CI:-}}"
+
   # Export for setup.sh and prompt.sh (prevents interactive prompts)
   export CLI_NAME="$name"
   export CLI_VERSION="$version"
   export LOG_THEME="$theme"
   export CLIFT_MODE="$mode"
   export PROMPT=false
+  [[ "$cfgd" == "true" ]] && export CFGD_VERSIONING="true"
+  [[ "$ci" == "true" ]] && export CLIFT_CI="true"
 
   exec bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
     "$path" "$FRAMEWORK_DIR" "$name" "$version" "$theme" "$mode"

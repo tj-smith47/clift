@@ -37,10 +37,17 @@ teardown() {
   [ -f "$TEST_DIR/mycli/.clift.yaml" ]
 }
 
-@test "setup.sh creates module.yaml" {
+@test "setup.sh does not create module.yaml without CFGD_VERSIONING" {
   bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
     "$TEST_DIR/mycli" "$FRAMEWORK_DIR" "mycli" "1.0.0" "minimal" "standard"
+  [ ! -f "$TEST_DIR/mycli/module.yaml" ]
+}
+
+@test "setup.sh creates module.yaml when CFGD_VERSIONING=true" {
+  CFGD_VERSIONING=true bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
+    "$TEST_DIR/mycli" "$FRAMEWORK_DIR" "mycli" "1.0.0" "minimal" "standard"
   [ -f "$TEST_DIR/mycli/module.yaml" ]
+  grep -q "mycli" "$TEST_DIR/mycli/module.yaml"
 }
 
 @test "setup.sh standard mode creates wrapper script" {
@@ -49,16 +56,22 @@ teardown() {
   [ -x "$TEST_DIR/mycli/bin/mycli" ]
 }
 
-@test "setup.sh standard mode adds PATH to rc file" {
+@test "setup.sh standard mode adds PATH with \$HOME to rc file" {
   bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
     "$TEST_DIR/mycli" "$FRAMEWORK_DIR" "mycli" "1.0.0" "minimal" "standard"
   grep -q "export PATH" "$HOME/.bashrc"
+  # PATH should use $HOME, not absolute path
+  grep -q '\$HOME' "$HOME/.bashrc"
+  # PATH should not contain /./
+  ! grep -q '/\./' "$HOME/.bashrc"
 }
 
-@test "setup.sh task mode creates alias in rc file" {
+@test "setup.sh task mode creates alias with \$HOME in rc file" {
   bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
     "$TEST_DIR/mycli" "$FRAMEWORK_DIR" "mycli" "1.0.0" "minimal" "task"
   grep -q "alias mycli=" "$HOME/.bashrc"
+  # Alias should use $HOME, not absolute path
+  grep -q '\$HOME' "$HOME/.bashrc"
 }
 
 @test "setup.sh task mode does not create wrapper script" {
@@ -137,8 +150,14 @@ teardown() {
   grep -q "export PATH" "$HOME/.bashrc"
 }
 
-@test "setup.sh copies CI workflow" {
+@test "setup.sh does not copy CI workflow without CLIFT_CI" {
   bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
+    "$TEST_DIR/mycli" "$FRAMEWORK_DIR" "mycli" "1.0.0" "minimal" "standard"
+  [ ! -f "$TEST_DIR/mycli/.github/workflows/ci.yml" ]
+}
+
+@test "setup.sh copies CI workflow with CLIFT_CI=true" {
+  CLIFT_CI=true bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
     "$TEST_DIR/mycli" "$FRAMEWORK_DIR" "mycli" "1.0.0" "minimal" "standard"
   [ -f "$TEST_DIR/mycli/.github/workflows/ci.yml" ]
 }
@@ -180,6 +199,16 @@ teardown() {
   bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
     "$TEST_DIR/deep/nested/cli" "$FRAMEWORK_DIR" "nested" "1.0.0" "minimal" "standard"
   [ -f "$TEST_DIR/deep/nested/cli/.env" ]
+}
+
+@test "setup.sh resolves . target without /./bin in PATH" {
+  mkdir -p "$TEST_DIR/dotcli"
+  bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
+    "$TEST_DIR/dotcli/." "$FRAMEWORK_DIR" "dotcli" "1.0.0" "minimal" "standard"
+  # PATH entry should not contain /./
+  ! grep -q '/\./' "$HOME/.bashrc"
+  # Wrapper should exist at the resolved path
+  [ -x "$TEST_DIR/dotcli/bin/dotcli" ]
 }
 
 @test "setup.sh success message shows standard mode next steps" {

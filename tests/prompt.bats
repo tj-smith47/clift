@@ -135,3 +135,68 @@ teardown() {
   [ "$status" -eq 0 ]
   [ "$output" = "b" ]
 }
+
+@test "prompt input uses gum when available" {
+  # Create a mock gum that returns a known value
+  mkdir -p "$TEST_DIR/fakebin"
+  cat > "$TEST_DIR/fakebin/gum" <<'SCRIPT'
+#!/bin/sh
+# Mock gum: echo placeholder value for input
+if [ "$1" = "input" ]; then
+  echo "gum_input_value"
+elif [ "$1" = "choose" ]; then
+  # Read stdin options and return the first one
+  head -1
+fi
+SCRIPT
+  chmod +x "$TEST_DIR/fakebin/gum"
+
+  run bash -c "
+    export PATH=\"$TEST_DIR/fakebin:\$PATH\"
+    \"\$FRAMEWORK_DIR/lib/prompt/prompt.sh\" input 'Name' --var UNSET_VAR
+  "
+  [ "$status" -eq 0 ]
+  [ "$output" = "gum_input_value" ]
+}
+
+@test "prompt input with gum uses default as initial value" {
+  mkdir -p "$TEST_DIR/fakebin"
+  cat > "$TEST_DIR/fakebin/gum" <<'SCRIPT'
+#!/bin/sh
+# Mock gum: echo the --value arg if present
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --value) echo "$2"; exit 0 ;;
+    *) shift ;;
+  esac
+done
+echo "no_value"
+SCRIPT
+  chmod +x "$TEST_DIR/fakebin/gum"
+
+  run bash -c "
+    export PATH=\"$TEST_DIR/fakebin:\$PATH\"
+    \"\$FRAMEWORK_DIR/lib/prompt/prompt.sh\" input 'Name' --var UNSET_VAR --default 'Alice'
+  "
+  [ "$status" -eq 0 ]
+  [ "$output" = "Alice" ]
+}
+
+@test "prompt choose uses gum when available" {
+  mkdir -p "$TEST_DIR/fakebin"
+  cat > "$TEST_DIR/fakebin/gum" <<'SCRIPT'
+#!/bin/sh
+if [ "$1" = "choose" ]; then
+  # Return the second option
+  head -2 | tail -1
+fi
+SCRIPT
+  chmod +x "$TEST_DIR/fakebin/gum"
+
+  run bash -c "
+    export PATH=\"$TEST_DIR/fakebin:\$PATH\"
+    \"\$FRAMEWORK_DIR/lib/prompt/prompt.sh\" choose 'Pick' --var UNSET_VAR --options 'alpha,beta,gamma'
+  "
+  [ "$status" -eq 0 ]
+  [ "$output" = "beta" ]
+}

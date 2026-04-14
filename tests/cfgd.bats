@@ -30,40 +30,44 @@ load test_helper
   [[ "$output" != *"managed by cfgd"* ]]
 }
 
-@test "setup generates module.yaml" {
-  CLI_NAME="testmod" \
-  CLI_VERSION="0.1.0" \
-  LOG_THEME="minimal" \
+@test "setup generates module.yaml only with CFGD_VERSIONING" {
+  # Without CFGD_VERSIONING, module.yaml should NOT be created
   PROMPT="false" \
-  run bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
+  bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
+    "$TEST_DIR/nocfgd" "$FRAMEWORK_DIR" "nocfgd" "0.1.0" "minimal"
+  [ ! -f "$TEST_DIR/nocfgd/module.yaml" ]
+
+  # With CFGD_VERSIONING=true, module.yaml SHOULD be created
+  CFGD_VERSIONING="true" \
+  PROMPT="false" \
+  bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
     "$TEST_DIR/newcli" "$FRAMEWORK_DIR" "testmod" "0.1.0" "minimal"
-  [ "$status" -eq 0 ]
   [ -f "$TEST_DIR/newcli/module.yaml" ]
-  # Verify it references the right module dependency
-  run grep "clift" "$TEST_DIR/newcli/module.yaml"
-  [ "$status" -eq 0 ]
+  grep -q "clift" "$TEST_DIR/newcli/module.yaml"
 }
 
 @test "setup module.yaml contains CLI name" {
-  CLI_NAME="mytools" \
-  CLI_VERSION="0.1.0" \
-  LOG_THEME="minimal" \
+  CFGD_VERSIONING="true" \
   PROMPT="false" \
-  run bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
+  bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
     "$TEST_DIR/mytools" "$FRAMEWORK_DIR" "mytools" "0.1.0" "minimal"
-  [ "$status" -eq 0 ]
-  run grep "name: mytools" "$TEST_DIR/mytools/module.yaml"
-  [ "$status" -eq 0 ]
+  grep -q "name: mytools" "$TEST_DIR/mytools/module.yaml"
 }
 
-@test "setup generates CI workflow" {
+@test "setup generates CI workflow only with CLIFT_CI=true" {
+  # Without CLIFT_CI, workflow should NOT be created
   PROMPT="false" \
-  run bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
+  bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
+    "$TEST_DIR/noci" "$FRAMEWORK_DIR" "noci" "0.1.0" "minimal"
+  [ ! -f "$TEST_DIR/noci/.github/workflows/ci.yml" ]
+
+  # With CLIFT_CI=true, workflow SHOULD be created
+  CLIFT_CI="true" \
+  PROMPT="false" \
+  bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
     "$TEST_DIR/cigentest" "$FRAMEWORK_DIR" "cigentest" "0.1.0" "minimal"
-  [ "$status" -eq 0 ]
   [ -f "$TEST_DIR/cigentest/.github/workflows/ci.yml" ]
-  run grep "shellcheck" "$TEST_DIR/cigentest/.github/workflows/ci.yml"
-  [ "$status" -eq 0 ]
+  grep -q "shellcheck" "$TEST_DIR/cigentest/.github/workflows/ci.yml"
 }
 
 @test "update shows already-up-to-date for current repo" {
@@ -125,16 +129,11 @@ load test_helper
 }
 
 @test "setup module.yaml uses portable paths" {
-  CLI_NAME="mytools" \
-  CLI_VERSION="0.1.0" \
-  LOG_THEME="minimal" \
+  CFGD_VERSIONING="true" \
   PROMPT="false" \
-  run bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
+  bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
     "$TEST_DIR/portable" "$FRAMEWORK_DIR" "mytools" "0.1.0" "minimal"
-  [ "$status" -eq 0 ]
   # Should use ~/.local/share paths, not absolute machine paths
-  run grep "~/.local/share/clift" "$TEST_DIR/portable/module.yaml"
-  [ "$status" -eq 0 ]
-  run grep "~/.local/share/mytools" "$TEST_DIR/portable/module.yaml"
-  [ "$status" -eq 0 ]
+  grep -q "~/.local/share/clift" "$TEST_DIR/portable/module.yaml"
+  grep -q "~/.local/share/mytools" "$TEST_DIR/portable/module.yaml"
 }
