@@ -136,6 +136,23 @@ teardown() {
   [[ "$output" == *"unknown command"* ]]
 }
 
+@test "detail.sh falls back to task CLI when tasks.json cache is missing" {
+  rm -f "$TEST_DIR/.clift/tasks.json"
+  run bash "$FRAMEWORK_DIR/lib/help/detail.sh" "greet" "$TEST_DIR/Taskfile.yaml"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Greet someone"* ]]
+}
+
+@test "detail.sh exits with error when taskfile is unreadable by task CLI" {
+  # Removing the cache AND corrupting the Taskfile forces the task CLI
+  # fallback to fail — the error must be specific, not silent.
+  rm -f "$TEST_DIR/.clift/tasks.json"
+  echo "not valid yaml: [[[" > "$TEST_DIR/Taskfile.yaml"
+  run bash "$FRAMEWORK_DIR/lib/help/detail.sh" "greet" "$TEST_DIR/Taskfile.yaml"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"failed to read task list"* ]]
+}
+
 @test "detail.sh requires both command and taskfile args" {
   run bash "$FRAMEWORK_DIR/lib/help/detail.sh"
   [ "$status" -eq 1 ]

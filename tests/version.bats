@@ -51,6 +51,41 @@ load test_helper
   [[ "$output" == *"not set up"* ]]
 }
 
+@test "upgrade invokes cfgd module upgrade and reports success" {
+  export CFGD_VERSIONING=true
+  # Mock a cfgd that records invocations and succeeds
+  mkdir -p "$TEST_DIR/bin"
+  cat > "$TEST_DIR/bin/cfgd" <<SH
+#!/bin/sh
+echo "cfgd \$*" > "$TEST_DIR/cfgd.log"
+exit 0
+SH
+  chmod +x "$TEST_DIR/bin/cfgd"
+  export PATH="$TEST_DIR/bin:$PATH"
+
+  run bash "$FRAMEWORK_DIR/lib/version/upgrade.sh" "$CLI_DIR" "$FRAMEWORK_DIR"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Upgrade complete"* ]]
+  [[ "$output" == *"cfgd apply"* ]]
+  run cat "$TEST_DIR/cfgd.log"
+  [[ "$output" == *"module upgrade testcli"* ]]
+}
+
+@test "upgrade dies when cfgd upgrade fails" {
+  export CFGD_VERSIONING=true
+  mkdir -p "$TEST_DIR/bin"
+  cat > "$TEST_DIR/bin/cfgd" <<'SH'
+#!/bin/sh
+exit 2
+SH
+  chmod +x "$TEST_DIR/bin/cfgd"
+  export PATH="$TEST_DIR/bin:$PATH"
+
+  run bash "$FRAMEWORK_DIR/lib/version/upgrade.sh" "$CLI_DIR" "$FRAMEWORK_DIR"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"Upgrade failed"* ]]
+}
+
 @test "upgrade fails without cfgd installed" {
   export CFGD_VERSIONING=true
   export PATH="/usr/bin:/bin"
@@ -412,6 +447,93 @@ YAML
   run yq '.spec.modules[]' "$TEST_DIR/cfgd-config/profiles/dev.yaml"
   [ "$status" -eq 0 ]
   [[ "$output" == *"profilecli"* ]]
+}
+
+@test "version/setup.sh requires CLI_DIR and FRAMEWORK_DIR" {
+  run bash "$FRAMEWORK_DIR/lib/version/setup.sh" "" ""
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"required"* ]]
+}
+
+@test "version/setup.sh dies when .clift.yaml has no name" {
+  mkdir -p "$TEST_DIR/noname"
+  echo "version: 0.1.0" > "$TEST_DIR/noname/.clift.yaml"
+  echo "CLI_VERSION=0.1.0" > "$TEST_DIR/noname/.env"
+
+  unset CLI_NAME
+  run bash "$FRAMEWORK_DIR/lib/version/setup.sh" "$TEST_DIR/noname" "$FRAMEWORK_DIR"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"Could not determine CLI name"* ]]
+}
+
+@test "version/setup.sh standalone mode logs remote when git origin is set" {
+  mkdir -p "$TEST_DIR/remotecli"
+  cat > "$TEST_DIR/remotecli/.clift.yaml" <<'YAML'
+name: remotecli
+version: 0.1.0
+YAML
+  cat > "$TEST_DIR/remotecli/.env" <<'ENV'
+CLI_NAME=remotecli
+CLI_VERSION=0.1.0
+ENV
+  cat > "$TEST_DIR/remotecli/Taskfile.yaml" <<'YAML'
+version: '3'
+includes:
+  # User commands
+tasks:
+  default:
+    desc: "Show help"
+YAML
+  git -C "$TEST_DIR/remotecli" init -q
+  git -C "$TEST_DIR/remotecli" remote add origin "https://example.com/remotecli.git"
+
+  mkdir -p "$TEST_DIR/bin"
+  echo '#!/bin/sh' > "$TEST_DIR/bin/cfgd"
+  chmod +x "$TEST_DIR/bin/cfgd"
+  export PATH="$TEST_DIR/bin:$PATH"
+
+  CLI_NAME=remotecli CLI_VERSION=0.1.0 \
+    run bash "$FRAMEWORK_DIR/lib/version/setup.sh" "$TEST_DIR/remotecli" "$FRAMEWORK_DIR"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Module configured with remote"* ]]
+  # yq injection via strenv should populate the source field with the remote URL
+  run yq '.spec.files[0].source' "$TEST_DIR/remotecli/module.yaml"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"example.com/remotecli.git"* ]]
+}
+
+@test "version/setup.sh warns when a CFGD_PROFILES entry does not exist" {
+  mkdir -p "$TEST_DIR/missprofcli"
+  cat > "$TEST_DIR/missprofcli/.clift.yaml" <<'YAML'
+name: missprofcli
+version: 0.1.0
+YAML
+  cat > "$TEST_DIR/missprofcli/.env" <<'ENV'
+CLI_NAME=missprofcli
+ENV
+  cat > "$TEST_DIR/missprofcli/Taskfile.yaml" <<'YAML'
+version: '3'
+includes:
+  # User commands
+tasks:
+  default:
+    desc: "Show help"
+YAML
+  mkdir -p "$TEST_DIR/cfgd-config/modules"
+  mkdir -p "$TEST_DIR/cfgd-config/profiles"
+
+  mkdir -p "$TEST_DIR/bin"
+  echo '#!/bin/sh' > "$TEST_DIR/bin/cfgd"
+  chmod +x "$TEST_DIR/bin/cfgd"
+  export PATH="$TEST_DIR/bin:$PATH"
+
+  CLI_NAME=missprofcli CLI_VERSION=0.1.0 \
+  CFGD_CONFIG_DIR="$TEST_DIR/cfgd-config" \
+  CFGD_PROFILES="ghost" \
+    run bash "$FRAMEWORK_DIR/lib/version/setup.sh" "$TEST_DIR/missprofcli" "$FRAMEWORK_DIR"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Profile not found"* ]]
+  [[ "$output" == *"ghost"* ]]
 }
 
 @test "setup fails with nonexistent CFGD_CONFIG_DIR" {

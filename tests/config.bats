@@ -137,3 +137,9 @@ EOF
   [[ "$output" == *"usage"* ]]
 }
 
+@test "show.sh errors when CLI_DIR argument is missing" {
+  run bash "$FRAMEWORK_DIR/lib/config/show.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"CLI_DIR required"* ]]
+}
+

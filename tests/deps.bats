@@ -31,6 +31,26 @@ load test_helper
   [ "$status" -eq 0 ]
 }
 
+@test "clift_check_deps_full emits no warning when task version matches minimum" {
+  # Trigger the equal-versions branch of _version_lt (final `return 1`).
+  # A false warning here would train users to ignore real ones.
+  local current_ver
+  current_ver="$(task --version 2>/dev/null | sed 's/.*v\([0-9][0-9.]*\).*/\1/; s/-.*//')"
+  [ -n "$current_ver" ]
+  mkdir -p "$TEST_DIR/fakefwdir"
+  cat > "$TEST_DIR/fakefwdir/.clift.yaml" <<YAML
+version: 0.1.0
+min_task_version: "$current_ver"
+YAML
+  run bash -c "
+    export FRAMEWORK_DIR='$TEST_DIR/fakefwdir'
+    source '$FRAMEWORK_DIR/lib/check/deps.sh'
+    clift_check_deps_full 2>&1
+  "
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"below minimum"* ]]
+}
+
 @test "clift_check_deps_full warns when task version below minimum" {
   # Create a .clift.yaml requiring an impossibly high task version
   mkdir -p "$TEST_DIR/fakefwdir"

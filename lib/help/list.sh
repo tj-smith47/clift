@@ -34,12 +34,12 @@ else
   }
 fi
 
-# Flatten nested JSON into group<TAB>display_name<TAB>desc lines.
-# Root tasks → "Commands" group (unless they have a vars.group override).
-# Namespaced tasks → title-cased namespace group.
-# Filter out _-prefixed namespaces (framework internals) and "default" task.
+# Flatten into group<TAB>display_name<TAB>desc lines (one row per top-level
+# command). Root tasks emit directly. Namespaces collapse into a single row:
+# desc comes from the namespace's `default` task, else the first task, else
+# "(group)" as a last resort. A root task's `vars.group` can override which
+# section it appears under; namespaces always fall under "Commands".
 all_entries=$(echo "$json" | jq -r '
-  # Root tasks
   (
     (.tasks // [])[]
     | select(.name != "default")
@@ -47,7 +47,6 @@ all_entries=$(echo "$json" | jq -r '
     | {
         name: .name,
         desc: (.desc // ""),
-        location: (.location.taskfile // ""),
         group_var: (
           if (.vars.group | type) == "object" then (.vars.group.value // "")
           else (.vars.group // "")
@@ -63,39 +62,23 @@ all_entries=$(echo "$json" | jq -r '
       )
     | "\(.group)\t\(.display_name)\t\(.desc)"
   ),
-  # Namespaced tasks
   (
     (.namespaces // {}) | to_entries[]
     | select(.key | startswith("_") | not)
     | .key as $ns
-    | (.value.tasks // [])[]
-    | select(.name | test(":[_]") | not)
-    | select(.name != ($ns + ":default"))
-    | {
-        name: .name,
-        desc: (.desc // ""),
-        location: (.location.taskfile // ""),
-        ns: $ns,
-        group_var: (
-          if (.vars.group | type) == "object" then (.vars.group.value // "")
-          else (.vars.group // "")
-          end | tostring
-        )
-      }
-    | .display_name = (
-        if (.location | contains("/cmds/")) then
-          (.name | gsub(":default$"; "") | gsub(":"; " "))
-        else
-          (.name | gsub(":default$"; ""))
-        end
+    | (
+        [ (.value.tasks // [])[]
+          | select(.name | test(":[_]") | not)
+        ] as $all
+        | ($all | map(select(.name == ($ns + ":default"))) | first) as $def
+        | ($all | map(select(.name != ($ns + ":default"))) | first) as $fallback
+        | ($def // $fallback) as $pick
+        | if $pick == null then empty
+          else
+            (($pick.desc // "") | if . == "" then "(group)" else . end) as $desc
+            | "Commands\t\($ns)\t\($desc)"
+          end
       )
-    | select(.display_name != "")
-    | .group = (
-        if (.group_var != "" and .group_var != "null") then .group_var
-        else (.ns | (ascii_upcase[:1] + .[1:]))
-        end
-      )
-    | "\(.group)\t\(.display_name)\t\(.desc)"
   )
 ')
 
