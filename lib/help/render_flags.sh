@@ -17,6 +17,7 @@ clift_render_flags() {
     .[] |
     (if .short then "-\(.short), " else "    " end) +
     "--\(.name)" +
+    ((.aliases // []) | map(", --" + .) | join("")) +
     (if .type and .type != "bool" then "=<\(.type)>" else "" end) +
     "\t" +
     (.desc // "") +

@@ -20,6 +20,7 @@ Each flag is a map:
 |---|---|---|---|
 | `name` | yes | string | `^[a-z][a-z0-9-]*$` -- lowercase, dash-separated, no underscores |
 | `short` | no | single char | `^[a-zA-Z0-9]$` |
+| `aliases` | no | list of string | Alternate long names. Each must match the `name` regex and cannot collide with any other flag's name or alias in the same layer. |
 | `type` | yes | enum | `bool` \| `string` \| `int` \| `list` |
 | `default` | no | string | Ignored for bool; for list, comma-separated (e.g. `"a,b,c"`) |
 | `desc` | no | string | Help text |
@@ -62,6 +63,14 @@ Parser validates integer; negative values (`--count -5`) work.
 ```
 
 Script reads: `CLIFT_FLAG_TAG_1`, `CLIFT_FLAG_TAG_2`, ..., `CLIFT_FLAG_TAG_COUNT`.
+
+### Aliases
+
+```yaml
+- {name: format, aliases: [output, fmt], type: string, default: json, desc: "Output format"}
+```
+
+Users can invoke any of `--format`, `--output`, or `--fmt` -- all resolve to the same canonical flag, so the script reads `${CLIFT_FLAG_FORMAT}` regardless of which spelling was used. Aliases share the same `CLIFT_FLAG_<NAME>` env var as the canonical name. Aliases are rendered alongside the canonical long flag in `--help` output.
 
 ## Validation
 

@@ -123,10 +123,13 @@ _validate_layer() {
   fi
 
   # Emit one TSV row per entry: index, entry_type, name, short, type,
-  # required, has_default_key, default_value. has_default_key distinguishes
-  # "no default" from "default: null", which matters for the required-vs-default
-  # mutual-exclusion rule. Bare-string (non-map) entries get entry_type=string
-  # and empty fields — _validate_entry_fields rejects them with a clean message.
+  # required, has_default_key, default_value, aliases_csv. has_default_key
+  # distinguishes "no default" from "default: null", which matters for the
+  # required-vs-default mutual-exclusion rule. Bare-string (non-map) entries
+  # get entry_type=string and empty fields — _validate_entry_fields rejects
+  # them with a clean message. aliases_csv is a comma-separated list of
+  # alias strings (commas aren't permitted in flag names, so this is
+  # unambiguous).
   #
   # Every field is prefixed with a literal "x" sentinel because bash's `read`
   # with `IFS=$'\t'` collapses runs of tabs (tabs are IFS-whitespace in bash),
@@ -142,12 +145,16 @@ _validate_layer() {
       "x" + (if (.value|type) == "object" then (.value.type // "") else "" end),
       "x" + (if (.value|type) == "object" then (.value.required // false | tostring) else "false" end),
       "x" + (if (.value|type) == "object" then (.value | has("default") | tostring) else "false" end),
-      "x" + (if (.value|type) == "object" then (.value.default // "" | tostring) else "" end)
+      "x" + (if (.value|type) == "object" then (.value.default // "" | tostring) else "" end),
+      "x" + (if (.value|type) == "object" then ((.value.aliases // []) | join(",")) else "" end)
     ] | @tsv
   ')"
 
   local seen_names="" seen_shorts="" seen_envs=""
-  while IFS=$'\t' read -r idx entry_type name short type required has_default default_val; do
+  # seen_name_owner maps a name/alias back to the flag that introduced it, so
+  # a collision error can name both ends of the conflict.
+  declare -A seen_name_owner
+  while IFS=$'\t' read -r idx entry_type name short type required has_default default_val aliases_csv; do
     [[ -z "$idx" ]] && continue
     # Strip sentinel prefix from each field
     idx="${idx#x}"
@@ -158,15 +165,44 @@ _validate_layer() {
     required="${required#x}"
     has_default="${has_default#x}"
     default_val="${default_val#x}"
+    aliases_csv="${aliases_csv#x}"
     _validate_entry_fields "${context}[${idx}]" "$entry_type" "$name" "$short" "$type" "$required" "$has_default" "$default_val" || return 1
 
     # Dedup checks only run after entry validation succeeds, so $name is non-empty and sane.
     if [[ -n "$name" ]]; then
       if [[ " $seen_names " == *" $name "* ]]; then
-        echo "error: ${context}: duplicate flag name '$name' within layer" >&2
+        local _owner="${seen_name_owner[$name]:-}"
+        if [[ -n "$_owner" && "$_owner" != "$name" ]]; then
+          echo "error: ${context}: alias '$name' conflicts with name/alias of flag '$_owner'" >&2
+        else
+          echo "error: ${context}: duplicate flag name '$name' within layer" >&2
+        fi
         return 1
       fi
       seen_names="$seen_names $name"
+      seen_name_owner["$name"]="$name"
+    fi
+
+    # Aliases share the same namespace as names. Split the CSV and check each
+    # against every previously seen name/alias (including the current flag's
+    # own canonical name, so a self-collision is caught too).
+    if [[ -n "$aliases_csv" ]]; then
+      local _alias _aliases
+      IFS=',' read -ra _aliases <<< "$aliases_csv"
+      for _alias in "${_aliases[@]}"; do
+        [[ -z "$_alias" ]] && continue
+        if [[ ! "$_alias" =~ $NAME_RE ]]; then
+          echo "error: ${context}: flag '$name' alias '$_alias' must match ${NAME_RE} (no underscores, lowercase)" >&2
+          return 1
+        fi
+        if [[ " $seen_names " == *" $_alias "* ]]; then
+          local _owner="${seen_name_owner[$_alias]:-}"
+          echo "error: ${context}: alias '$_alias' conflicts with name/alias of flag '$_owner'" >&2
+          return 1
+        fi
+        seen_names="$seen_names $_alias"
+        seen_name_owner["$_alias"]="$name"
+      done
     fi
 
     if [[ -n "$short" ]]; then

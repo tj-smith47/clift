@@ -33,33 +33,44 @@ clift_parse_args() {
 
   # Pre-build lookup tables, known names, required flags, AND defaults in a
   # single jq call — the only fork in the parser init path.
-  # Output: four NUL-separated sections via process substitution (NUL bytes
+  # Output: five NUL-separated sections via process substitution (NUL bytes
   # can't survive bash command substitution, so we read from an fd).
   #   1. name\x01short\x01type lines  (lookup tables)
-  #   2. space-joined known names      (error suggestions)
+  #   2. space-joined known names      (error suggestions; includes aliases)
   #   3. required flag names           (one per line)
   #   4. name\x01type\x01default lines (non-bool defaults)
-  local _ft_lines="" known_names="" _required_names="" _defaults_tsv=""
+  #   5. alias\x01canonical-name lines (alias -> canonical lookup)
+  local _ft_lines="" known_names="" _required_names="" _defaults_tsv="" _alias_lines=""
   {
     IFS= read -r -d '' _ft_lines || true
     IFS= read -r -d '' known_names || true
     IFS= read -r -d '' _required_names || true
     IFS= read -r -d '' _defaults_tsv || true
+    IFS= read -r -d '' _alias_lines || true
   } < <(jq -j '
     ([.[] | [.name, (.short // ""), .type] | join("\u0001")] | join("\n")) + "\u0000" +
-    ([.[].name] | join(" ")) + "\u0000" +
+    ([.[] | [.name] + (.aliases // []) | .[]] | join(" ")) + "\u0000" +
     ([.[] | select(.required == true) | .name] | join("\n")) + "\u0000" +
     ([.[] | select(.default != null and .type != "bool")
       | [.name, .type, (.default | tostring)] | join("\u0001")]
+      | join("\n")) + "\u0000" +
+    ([.[] as $f | ($f.aliases // [])[] | [., $f.name] | join("\u0001")]
       | join("\n")) + "\u0000"
   ' <<< "$table_json")
 
-  declare -A _ft_type _ft_name_by_short
+  declare -A _ft_type _ft_name_by_short _ft_alias_to_name
   while IFS=$'\x01' read -r _fn _fs _ftype; do
     [[ -z "$_fn" ]] && continue
     _ft_type["$_fn"]="$_ftype"
     [[ -n "$_fs" ]] && _ft_name_by_short["$_fs"]="$_fn"
   done <<< "$_ft_lines"
+
+  # Populate alias → canonical-name map. Empty lines (no aliases declared)
+  # are skipped.
+  while IFS=$'\x01' read -r _alias _canonical; do
+    [[ -z "$_alias" ]] && continue
+    _ft_alias_to_name["$_alias"]="$_canonical"
+  done <<< "$_alias_lines"
 
   # Apply defaults first. For list flags, we track "defaulted" state separately
   # so that when a user passes the first --list=value, we can wipe the default
@@ -162,6 +173,11 @@ clift_parse_args() {
         inline_val="${name#*=}"
         name="${name%%=*}"
         has_inline=true
+      fi
+
+      # Resolve alias to canonical name before lookup.
+      if [[ -n "${_ft_alias_to_name[$name]:-}" ]]; then
+        name="${_ft_alias_to_name[$name]}"
       fi
 
       if [[ -z "${_ft_type[$name]+x}" ]]; then
