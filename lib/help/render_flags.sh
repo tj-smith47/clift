@@ -21,6 +21,7 @@ clift_render_flags() {
     (if .type and .type != "bool" then "=<\(.type)>" else "" end) +
     "\t" +
     (.desc // "") +
-    (if .required == true then " (required)" elif .default then " (default: \(.default))" else "" end)
+    (if .required == true then " (required)" elif .default then " (default: \(.default))" else "" end) +
+    (if (.deprecated // "") != "" then " (deprecated)" else "" end)
   ' | column -t -s $'\t' | sed 's/^/  /'
 }

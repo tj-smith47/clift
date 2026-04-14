@@ -33,20 +33,22 @@ clift_parse_args() {
 
   # Pre-build lookup tables, known names, required flags, AND defaults in a
   # single jq call — the only fork in the parser init path.
-  # Output: five NUL-separated sections via process substitution (NUL bytes
+  # Output: six NUL-separated sections via process substitution (NUL bytes
   # can't survive bash command substitution, so we read from an fd).
   #   1. name\x01short\x01type lines  (lookup tables)
   #   2. space-joined known names      (error suggestions; includes aliases)
   #   3. required flag names           (one per line)
   #   4. name\x01type\x01default lines (non-bool defaults)
   #   5. alias\x01canonical-name lines (alias -> canonical lookup)
-  local _ft_lines="" known_names="" _required_names="" _defaults_tsv="" _alias_lines=""
+  #   6. name\x01message lines         (deprecated flags; empty/null filtered)
+  local _ft_lines="" known_names="" _required_names="" _defaults_tsv="" _alias_lines="" _deprecated_lines=""
   {
     IFS= read -r -d '' _ft_lines || true
     IFS= read -r -d '' known_names || true
     IFS= read -r -d '' _required_names || true
     IFS= read -r -d '' _defaults_tsv || true
     IFS= read -r -d '' _alias_lines || true
+    IFS= read -r -d '' _deprecated_lines || true
   } < <(jq -j '
     ([.[] | [.name, (.short // ""), .type] | join("\u0001")] | join("\n")) + "\u0000" +
     ([.[] | [.name] + (.aliases // []) | .[]] | join(" ")) + "\u0000" +
@@ -55,10 +57,13 @@ clift_parse_args() {
       | [.name, .type, (.default | tostring)] | join("\u0001")]
       | join("\n")) + "\u0000" +
     ([.[] as $f | ($f.aliases // [])[] | [., $f.name] | join("\u0001")]
+      | join("\n")) + "\u0000" +
+    ([.[] | select((.deprecated // "") != "")
+      | [.name, .deprecated] | join("\u0001")]
       | join("\n")) + "\u0000"
   ' <<< "$table_json")
 
-  declare -A _ft_type _ft_name_by_short _ft_alias_to_name
+  declare -A _ft_type _ft_name_by_short _ft_alias_to_name _ft_deprecated
   while IFS=$'\x01' read -r _fn _fs _ftype; do
     [[ -z "$_fn" ]] && continue
     _ft_type["$_fn"]="$_ftype"
@@ -71,6 +76,26 @@ clift_parse_args() {
     [[ -z "$_alias" ]] && continue
     _ft_alias_to_name["$_alias"]="$_canonical"
   done <<< "$_alias_lines"
+
+  # Populate canonical-name → deprecation-message map. Flags without a
+  # `deprecated` field (or with empty string) don't appear here.
+  while IFS=$'\x01' read -r _dname _dmsg; do
+    [[ -z "$_dname" ]] && continue
+    _ft_deprecated["$_dname"]="$_dmsg"
+  done <<< "$_deprecated_lines"
+
+  # Emit a one-shot deprecation warning for a canonical flag name if one is
+  # registered. The warning fires per-invocation, not per-occurrence, so
+  # `--old x --old y` warns once — matching Cobra's behavior.
+  declare -A _warned_deprecated
+  _clift_warn_deprecated() {
+    local name="$1"
+    local msg="${_ft_deprecated[$name]:-}"
+    [[ -z "$msg" ]] && return 0
+    [[ -n "${_warned_deprecated[$name]:-}" ]] && return 0
+    _warned_deprecated["$name"]=1
+    echo "warning: --${name} is deprecated: ${msg}" >&2
+  }
 
   # Apply defaults first. For list flags, we track "defaulted" state separately
   # so that when a user passes the first --list=value, we can wipe the default
@@ -210,6 +235,7 @@ clift_parse_args() {
       fi
 
       seen_names="$seen_names $name"
+      _clift_warn_deprecated "$name"
       shift
       continue
     fi
@@ -233,6 +259,7 @@ clift_parse_args() {
 
         _clift_set_flag_value "$tok" "$name" "$type" "$value" || return 1
         seen_names="$seen_names $name"
+        _clift_warn_deprecated "$name"
         shift
         continue
       fi
@@ -267,6 +294,7 @@ clift_parse_args() {
           _clift_var_name "$n"; v="$_CLIFT_VAR"
           export "${v}=true"
           seen_names="$seen_names $n"
+          _clift_warn_deprecated "$n"
         done
         shift
         continue
@@ -286,6 +314,7 @@ clift_parse_args() {
       if [[ "$type" == "bool" ]]; then
         _clift_set_flag_value "$tok" "$name" "$type" "true"
         seen_names="$seen_names $name"
+        _clift_warn_deprecated "$name"
         shift
         continue
       fi
@@ -298,6 +327,7 @@ clift_parse_args() {
       local value="$1"
       _clift_set_flag_value "$tok" "$name" "$type" "$value" || return 1
       seen_names="$seen_names $name"
+      _clift_warn_deprecated "$name"
       shift
       continue
     fi
