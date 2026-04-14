@@ -7,26 +7,26 @@ Output .vhs/gifs/errors.gif
 Set Shell "bash"
 Set FontSize 16
 Set Width 900
-Set Height 500
+Set Height 800
 Set Padding 20
-Set TypingSpeed 50ms
+Set TypingSpeed 75ms
 
 # Typo with did-you-mean suggestion
 Type "kube deplooy"
 Enter
-Sleep 2s
+Sleep 3s
 
 # Flags before command
 Type "kube -t prod deploy"
 Enter
-Sleep 2s
+Sleep 3s
 
 # Wrong flag type
 Type "kube deploy --replicas abc"
 Enter
-Sleep 2s
+Sleep 3s
 
 # Missing required flag
 Type "kube logs"
 Enter
-Sleep 2s
+Sleep 3s
