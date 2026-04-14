@@ -94,7 +94,7 @@ clift_parse_args() {
     [[ -z "$msg" ]] && return 0
     [[ -n "${_warned_deprecated[$name]:-}" ]] && return 0
     _warned_deprecated["$name"]=1
-    echo "warning: --${name} is deprecated: ${msg}" >&2
+    printf '%s\n' "warning: --${name} is deprecated: ${msg}" >&2
   }
 
   # Apply defaults first. For list flags, we track "defaulted" state separately

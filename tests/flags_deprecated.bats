@@ -97,6 +97,24 @@ JSON
   [[ "$stderr" == *"warning: --old is deprecated: use --new"* ]]
 }
 
+# List-typed deprecated flag: passing it twice warns exactly once
+# (the _warned_deprecated dedup guard in parser.sh).
+@test "deprecated list flag warns once even when passed multiple times" {
+  cat > "$TEST_DIR/flags.json" <<'JSON'
+[
+  {"name": "old", "type": "list", "deprecated": "use --new instead"}
+]
+JSON
+  run --separate-stderr bash -c "
+    source '$FRAMEWORK_DIR/lib/flags/parser.sh'
+    clift_parse_args '$TEST_DIR/flags.json' --old x --old y
+  "
+  [ "$status" -eq 0 ]
+  local count
+  count=$(grep -c "is deprecated" <<< "$stderr" || true)
+  [ "$count" -eq 1 ]
+}
+
 # Compile pipeline: deprecated field must survive into flags.json.
 @test "compile preserves deprecated field in flags.json" {
   export CLI_DIR="$TEST_DIR"
