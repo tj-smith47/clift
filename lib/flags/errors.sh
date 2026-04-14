@@ -142,3 +142,43 @@ clift_err_nonbool_in_cluster() {
   echo "  '-$short' is declared by $layer as non-bool" >&2
   return 1
 }
+
+# Mutually-exclusive group violation. Members is a space-separated list of
+# canonical flag names that were all set in this invocation (at least 2).
+clift_err_mutex_group() {
+  local group="$1" members="$2"
+  local formatted=""
+  for m in $members; do
+    if [[ -z "$formatted" ]]; then
+      formatted="'--$m'"
+    else
+      formatted="$formatted, '--$m'"
+    fi
+  done
+  echo "error: flags $formatted are mutually exclusive (group '$group')" >&2
+  return 1
+}
+
+# Required-together group violation. `set_members` is space-separated canonical
+# names that WERE set; `missing_members` is the names that were NOT set but
+# are required because another group member was provided.
+clift_err_requires_all_group() {
+  local group="$1" set_members="$2" missing_members="$3"
+  local missing_fmt="" set_fmt=""
+  for m in $missing_members; do
+    if [[ -z "$missing_fmt" ]]; then
+      missing_fmt="'--$m'"
+    else
+      missing_fmt="$missing_fmt, '--$m'"
+    fi
+  done
+  for m in $set_members; do
+    if [[ -z "$set_fmt" ]]; then
+      set_fmt="'--$m'"
+    else
+      set_fmt="$set_fmt, '--$m'"
+    fi
+  done
+  echo "error: flag(s) $missing_fmt required when $set_fmt is provided (group '$group')" >&2
+  return 1
+}

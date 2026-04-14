@@ -23,6 +23,7 @@ VALID_TYPES=(bool string int list)
 
 # Validate a single flag entry using pre-extracted fields (no jq calls).
 # Args: context entry_type name short type required has_default default_val
+#       [group has_exclusive exclusive has_requires requires]
 _validate_entry_fields() {
   local context="$1"
   local entry_type="$2"
@@ -32,6 +33,11 @@ _validate_entry_fields() {
   local required="$6"
   local has_default="$7"
   local default_val="$8"
+  local group="${9:-}"
+  local has_exclusive="${10:-false}"
+  local exclusive="${11:-false}"
+  local has_requires="${12:-false}"
+  local requires="${13:-}"
 
   # I4: bare-string (or any non-map) entries produce a clean error, no jq leak
   if [[ "$entry_type" != "object" ]]; then
@@ -106,6 +112,41 @@ _validate_entry_fields() {
     esac
   fi
 
+  # Rule 7: group/exclusive/requires must be well-formed individually. The
+  # cross-member consistency check (same modifier across members of a named
+  # group, group required when a modifier is set) happens in the caller once
+  # all layer entries are seen.
+  if [[ "$has_exclusive" == "true" ]]; then
+    if [[ "$exclusive" != "true" && "$exclusive" != "false" ]]; then
+      echo "error: ${context}: flag '$name' exclusive must be boolean, got '$exclusive'" >&2
+      return 1
+    fi
+  fi
+
+  if [[ "$has_requires" == "true" ]]; then
+    if [[ "$requires" != "all" ]]; then
+      echo "error: ${context}: flag '$name' requires must be \"all\" (got '$requires')" >&2
+      return 1
+    fi
+  fi
+
+  if [[ -n "$group" ]]; then
+    if [[ ! "$group" =~ ^[A-Za-z][A-Za-z0-9_-]*$ ]]; then
+      echo "error: ${context}: flag '$name' group '$group' must be a non-empty identifier" >&2
+      return 1
+    fi
+  fi
+
+  if [[ "$exclusive" == "true" && -z "$group" ]]; then
+    echo "error: ${context}: flag '$name' has exclusive: true without a group" >&2
+    return 1
+  fi
+
+  if [[ "$has_requires" == "true" && -z "$group" ]]; then
+    echo "error: ${context}: flag '$name' has requires without a group" >&2
+    return 1
+  fi
+
   return 0
 }
 
@@ -146,7 +187,12 @@ _validate_layer() {
       "x" + (if (.value|type) == "object" then (.value.required // false | tostring) else "false" end),
       "x" + (if (.value|type) == "object" then (.value | has("default") | tostring) else "false" end),
       "x" + (if (.value|type) == "object" then (.value.default // "" | tostring) else "" end),
-      "x" + (if (.value|type) == "object" then ((.value.aliases // []) | join(",")) else "" end)
+      "x" + (if (.value|type) == "object" then ((.value.aliases // []) | join(",")) else "" end),
+      "x" + (if (.value|type) == "object" then (.value.group // "") else "" end),
+      "x" + (if (.value|type) == "object" then (.value | has("exclusive") | tostring) else "false" end),
+      "x" + (if (.value|type) == "object" then (.value.exclusive // false | tostring) else "false" end),
+      "x" + (if (.value|type) == "object" then (.value | has("requires") | tostring) else "false" end),
+      "x" + (if (.value|type) == "object" then (.value.requires // "" | tostring) else "" end)
     ] | @tsv
   ')"
 
@@ -154,7 +200,13 @@ _validate_layer() {
   # seen_name_owner maps a name/alias back to the flag that introduced it, so
   # a collision error can name both ends of the conflict.
   declare -A seen_name_owner
-  while IFS=$'\t' read -r idx entry_type name short type required has_default default_val aliases_csv; do
+  # Track group → modifier ("exclusive"|"requires-all") for the cross-member
+  # consistency check. A named group must have exactly one modifier across all
+  # its members; mixing is a compile error.
+  declare -A group_modifier
+  declare -A group_first_owner
+  while IFS=$'\t' read -r idx entry_type name short type required has_default default_val aliases_csv \
+      group has_exclusive exclusive has_requires requires; do
     [[ -z "$idx" ]] && continue
     # Strip sentinel prefix from each field
     idx="${idx#x}"
@@ -166,7 +218,36 @@ _validate_layer() {
     has_default="${has_default#x}"
     default_val="${default_val#x}"
     aliases_csv="${aliases_csv#x}"
-    _validate_entry_fields "${context}[${idx}]" "$entry_type" "$name" "$short" "$type" "$required" "$has_default" "$default_val" || return 1
+    group="${group#x}"
+    has_exclusive="${has_exclusive#x}"
+    exclusive="${exclusive#x}"
+    has_requires="${has_requires#x}"
+    requires="${requires#x}"
+    _validate_entry_fields "${context}[${idx}]" "$entry_type" "$name" "$short" "$type" "$required" "$has_default" "$default_val" \
+      "$group" "$has_exclusive" "$exclusive" "$has_requires" "$requires" || return 1
+
+    # Cross-member group consistency: all flags sharing a group name must
+    # agree on the modifier. Record the first member's modifier and reject
+    # any later member whose modifier differs.
+    if [[ -n "$group" ]]; then
+      local this_mod=""
+      if [[ "$exclusive" == "true" ]]; then
+        this_mod="exclusive"
+      elif [[ "$has_requires" == "true" ]]; then
+        this_mod="requires-all"
+      fi
+      if [[ -n "$this_mod" ]]; then
+        if [[ -n "${group_modifier[$group]:-}" ]]; then
+          if [[ "${group_modifier[$group]}" != "$this_mod" ]]; then
+            echo "error: ${context}: flag '$name' in group '$group' uses '$this_mod' but flag '${group_first_owner[$group]}' uses '${group_modifier[$group]}' (group must be consistent)" >&2
+            return 1
+          fi
+        else
+          group_modifier["$group"]="$this_mod"
+          group_first_owner["$group"]="$name"
+        fi
+      fi
+    fi
 
     # Dedup checks only run after entry validation succeeds, so $name is non-empty and sane.
     if [[ -n "$name" ]]; then

@@ -33,7 +33,7 @@ clift_parse_args() {
 
   # Pre-build lookup tables, known names, required flags, AND defaults in a
   # single jq call — the only fork in the parser init path.
-  # Output: six NUL-separated sections via process substitution (NUL bytes
+  # Output: seven NUL-separated sections via process substitution (NUL bytes
   # can't survive bash command substitution, so we read from an fd).
   #   1. name\x01short\x01type lines  (lookup tables)
   #   2. space-joined known names      (error suggestions; includes aliases)
@@ -41,7 +41,8 @@ clift_parse_args() {
   #   4. name\x01type\x01default lines (non-bool defaults)
   #   5. alias\x01canonical-name lines (alias -> canonical lookup)
   #   6. name\x01message lines         (deprecated flags; empty/null filtered)
-  local _ft_lines="" known_names="" _required_names="" _defaults_tsv="" _alias_lines="" _deprecated_lines=""
+  #   7. name\x01group\x01mode lines   (group membership; mode="exclusive"|"requires-all")
+  local _ft_lines="" known_names="" _required_names="" _defaults_tsv="" _alias_lines="" _deprecated_lines="" _group_lines=""
   {
     IFS= read -r -d '' _ft_lines || true
     IFS= read -r -d '' known_names || true
@@ -49,6 +50,7 @@ clift_parse_args() {
     IFS= read -r -d '' _defaults_tsv || true
     IFS= read -r -d '' _alias_lines || true
     IFS= read -r -d '' _deprecated_lines || true
+    IFS= read -r -d '' _group_lines || true
   } < <(jq -j '
     ([.[] | [.name, (.short // ""), .type] | join("\u0001")] | join("\n")) + "\u0000" +
     ([.[] | [.name] + (.aliases // []) | .[]] | join(" ")) + "\u0000" +
@@ -60,6 +62,14 @@ clift_parse_args() {
       | join("\n")) + "\u0000" +
     ([.[] | select((.deprecated // "") != "")
       | [.name, .deprecated] | join("\u0001")]
+      | join("\n")) + "\u0000" +
+    ([.[] | select((.group // "") != "")
+      | [.name, .group,
+         (if .exclusive == true then "exclusive"
+          elif (.requires // "") == "all" then "requires-all"
+          else "" end)]
+      | select(.[2] != "")
+      | join("\u0001")]
       | join("\n")) + "\u0000"
   ' <<< "$table_json")
 
@@ -83,6 +93,16 @@ clift_parse_args() {
     [[ -z "$_dname" ]] && continue
     _ft_deprecated["$_dname"]="$_dmsg"
   done <<< "$_deprecated_lines"
+
+  # Populate group membership. _group_members[$group] is a space-separated
+  # list of member canonical names (leading space for safe substring matching).
+  # _group_mode[$group] is "exclusive" or "requires-all".
+  declare -A _group_members _group_mode
+  while IFS=$'\x01' read -r _gname _ggroup _gmode; do
+    [[ -z "$_gname" ]] && continue
+    _group_members["$_ggroup"]="${_group_members[$_ggroup]:-} $_gname"
+    _group_mode["$_ggroup"]="$_gmode"
+  done <<< "$_group_lines"
 
   # Emit a one-shot deprecation warning for a canonical flag name if one is
   # registered. The warning fires per-invocation, not per-occurrence, so
@@ -343,6 +363,44 @@ clift_parse_args() {
   for p in "${positionals[@]+"${positionals[@]}"}"; do
     pi=$((pi+1))
     export "CLIFT_POS_${pi}=${p}"
+  done
+
+  # Group constraint validation. For each registered group, walk the member
+  # list and partition into "set" (seen this invocation) vs "unset". Then:
+  #   - exclusive: if >1 members set, error naming all set members.
+  #   - requires-all: if 0 < set < total, error naming the missing members.
+  # A single-member group is a no-op by design — you can't violate an
+  # exclusive constraint alone, and a lone requires-all trivially satisfies.
+  local _grp
+  for _grp in "${!_group_members[@]}"; do
+    local _members="${_group_members[$_grp]}"
+    local _mode="${_group_mode[$_grp]}"
+    local _set_members="" _missing_members="" _set_count=0 _total=0
+    local _m
+    for _m in $_members; do
+      [[ -z "$_m" ]] && continue
+      _total=$((_total+1))
+      if [[ " $seen_names " == *" $_m "* ]]; then
+        _set_members="$_set_members $_m"
+        _set_count=$((_set_count+1))
+      else
+        _missing_members="$_missing_members $_m"
+      fi
+    done
+    case "$_mode" in
+      exclusive)
+        if (( _set_count > 1 )); then
+          clift_err_mutex_group "$_grp" "$_set_members"
+          return 1
+        fi
+        ;;
+      requires-all)
+        if (( _set_count > 0 && _set_count < _total )); then
+          clift_err_requires_all_group "$_grp" "$_set_members" "$_missing_members"
+          return 1
+        fi
+        ;;
+    esac
   done
 
   # Required-flag validation (uses pre-computed list from initial jq batch)
