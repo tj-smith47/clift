@@ -100,13 +100,13 @@ task --taskfile ~/.clift/Taskfile.yaml setup:cli -- ~/mycli
 
 | Dependency | Required | Purpose |
 |---|---|---|
-| bash 4.0+ | Yes | Associative arrays, `${var^^}`, used throughout |
+| bash 4.2+ | Yes | Associative arrays, `declare -g`, `${var^^}`, used throughout |
 | [Task](https://taskfile.dev) v3.0+ | Yes | Task runner that powers the CLI |
 | [jq](https://jqlang.github.io/jq/) | Yes | JSON processing for help and config |
 | [yq](https://github.com/mikefarah/yq) | Yes | YAML processing for metadata |
 | [gum](https://github.com/charmbracelet/gum) | No | Enhanced interactive prompts (falls back to `read`) |
 
-> **macOS note:** macOS ships bash 3.2. Install bash 4+ via `brew install bash`.
+> **macOS note:** macOS ships bash 3.2. Install bash 4.2+ via `brew install bash`.
 
 ## How It Works
 

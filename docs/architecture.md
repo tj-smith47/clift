@@ -45,7 +45,7 @@ User types: mycli deploy prod --force
 - **`lib/flags/errors.sh`** -- error formatting, did-you-mean (Levenshtein)
 - **`lib/router/router.sh`** -- single runtime entry for both modes
 - **`lib/cache.sh`** -- portable mtime + staleness check (reads `.clift/sources`)
-- **`lib/check/deps.sh`** -- dependency validation (bash 4.0+, jq, yq)
+- **`lib/check/deps.sh`** -- dependency validation (bash 4.2+, jq, yq)
 - **`lib/scaffold/scaffold.sh`** -- command scaffolding (`new:cmd`)
 - **`lib/help/`** -- list and detail renderers, consume `.clift/index.json`
 - **`lib/completion/`** -- shell completion generator (bash + zsh, with flag completion)

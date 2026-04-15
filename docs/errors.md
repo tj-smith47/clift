@@ -42,5 +42,5 @@ All clift errors print to stderr with an `error:` prefix and consistent formatti
 
 | Error | Trigger |
 |---|---|
-| `error: bash 4.0+ is required` | Running on macOS stock bash 3.2 |
+| `error: bash 4.2+ is required` | Running on macOS stock bash 3.2 (or any 4.0/4.1) |
 | `error: script not found for task '...'` | Scaffold bug or deleted script |

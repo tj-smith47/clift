@@ -20,6 +20,49 @@ _clift_var_name() {
   _CLIFT_VAR="CLIFT_FLAG_${upper//-/_}"
 }
 
+# Write the CLIFT_FLAGS tempfile (NUL-separated <name>=<value> records) that
+# the runtime prelude materializes into `declare -A CLIFT_FLAGS`. No-op when
+# CLIFT_FLAGS_FILE is unset (unit-test / external-caller path — see emit-guard
+# comment in clift_parse_args). Relies on bash dynamic scoping to read the
+# caller's `_ft_type` assoc array (populated in clift_parse_args).
+#
+# Phase 3 bench-headroom: iterates all known flags. If that becomes a
+# bottleneck, track only set/defaulted names during parse (a `_ft_touched`
+# parallel map) and emit just those.
+_clift_emit_flags_file() {
+  [[ -z "${CLIFT_FLAGS_FILE:-}" ]] && return 0
+  local _en _etype _evar _ecount_var _ecount _ei _eval _ejoined _eitem_var
+  : > "$CLIFT_FLAGS_FILE"
+  for _en in "${!_ft_type[@]}"; do
+    _etype="${_ft_type[$_en]}"
+    _clift_var_name "$_en"; _evar="$_CLIFT_VAR"
+    case "$_etype" in
+      list)
+        _ecount_var="${_evar}_COUNT"
+        _ecount="${!_ecount_var:-0}"
+        (( _ecount == 0 )) && continue
+        _ejoined=""
+        for (( _ei=1; _ei<=_ecount; _ei++ )); do
+          _eitem_var="${_evar}_${_ei}"
+          if (( _ei == 1 )); then
+            _ejoined="${!_eitem_var:-}"
+          else
+            _ejoined="${_ejoined},${!_eitem_var:-}"
+          fi
+        done
+        printf '%s=%s\0' "$_en" "$_ejoined" >> "$CLIFT_FLAGS_FILE"
+        ;;
+      *)
+        # bool / string / int: record only if the env var is set.
+        # Unset bool means "not provided" — absent from CLIFT_FLAGS too.
+        [[ -z "${!_evar+x}" ]] && continue
+        _eval="${!_evar}"
+        printf '%s=%s\0' "$_en" "$_eval" >> "$CLIFT_FLAGS_FILE"
+        ;;
+    esac
+  done
+}
+
 clift_parse_args() {
   local flag_table_file="$1"; shift
 
@@ -519,38 +562,13 @@ clift_parse_args() {
   #   - list flags record a single comma-joined value (no dup key rewrite)
   #   - defaults, persistent-flag pre-binds, and user values are all included
   #   - a failing parse writes nothing (router's trap still cleans the file)
-  if [[ -n "${CLIFT_FLAGS_FILE:-}" ]]; then
-    local _en _etype _evar _ecount _ei _eval _ejoined _eitem_var
-    : > "$CLIFT_FLAGS_FILE"
-    for _en in "${!_ft_type[@]}"; do
-      _etype="${_ft_type[$_en]}"
-      _clift_var_name "$_en"; _evar="$_CLIFT_VAR"
-      case "$_etype" in
-        list)
-          _ecount_var="${_evar}_COUNT"
-          _ecount="${!_ecount_var:-0}"
-          (( _ecount == 0 )) && continue
-          _ejoined=""
-          for (( _ei=1; _ei<=_ecount; _ei++ )); do
-            _eitem_var="${_evar}_${_ei}"
-            if (( _ei == 1 )); then
-              _ejoined="${!_eitem_var:-}"
-            else
-              _ejoined="${_ejoined},${!_eitem_var:-}"
-            fi
-          done
-          printf '%s=%s\0' "$_en" "$_ejoined" >> "$CLIFT_FLAGS_FILE"
-          ;;
-        *)
-          # bool / string / int: record only if the env var is set.
-          # Unset bool means "not provided" — absent from CLIFT_FLAGS too.
-          [[ -z "${!_evar+x}" ]] && continue
-          _eval="${!_evar}"
-          printf '%s=%s\0' "$_en" "$_eval" >> "$CLIFT_FLAGS_FILE"
-          ;;
-      esac
-    done
-  fi
+  #
+  # Intentional: parser is also invoked from unit tests (and potentially other
+  # external callers) without a router-side tempfile; _clift_emit_flags_file
+  # no-ops in that case. The router always sets CLIFT_FLAGS_FILE for real
+  # invocations, so a regression there would surface as the assoc array
+  # being empty in user scripts (covered by flags_assoc.bats).
+  _clift_emit_flags_file
 
   return 0
 }

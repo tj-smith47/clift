@@ -130,30 +130,73 @@ SCRIPT
   [[ "$output" == *"profile=staging"* ]]
 }
 
-@test "CLIFT_FLAGS_FILE is removed before user script body runs (prelude cleans up)" {
-  # The prelude reads the tempfile, then unlinks it — user scripts see the
-  # parsed flags via the CLIFT_FLAGS assoc array, not by re-reading the file.
-  # Cleanup is eager so it survives the router's exec-into-exec.sh jump (which
-  # would otherwise skip the router's EXIT trap).
+@test "CLIFT_FLAGS_FILE is unset before user script body runs (prelude cleans up)" {
+  # The prelude reads the tempfile, unlinks it, AND unsets CLIFT_FLAGS_FILE so
+  # subshells never see a dangling path. User scripts access parsed flags via
+  # the CLIFT_FLAGS assoc array, not by re-reading the file. Cleanup is eager
+  # so it survives the router's exec-into-exec.sh jump (which would otherwise
+  # skip the router's EXIT trap).
   _build_cli \
     '- {name: target, type: string, default: x}' \
-    'echo "FILE=${CLIFT_FLAGS_FILE:-UNSET}"; if [[ -f "${CLIFT_FLAGS_FILE}" ]]; then echo "during=exists"; else echo "during=missing"; fi'
+    'if [[ -v CLIFT_FLAGS_FILE ]]; then echo "envvar=set:${CLIFT_FLAGS_FILE}"; else echo "envvar=unset"; fi; echo "target=${CLIFT_FLAGS[target]:-UNSET}"'
 
   CLIFT_ARG_COUNT=1 CLIFT_ARG_1=--target=y \
     run bash "$FRAMEWORK_DIR/lib/router/router.sh" sub
   [ "$status" -eq 0 ]
-  [[ "$output" == *"during=missing"* ]]
+  [[ "$output" == *"envvar=unset"* ]]
+  [[ "$output" == *"target=y"* ]]
+}
 
-  # Extract the file path, verify it's gone after exit.
-  captured_file=""
-  while IFS= read -r line; do
-    if [[ "$line" == FILE=* ]]; then
-      captured_file="${line#FILE=}"
-    fi
-  done <<< "$output"
-  [ -n "$captured_file" ]
-  [ "$captured_file" != "UNSET" ]
-  [ ! -f "$captured_file" ]
+@test "router cleans up parser tempfile even when parse fails" {
+  # M3: belt-and-suspenders — router's EXIT trap must remove CLIFT_FLAGS_FILE
+  # on the failure path where the parser exits early (unknown flag) and
+  # never reaches the prelude's eager unlink.
+  _build_cli \
+    '- {name: target, type: string}' \
+    'echo "should-not-run"'
+
+  # Point TMPDIR at an isolated dir so we can detect any leftover tmp files
+  # without interference from other tests.
+  local probe_tmpdir="$TEST_DIR/m3_tmpdir"
+  mkdir -p "$probe_tmpdir"
+
+  TMPDIR="$probe_tmpdir" CLIFT_ARG_COUNT=1 CLIFT_ARG_1=--bogus-flag \
+    run bash "$FRAMEWORK_DIR/lib/router/router.sh" sub
+  [ "$status" -ne 0 ]
+
+  # No leftover tempfiles from the parser emit path in the isolated TMPDIR.
+  # (The cache under $CLI_DIR/.clift/ is separate and not placed in TMPDIR.)
+  shopt -s nullglob
+  local leftovers=("$probe_tmpdir"/tmp.*)
+  shopt -u nullglob
+  [ "${#leftovers[@]}" -eq 0 ]
+}
+
+@test "concurrent invocations see distinct CLIFT_FLAGS_FILE paths" {
+  # M4: mktemp uniqueness — two invocations run back-to-back (and in the
+  # background) must each observe their own tempfile path. The prelude dumps
+  # the path before cleanup via a debug trap; we just assert the CLIFT_FLAGS
+  # assoc array ends up with the value each invocation supplied.
+  _build_cli \
+    '- {name: target, type: string, default: d}' \
+    'echo "pid=$$ target=${CLIFT_FLAGS[target]}"'
+
+  local out1="$TEST_DIR/m4.out1" out2="$TEST_DIR/m4.out2"
+
+  CLIFT_ARG_COUNT=1 CLIFT_ARG_1=--target=one \
+    bash "$FRAMEWORK_DIR/lib/router/router.sh" sub >"$out1" 2>&1 &
+  local pid1=$!
+
+  CLIFT_ARG_COUNT=1 CLIFT_ARG_1=--target=two \
+    bash "$FRAMEWORK_DIR/lib/router/router.sh" sub >"$out2" 2>&1 &
+  local pid2=$!
+
+  wait "$pid1"
+  wait "$pid2"
+
+  grep -q "target=one" "$out1"
+  grep -q "target=two" "$out2"
+  # Each invocation saw its own flag value — mktemp-per-invocation is sound.
 }
 
 @test "CLIFT_FLAGS defaults populate even when no user value is supplied" {

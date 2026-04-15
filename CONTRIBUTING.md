@@ -7,7 +7,7 @@ git clone <repo-url> && cd clift
 ```
 
 Requirements:
-- bash 4.0+ (macOS ships 3.2 -- `brew install bash`)
+- bash 4.2+ (macOS ships 3.2 -- `brew install bash`)
 - [Task](https://taskfile.dev) v3.0+
 - [jq](https://jqlang.github.io/jq/)
 - [yq](https://github.com/mikefarah/yq)

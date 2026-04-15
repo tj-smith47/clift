@@ -171,7 +171,7 @@ target="${CLIFT_FLAGS[target]:-staging}"
 
 Keys match the declared flag `name` exactly — including dashes. `CLIFT_FLAGS[dry-run]`, not `CLIFT_FLAGS[DRY_RUN]`. Absent keys mean "not provided and no default" (use `${CLIFT_FLAGS[key]:-fallback}` as normal).
 
-Requires bash 4.2+ (clift's documented floor). The framework sources the array from a tempfile during the runtime prelude; subshells that don't re-source the prelude fall back to the env-var form below.
+Requires bash 4.2+ (clift's documented floor). The framework materializes the array from a tempfile during the runtime prelude, then unlinks the file eagerly. As a result, **`CLIFT_FLAGS` is main-process only** — subshells (`$(bash -c …)`, `(…)` blocks that fork, etc.) cannot re-source the prelude to rebuild it (the tempfile is gone) and bash assoc arrays don't cross process boundaries. Subshells must read the env-var form below, which inherits natively.
 
 ### `${CLIFT_FLAG_<UPPER>}` -- env var, underscore-substituted (back-compat)
 

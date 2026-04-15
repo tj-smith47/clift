@@ -82,6 +82,49 @@ YAML
   [[ "$output" == *"GUM=true"* ]]
 }
 
+@test "clift_check_deps_fast rejects bash < 4.2 (patched version gate)" {
+  # The runtime prelude uses `declare -A -g`, which requires bash 4.2+. The
+  # deps check must fail clearly on 4.0/4.1 instead of surfacing cryptic
+  # `declare: -g: invalid option` later on. BASH_VERSINFO is read-only in
+  # a running shell, so we patch a copy of deps.sh to hard-code the check
+  # against a mocked version.
+  local patched="$TEST_DIR/deps_mock_4_1.sh"
+  cp "$FRAMEWORK_DIR/lib/check/deps.sh" "$patched"
+  # Replace the BASH_VERSINFO references with a mocked 4.1 pair so the
+  # arithmetic guard evaluates the "too old" branch.
+  local tmp_patch="$TEST_DIR/deps_mock_4_1.sh.tmp"
+  sed 's/BASH_VERSINFO\[0\]/__CLIFT_TEST_MAJOR/g; s/BASH_VERSINFO\[1\]/__CLIFT_TEST_MINOR/g' \
+    "$patched" > "$tmp_patch"
+  mv "$tmp_patch" "$patched"
+
+  run bash -c "
+    __CLIFT_TEST_MAJOR=4
+    __CLIFT_TEST_MINOR=1
+    source '$patched'
+    clift_check_deps_fast 2>&1
+  "
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"bash 4.2+ is required"* ]]
+}
+
+@test "clift_check_deps_fast accepts bash 4.2 exactly (patched version gate)" {
+  local patched="$TEST_DIR/deps_mock_4_2.sh"
+  cp "$FRAMEWORK_DIR/lib/check/deps.sh" "$patched"
+  local tmp_patch="$TEST_DIR/deps_mock_4_2.sh.tmp"
+  sed 's/BASH_VERSINFO\[0\]/__CLIFT_TEST_MAJOR/g; s/BASH_VERSINFO\[1\]/__CLIFT_TEST_MINOR/g' \
+    "$patched" > "$tmp_patch"
+  mv "$tmp_patch" "$patched"
+
+  run bash -c "
+    __CLIFT_TEST_MAJOR=4
+    __CLIFT_TEST_MINOR=2
+    source '$patched'
+    clift_check_deps_fast 2>&1
+  "
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"bash 4.2+ is required"* ]]
+}
+
 @test "DEPS_WARN_GUM=true warns when gum missing" {
   run bash -c "
     export DEPS_WARN_GUM=true

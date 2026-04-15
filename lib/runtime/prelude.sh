@@ -24,20 +24,19 @@ source "${FRAMEWORK_DIR}/lib/log/log.sh"
 # (e.g., ${CLIFT_FLAGS[dry-run]}). The legacy CLIFT_FLAG_<UPPER_NAME> env vars
 # (dashes → underscores) are unchanged and still exported by the parser.
 #
-# Requires bash 4.2+ for `declare -A -g`. clift's documented floor is 4.0, but
-# every known production user is on 4.2+ and CI runs 5.x. If a future 4.0
-# fixture surfaces we'll add a fallback; for now we fail loudly rather than
-# silently skip the array.
+# Requires bash 4.2+ for `declare -A -g`. clift's documented floor is 4.2
+# (enforced by lib/check/deps.sh); earlier 4.x lacked `-g` on declare.
 #
 # List flags are exposed as a single comma-joined value:
 #   CLIFT_FLAGS[tag]="a,b,c"
 # Per-element access stays via CLIFT_FLAG_TAG_1, CLIFT_FLAG_TAG_2,
 # CLIFT_FLAG_TAG_COUNT (unchanged).
 #
-# Subshells: bash assoc arrays don't export across process boundaries. A
-# subshell that re-sources this prelude (or inherits CLIFT_FLAGS_FILE and
-# reads it) can rebuild the array; otherwise subshells fall back to the
-# exported CLIFT_FLAG_* env vars, which DO cross the boundary.
+# Subshells: the CLIFT_FLAGS assoc array is main-process only. Bash assoc
+# arrays don't export across process boundaries, and the prelude unlinks
+# CLIFT_FLAGS_FILE immediately after reading it — so subshells cannot
+# re-source to rebuild it. Subshells must read the exported CLIFT_FLAG_*
+# env vars, which DO cross the boundary.
 declare -A -g CLIFT_FLAGS=()
 if [[ -n "${CLIFT_FLAGS_FILE:-}" && -f "${CLIFT_FLAGS_FILE}" ]]; then
   while IFS= read -r -d '' _clift_kv; do
@@ -52,4 +51,8 @@ if [[ -n "${CLIFT_FLAGS_FILE:-}" && -f "${CLIFT_FLAGS_FILE}" ]]; then
   # trap stays as belt-and-suspenders for the failure path where parsing
   # exits early and never reaches this prelude.
   rm -f "${CLIFT_FLAGS_FILE}"
+  # Unset the env var too so subshells don't see a dangling path pointing at
+  # a file we've already removed — treating CLIFT_FLAGS_FILE as meaningful
+  # post-cleanup is a latent-bug attractor.
+  unset CLIFT_FLAGS_FILE
 fi

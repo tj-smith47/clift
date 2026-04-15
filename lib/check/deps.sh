@@ -9,9 +9,12 @@ _CLIFT_DEPS_LOADED=1
 
 # Fast check — called by router on every invocation
 clift_check_deps_fast() {
-  # Hard dependency: bash 4.0+ (associative arrays, mapfile, ${var^^})
-  if (( BASH_VERSINFO[0] < 4 )); then
-    echo "error: bash 4.0+ is required (found ${BASH_VERSION}). Install a newer bash via your package manager." >&2
+  # Hard dependency: bash 4.2+ (associative arrays with `declare -g`, mapfile,
+  # ${var^^}). 4.2 is required because the runtime prelude uses `declare -A -g`
+  # to publish CLIFT_FLAGS — that `-g` flag was added in bash 4.2 and earlier
+  # 4.x releases fail with `declare: -g: invalid option`.
+  if (( BASH_VERSINFO[0] < 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] < 2) )); then
+    echo "error: bash 4.2+ is required (found ${BASH_VERSION}). Install a newer bash via your package manager." >&2
     return 1
   fi
 
