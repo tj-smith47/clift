@@ -9,7 +9,7 @@
 # `$(bash -c …)` on the hot path. Instead, we run once here and rely on
 # `export -f` in log.sh so subshells inherit the functions for free.
 
-if [[ -n "${_CLIFT_PRELUDE_LOADED:-}" ]]; then return 0 2>/dev/null || true; fi
+if [[ -n "${_CLIFT_PRELUDE_LOADED:-}" ]]; then return 0 2>/dev/null || exit 0; fi
 _CLIFT_PRELUDE_LOADED=1
 
 if [[ -z "${FRAMEWORK_DIR:-}" ]]; then

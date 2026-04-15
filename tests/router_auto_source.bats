@@ -107,6 +107,16 @@ SCRIPT
   [[ "$output" == *"BASH_ENV=UNSET"* ]]
 }
 
+@test "framework never assigns BASH_ENV (grep invariant)" {
+  # Complementary to the runtime check above: statically assert no file under
+  # lib/ assigns BASH_ENV. Comments that mention BASH_ENV (lines like
+  # `# note BASH_ENV=…`) are allowed; only real assignments are flagged.
+  # `grep` returns 1 when there are no matches, which is the success case.
+  run bash -c "grep -rnE 'BASH_ENV=' '$FRAMEWORK_DIR/lib/' --include='*.sh' --include='*.tmpl' | grep -vE '^[^:]*:[^:]*:[[:space:]]*#'"
+  [ "$status" -eq 1 ]
+  [ -z "$output" ]
+}
+
 @test "explicit source of log.sh in user script still works (back-compat)" {
   # Existing scripts that explicitly source log.sh must keep working; the
   # source guard in log.sh makes the second sourcing a no-op.

@@ -5,6 +5,9 @@
 # script in the same process — no extra fork, no BASH_ENV recursion.
 #
 # Usage: exec.sh <user_script_path>
+#
+# This file is only ever invoked via `exec bash …` from the router; it is
+# never sourced. No source guard is needed.
 
 set -euo pipefail
 
