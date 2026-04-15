@@ -16,5 +16,6 @@ User-facing documentation for clift, the CLI framework built on go-task.
 Deeper references for people building a CLI on top of clift. Future Phase 3/4 docs (e.g. `cli/caching.md`, `cli/overrides.md`) land in this section.
 
 - [go-task features](cli/task-features.md) — passthrough task fields (`deps`, `preconditions`, `sources`, etc.) available in command Taskfiles.
+- [Overrides](cli/overrides.md) — override-slot loader, per-command + CLI-global tiers, callback signature.
 
 For the canonical go-task reference, see [taskfile.dev](https://taskfile.dev).

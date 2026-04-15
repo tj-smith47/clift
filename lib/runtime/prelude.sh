@@ -56,3 +56,9 @@ if [[ -n "${CLIFT_FLAGS_FILE:-}" && -f "${CLIFT_FLAGS_FILE}" ]]; then
   # post-cleanup is a latent-bug attractor.
   unset CLIFT_FLAGS_FILE
 fi
+
+# Override loader — after log.sh and CLIFT_FLAGS so override functions can use
+# both. Sourcing is a plain file-read; the loader itself resolves override
+# files lazily at call sites via clift_call_override.
+# shellcheck source=/dev/null
+source "${FRAMEWORK_DIR}/lib/runtime/overrides.sh"
