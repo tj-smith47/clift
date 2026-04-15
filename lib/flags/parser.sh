@@ -122,9 +122,21 @@ clift_parse_args() {
   # so that when a user passes the first --list=value, we can wipe the default
   # and start fresh — a user-supplied value REPLACES a default, not appends to
   # it. This matches Cobra semantics.
+  #
+  # Persistent flags bound pre-command by the wrapper are already exported;
+  # don't overwrite them with defaults here (user-provided wins over default
+  # by position — the wrapper's bind IS a user value). The wrapper advertises
+  # which names it bound via CLIFT_PERSIST_BOUND (space-separated).
+  local _persist_bound=" ${CLIFT_PERSIST_BOUND:-} "
   declare -A _list_was_defaulted
   while IFS=$'\x01' read -r dname dtype ddefault; do
     [[ -z "$dname" ]] && continue
+    # Skip default application for flags the wrapper already bound. Treat
+    # wrapper-bound list flags as "not defaulted" so the clear-on-first-use
+    # logic doesn't wipe them.
+    if [[ "$_persist_bound" == *" $dname "* ]]; then
+      continue
+    fi
     _clift_var_name "$dname"; local dvar="$_CLIFT_VAR"
     if [[ "$dtype" == "list" ]]; then
       if [[ -n "$ddefault" ]]; then

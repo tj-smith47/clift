@@ -106,10 +106,38 @@ done <<< "$unique_taskfiles"
 # unique command Taskfile a single time and cache its FLAGS data in-memory as
 # a jq object keyed by absolute file path.
 
-root_flags="$(yq -o=json '.vars.FLAGS // []' "$ROOT_TASKFILE")" || {
+# Pull both vars.FLAGS (framework globals, forms the base layer) and
+# vars.PERSISTENT_FLAGS (user-declared CLI-wide flags) in a single yq call.
+root_layers="$(yq -o=json '{"flags": (.vars.FLAGS // []), "persistent": (.vars.PERSISTENT_FLAGS // [])}' "$ROOT_TASKFILE")" || {
   echo "error: failed to parse root Taskfile: ${ROOT_TASKFILE}" >&2
   exit 1
 }
+root_flags="$(jq -c '.flags' <<< "$root_layers")"
+persistent_flags="$(jq -c '.persistent' <<< "$root_layers")"
+
+# Validate PERSISTENT_FLAGS as a flag layer using the standard validator.
+# Reserved-name checks (help/verbose/quiet/no-color/version) already fire inside
+# _validate_layer, so a clash with a framework global is rejected here with a
+# clear "is reserved (framework global)" message.
+_validate_layer "$persistent_flags" "${ROOT_TASKFILE}:vars.PERSISTENT_FLAGS" || exit 1
+
+# Persistent-layer group/exclusive/requires are rejected — groups only make
+# sense within a single command's flag table. The wrapper's early-bind pass
+# would also have to understand group semantics, and cross-layer group
+# consistency (persistent vs per-command) is out of scope.
+_pg_first="$(jq -r '[.[]? | select((.group // "") != "" or (.exclusive // false) == true or (.requires // "") != "") | .name] | .[0] // ""' <<< "$persistent_flags")"
+if [[ -n "$_pg_first" ]]; then
+  echo "error: ${ROOT_TASKFILE}:vars.PERSISTENT_FLAGS: flag '${_pg_first}' uses group/exclusive/requires — not allowed in persistent flags" >&2
+  exit 1
+fi
+
+# Build a quick-lookup set of persistent flag names + shorts for cross-layer
+# clash detection against each command's FLAGS. A persistent flag and a
+# per-command flag that share a name (or short) is ambiguous — the wrapper
+# would bind the persistent one before the command token and the per-command
+# parser would redefine it afterward. Reject at compile time.
+_persistent_names_csv="$(jq -r '[.[] | .name] | join(",")' <<< "$persistent_flags")"
+_persistent_shorts_csv="$(jq -r '[.[] | select((.short // "") != "") | .short] | join(",")' <<< "$persistent_flags")"
 
 # Build an in-memory map: taskfile path -> {toplevel: [...], tasks: {name: [...]}}
 declare -A taskfile_data
@@ -220,12 +248,49 @@ while IFS=$'\x01' read -r -d '' task_name source_tf aliases_json summary; do
     continue
   fi
 
+  # Cross-layer clash detection: a persistent flag cannot share a name, alias,
+  # or short with a per-command (top-level or per-task) flag. The error names
+  # both layers so the user knows where to fix it.
+  if [[ -n "$_persistent_names_csv" ]] || [[ -n "$_persistent_shorts_csv" ]]; then
+    _clash_msg="$(jq -r -n \
+      --argjson persistent "$persistent_flags" \
+      --argjson tfdata "$tf_data" \
+      --arg local_task "$local_task" \
+      --arg tf "$source_tf" \
+      '
+      ($persistent | map(.name) | unique) as $pnames |
+      ($persistent | map(select((.short // "") != "") | .short) | unique) as $pshorts |
+      [($tfdata.toplevel // [])[], ($tfdata.tasks[$local_task] // [])[]] as $cmdflags |
+      [ $cmdflags[] | . as $f |
+        (
+          if ($pnames | index($f.name)) then
+            "error: flag '\''\($f.name)'\'' declared in persistent flags conflicts with per-command flag in \($tf)"
+          elif (($f.aliases // []) | map(select($pnames | index(.))) | length > 0) then
+            "error: alias of flag '\''\($f.name)'\'' conflicts with persistent flag name in \($tf)"
+          elif (($f.short // "") != "" and ($pshorts | index($f.short))) then
+            "error: short '\''-\($f.short)'\'' of flag '\''\($f.name)'\'' conflicts with persistent flag short in \($tf)"
+          else empty
+          end
+        )
+      ] | .[0] // ""
+      ')"
+    if [[ -n "$_clash_msg" ]]; then
+      echo "$_clash_msg" >&2
+      exit 1
+    fi
+  fi
+
   # Combined merge + shadow check in a single jq call.
+  # Merge order: globals (root Taskfile's vars.FLAGS) -> persistent ->
+  # per-command top-level -> per-task. Later layers override earlier ones on
+  # name or short collision (persistent cannot clash with per-command — caught
+  # above — but CAN override a global's short alias if the user redeclares it).
   {
     IFS= read -r -d '' merged || true
     IFS= read -r -d '' shadow_check || true
   } < <(jq -j -n \
     --argjson root "$root_flags" \
+    --argjson persistent "$persistent_flags" \
     --argjson tfdata "$tf_data" \
     --arg local_task "$local_task" \
     --arg task_name "$task_name" \
@@ -242,7 +307,10 @@ while IFS=$'\x01' read -r -d '' task_name source_tf aliases_json summary; do
       end;
 
     merge_in(
-      merge_in($root; $tfdata.toplevel);
+      merge_in(
+        merge_in($root; $persistent);
+        $tfdata.toplevel
+      );
       $tfdata.tasks[$local_task]
     ) as $merged |
 
@@ -289,10 +357,10 @@ done < <(jq -j '
 # Assemble entries into index.json with a single jq pass, then derive flags.json
 # as a {task: flags} view for backwards compat with out-of-tree consumers.
 # Tab-separated: key<TAB>json_value
-jq -R -n '
+jq -R -n --argjson persistent "$persistent_flags" '
   [inputs | split("\t") | {key: .[0], value: (.[1:] | join("\t") | fromjson)}]
   | from_entries
-  | {tasks: .}
+  | {tasks: ., persistent_flags: $persistent}
 ' "$entries_tmpfile" > "${CACHE_DIR}/index.json.tmp"
 mv "${CACHE_DIR}/index.json.tmp" "${CACHE_DIR}/index.json"
 

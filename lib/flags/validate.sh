@@ -374,6 +374,12 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
   top_layer_json="$(echo "$TASKFILE_JSON" | jq -c '.vars.FLAGS // null')"
   _validate_layer "$top_layer_json" "${TASKFILE}:vars.FLAGS" || exit 1
 
+  # Validate vars.PERSISTENT_FLAGS (CLI-wide flags declared at the root
+  # Taskfile). Same schema as a regular FLAGS layer. Reserved-name check
+  # ensures a persistent flag cannot shadow a framework global.
+  persistent_layer_json="$(echo "$TASKFILE_JSON" | jq -c '.vars.PERSISTENT_FLAGS // null')"
+  _validate_layer "$persistent_layer_json" "${TASKFILE}:vars.PERSISTENT_FLAGS" || exit 1
+
   # Validate every tasks.*.vars.FLAGS.
   # I7: only iterate if .tasks is actually an object. Missing / non-object is
   # treated as "no tasks" — this preserves "root-only Taskfile with no tasks"

@@ -90,6 +90,24 @@ Users can invoke any of `--format`, `--output`, or `--fmt` -- all resolve to the
 
 Whenever the user supplies `--old` (or an alias, or the short form), the parser emits `warning: --old is deprecated: use --new instead` to stderr and continues to honor the flag's value. The warning fires at most once per invocation. In `--help` output the flag's description column gets a trailing ` (deprecated)` marker. An empty `deprecated: ""` is treated as "not deprecated" — no warning, no help marker.
 
+## Persistent flags
+
+CLI-wide flags (e.g., `--profile`, `--config-file`) that every command should accept belong in the root Taskfile under `vars.PERSISTENT_FLAGS`. They're merged into every command's flag table at compile time and may appear either before or after the command token — Cobra's `PersistentFlags()` equivalent:
+
+```yaml
+vars:
+  PERSISTENT_FLAGS:
+    - {name: profile, short: p, type: string, default: "default", desc: "Profile name"}
+```
+
+Both `mycli --profile=staging deploy prod` and `mycli deploy prod --profile=staging` work. When both positions are supplied, last-write-wins (the post-command value replaces the pre-command value). Persistent flags are accessible via the same `CLIFT_FLAG_<NAME>` / `${CLIFT_FLAGS[name]}` machinery as per-command flags — no script change required.
+
+Rules:
+
+- A persistent flag cannot share its `name`, `aliases`, or `short` with a reserved framework global (`help`, `verbose`, `quiet`, `no-color`, `version`) or with any per-command flag. Compile fails with an error naming both layers.
+- Persistent flags cannot declare `group`, `exclusive`, or `requires`. Groups are a per-command constraint mechanism; the cross-layer semantics are out of scope.
+- All other flag attributes (`type`, `default`, `required`, `deprecated`, `hidden`, `aliases`) work identically to per-command flags.
+
 ## Validation
 
 Schemas are validated at scaffold time by `new:cmd` and `new:subcmd`, at `setup:cli`, and at cache rebuild. Errors surface immediately, not at first invocation.

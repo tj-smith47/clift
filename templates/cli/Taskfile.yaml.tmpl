@@ -16,6 +16,13 @@ vars:
     - {name: no-color,           type: bool, desc: "Disable color output"}
     - {name: version,            type: bool, desc: "Show version"}
 
+  # CLI-wide (persistent) flags. Merged into every command's flag table and
+  # accepted either before or after the command token (e.g. `mycli --profile=x cmd`
+  # or `mycli cmd --profile=x`). Read from scripts as CLIFT_FLAG_<NAME>.
+  # Uncomment and tailor to enable.
+  # PERSISTENT_FLAGS:
+  #   - {name: profile, short: p, type: string, default: "default", desc: "Profile name"}
+
 includes:
   # Framework libs (underscore prefix = hidden from help)
   _help:

@@ -51,21 +51,90 @@ esac
 # any nesting depth. We filter out framework-internal tasks (underscore
 # prefixed at any segment).
 TASKS_JSON="$CLI_DIR/.clift/tasks.json"
+INDEX_JSON="$CLI_DIR/.clift/index.json"
 if [[ ! -f "$TASKS_JSON" ]]; then
   echo "error: task cache missing: $TASKS_JSON" >&2
   echo "  try: rm -rf '$CLI_DIR/.clift' and re-run" >&2
   exit 1
 fi
+# One jq call extracts everything the wrapper's dispatch walk needs:
+#   1. known_tasks   — every task name (for prefix lookup)
+#   2. root_cmds     — root command names + namespaces (for did-you-mean)
+#   3. persistent_tsv — one row per persistent flag: name<\x01>short<\x01>type
+# jq reads both tasks.json (positional input) and index.json (--slurpfile) in
+# a single invocation so there's no extra fork on the wrapper hot path.
+# index.json may be absent on a stale/partially-built cache — jq's null
+# arithmetic handles that via `// []` defaults.
 {
   IFS= read -r -d '' known_tasks || true
   IFS= read -r -d '' root_cmds || true
-} < <(jq -j '
+  IFS= read -r -d '' persistent_tsv || true
+} < <(jq -j --slurpfile idx_wrap <(
+    if [[ -f "$INDEX_JSON" ]]; then cat "$INDEX_JSON"; else echo '{"persistent_flags":[]}'; fi
+  ) '
   ([.. | .tasks? // empty | .[] | .name | select(test("^_|:_") | not)]
     | join("\n")) + "\u0000" +
   ([.tasks[]?.name // empty, (.namespaces // {} | keys)[]]
     | map(select(startswith("_") | not))
-    | unique | join(" ")) + "\u0000"
+    | unique | join(" ")) + "\u0000" +
+  (($idx_wrap[0].persistent_flags // [])
+    | map([.name, (.short // ""), .type] | join("\u0001"))
+    | join("\n")) + "\u0000"
 ' "$TASKS_JSON")
+
+# Build persistent-flag lookup tables. Empty list is the common case and costs
+# essentially nothing (one empty read).
+declare -A _persist_type _persist_name_by_short
+_persist_any=0
+while IFS=$'\x01' read -r _pname _pshort _ptype; do
+  [[ -z "$_pname" ]] && continue
+  _persist_type["$_pname"]="$_ptype"
+  [[ -n "$_pshort" ]] && _persist_name_by_short["$_pshort"]="$_pname"
+  _persist_any=1
+done <<< "$persistent_tsv"
+
+# Transform a long name to its CLIFT_FLAG_* env var name.
+_clift_persist_var() {
+  local upper="${1^^}"
+  _PERSIST_VAR="CLIFT_FLAG_${upper//-/_}"
+}
+
+# Track which persistent flag names were bound by the wrapper's early-bind
+# pass. CLIFT_PERSIST_BOUND is consumed by the router's parser to suppress
+# default-application for these names — a wrapper-bound value is a user
+# value and must outrank a default.
+_CLIFT_PERSIST_BOUND=""
+
+# Export a parsed persistent flag value. Handles bool/list/int/string.
+# Args: name type value
+_clift_persist_set() {
+  local _name="$1" _type="$2" _value="$3" _var
+  _clift_persist_var "$_name"; _var="$_PERSIST_VAR"
+  case " $_CLIFT_PERSIST_BOUND " in
+    *" $_name "*) ;;
+    *) _CLIFT_PERSIST_BOUND="${_CLIFT_PERSIST_BOUND:+${_CLIFT_PERSIST_BOUND} }$_name" ;;
+  esac
+  case "$_type" in
+    bool)
+      export "${_var}=${_value}"
+      ;;
+    list)
+      # List flags accumulate across repeated occurrences. Each value may
+      # itself be comma-separated (matching parser.sh semantics).
+      local _cv="${_var}_COUNT" _cur _items _it
+      _cur="${!_cv:-0}"
+      IFS=',' read -ra _items <<< "$_value"
+      for _it in "${_items[@]}"; do
+        _cur=$((_cur+1))
+        export "${_var}_${_cur}=${_it}"
+      done
+      export "${_cv}=${_cur}"
+      ;;
+    *)
+      export "${_var}=${_value}"
+      ;;
+  esac
+}
 
 # Build O(1) lookup tables for exact-match and prefix-match
 declare -A _known_exact=()
@@ -113,6 +182,85 @@ i=1
 while (( i <= $# )); do
   tok="${!i}"
   if [[ "$tok" == -* ]]; then
+    # Early-bind persistent flags that appear BEFORE the command token.
+    # Strip them from argv so they don't reach the router's parser twice.
+    # Only long/short forms declared in persistent_flags are consumed here —
+    # unknown flags stop the walk and reach the router/parser untouched
+    # (which will emit the normal "flags-before-command" / "unknown flag"
+    # error downstream).
+    if (( _persist_any == 1 )); then
+      _consumed_persist=0
+      if [[ "$tok" == --* ]]; then
+        _lname="${tok#--}"
+        _linline=""
+        _lhas_inline=false
+        if [[ "$_lname" == *=* ]]; then
+          _linline="${_lname#*=}"
+          _lname="${_lname%%=*}"
+          _lhas_inline=true
+        fi
+        if [[ -n "${_persist_type[$_lname]+x}" ]]; then
+          _ltype="${_persist_type[$_lname]}"
+          if [[ "$_ltype" == "bool" ]]; then
+            if [[ "$_lhas_inline" == true ]]; then
+              _clift_persist_set "$_lname" "$_ltype" "$_linline"
+            else
+              _clift_persist_set "$_lname" "$_ltype" "true"
+            fi
+            i=$((i+1))
+          else
+            if [[ "$_lhas_inline" == true ]]; then
+              _clift_persist_set "$_lname" "$_ltype" "$_linline"
+              i=$((i+1))
+            else
+              if (( i + 1 > $# )); then
+                echo "error: flag $tok requires a value" >&2
+                exit 1
+              fi
+              _next=$((i+1))
+              _clift_persist_set "$_lname" "$_ltype" "${!_next}"
+              i=$((i+2))
+            fi
+          fi
+          _consumed_persist=1
+        fi
+      elif [[ "$tok" == -?* && "$tok" != --* ]]; then
+        _rest="${tok#-}"
+        # -x=value form
+        if [[ "$_rest" == ?=* ]]; then
+          _sh="${_rest:0:1}"
+          _sval="${_rest#*=}"
+          _sname="${_persist_name_by_short[$_sh]:-}"
+          if [[ -n "$_sname" ]]; then
+            _clift_persist_set "$_sname" "${_persist_type[$_sname]}" "$_sval"
+            i=$((i+1))
+            _consumed_persist=1
+          fi
+        elif (( ${#_rest} == 1 )); then
+          _sh="$_rest"
+          _sname="${_persist_name_by_short[$_sh]:-}"
+          if [[ -n "$_sname" ]]; then
+            _stype="${_persist_type[$_sname]}"
+            if [[ "$_stype" == "bool" ]]; then
+              _clift_persist_set "$_sname" "$_stype" "true"
+              i=$((i+1))
+            else
+              if (( i + 1 > $# )); then
+                echo "error: flag $tok requires a value" >&2
+                exit 1
+              fi
+              _next=$((i+1))
+              _clift_persist_set "$_sname" "$_stype" "${!_next}"
+              i=$((i+2))
+            fi
+            _consumed_persist=1
+          fi
+        fi
+      fi
+      if (( _consumed_persist == 1 )); then
+        continue
+      fi
+    fi
     break
   fi
   candidate_path=("${path[@]+"${path[@]}"}" "$tok")
@@ -131,7 +279,16 @@ matched_task="$_JOINED"
 
 # Empty path handling: either the first token was a flag (flags-before-command
 # error) or it was an unrecognized command (did-you-mean suggestion).
+# Exception: if only persistent flags were provided (i.e., every arg was
+# consumed by the early-bind pass), fall through to the root task so the
+# persistent flag values are still observable by any root-level logic. The
+# exported CLIFT_FLAG_* env vars carry them forward.
 if (( ${#path[@]} == 0 )); then
+  if (( i > $# )); then
+    # All argv consumed by persistent-flag early-bind. Proceed to root task.
+    export CLIFT_PERSIST_BOUND="$_CLIFT_PERSIST_BOUND"
+    exec task --taskfile "$CLI_DIR/Taskfile.yaml"
+  fi
   first="${1:-}"
   if [[ "$first" == -* ]]; then
     clift_err_flag_before_command "$CLI_NAME" || exit 1
@@ -177,6 +334,10 @@ for _ha in "${remaining[@]+"${remaining[@]}"}"; do
     --no-color)   export NO_COLOR=1 ;;
   esac
 done
+
+# Advertise persistent flags the wrapper bound pre-command so the router's
+# parser doesn't clobber them with defaults.
+export CLIFT_PERSIST_BOUND="$_CLIFT_PERSIST_BOUND"
 
 # Dispatch via indexed env vars. Task can't forward positional args through
 # aliased tasks, so we pass argv out-of-band. The router/parser reassembles
