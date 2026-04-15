@@ -127,17 +127,16 @@ _validate_layer "$persistent_flags" "${ROOT_TASKFILE}:vars.PERSISTENT_FLAGS" || 
 # consistency (persistent vs per-command) is out of scope.
 _pg_first="$(jq -r '[.[]? | select((.group // "") != "" or (.exclusive // false) == true or (.requires // "") != "") | .name] | .[0] // ""' <<< "$persistent_flags")"
 if [[ -n "$_pg_first" ]]; then
-  echo "error: ${ROOT_TASKFILE}:vars.PERSISTENT_FLAGS: flag '${_pg_first}' uses group/exclusive/requires — not allowed in persistent flags" >&2
+  echo "error: ${ROOT_TASKFILE}:vars.PERSISTENT_FLAGS: flag '${_pg_first}' cannot declare group/exclusive/requires (not yet supported — declare these on per-command flags only)" >&2
   exit 1
 fi
 
-# Build a quick-lookup set of persistent flag names + shorts for cross-layer
-# clash detection against each command's FLAGS. A persistent flag and a
-# per-command flag that share a name (or short) is ambiguous — the wrapper
-# would bind the persistent one before the command token and the per-command
-# parser would redefine it afterward. Reject at compile time.
-_persistent_names_csv="$(jq -r '[.[] | .name] | join(",")' <<< "$persistent_flags")"
-_persistent_shorts_csv="$(jq -r '[.[] | select((.short // "") != "") | .short] | join(",")' <<< "$persistent_flags")"
+# Cross-layer clash detection runs below if any persistent flag is declared.
+# A persistent flag and a per-command flag that share a name (or short) is
+# ambiguous — the wrapper would bind the persistent one before the command
+# token and the per-command parser would redefine it afterward. Reject at
+# compile time via jq on $persistent_flags directly; no intermediate CSV
+# needed.
 
 # Build an in-memory map: taskfile path -> {toplevel: [...], tasks: {name: [...]}}
 declare -A taskfile_data
@@ -251,7 +250,7 @@ while IFS=$'\x01' read -r -d '' task_name source_tf aliases_json summary; do
   # Cross-layer clash detection: a persistent flag cannot share a name, alias,
   # or short with a per-command (top-level or per-task) flag. The error names
   # both layers so the user knows where to fix it.
-  if [[ -n "$_persistent_names_csv" ]] || [[ -n "$_persistent_shorts_csv" ]]; then
+  if [[ "$persistent_flags" != "[]" && "$persistent_flags" != "null" ]]; then
     _clash_msg="$(jq -r -n \
       --argjson persistent "$persistent_flags" \
       --argjson tfdata "$tf_data" \
@@ -377,7 +376,12 @@ source "$SCRIPT_DIR/../cache.sh"
 {
   echo "$ROOT_TASKFILE"
   while IFS= read -r _sf; do
-    [[ -n "$_sf" ]] && echo "$_sf"
+    [[ -z "$_sf" ]] && continue
+    # `unique_taskfiles` can include the root Taskfile itself (root-level
+    # tasks like `default`/`version` live there). Skip it here so the
+    # manifest lists each file exactly once.
+    [[ "$_sf" == "$ROOT_TASKFILE" ]] && continue
+    echo "$_sf"
   done <<< "$unique_taskfiles"
 } > "${CACHE_DIR}/sources.tmp"
 mv "${CACHE_DIR}/sources.tmp" "${CACHE_DIR}/sources"

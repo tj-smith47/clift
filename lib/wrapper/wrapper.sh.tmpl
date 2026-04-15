@@ -36,10 +36,6 @@ case "$1" in
     echo "$CLI_NAME version $CLI_VERSION"
     exit 0
     ;;
-  --)
-    # Bare -- with no command is an error; skip it so the walk sees no tokens
-    shift
-    ;;
 esac
 
 # Load known task names and root command names from the precompiled cache.
@@ -179,8 +175,21 @@ _join_colon() {
 # when the array is empty and set -u is active.
 path=()
 i=1
+# When we see a bare "--" anywhere during the walk, it terminates wrapper flag
+# scanning per bash convention: all remaining tokens are literal and pass
+# through verbatim to the router. If no command token has been matched yet
+# the empty-path branch below applies (either the root task runs, or we emit
+# the flag-before-command / unknown-command error).
+_terminator_seen=0
 while (( i <= $# )); do
   tok="${!i}"
+  if [[ "$tok" == "--" ]]; then
+    # End-of-options terminator: stop scanning entirely. The terminator
+    # itself is kept in `remaining` so the router's parser sees it and
+    # treats subsequent tokens as positionals (parser.sh handles `--`).
+    _terminator_seen=1
+    break
+  fi
   if [[ "$tok" == -* ]]; then
     # Early-bind persistent flags that appear BEFORE the command token.
     # Strip them from argv so they don't reach the router's parser twice.
@@ -279,14 +288,32 @@ matched_task="$_JOINED"
 
 # Empty path handling: either the first token was a flag (flags-before-command
 # error) or it was an unrecognized command (did-you-mean suggestion).
-# Exception: if only persistent flags were provided (i.e., every arg was
+# Exception 1: if only persistent flags were provided (i.e., every arg was
 # consumed by the early-bind pass), fall through to the root task so the
 # persistent flag values are still observable by any root-level logic. The
 # exported CLIFT_FLAG_* env vars carry them forward.
+# Exception 2: if the `--` terminator was seen, all tokens after it are
+# literal. Dispatch to the root task; those tokens ride along as positionals
+# so user scripts/help can observe them without the wrapper interpreting them.
 if (( ${#path[@]} == 0 )); then
   if (( i > $# )); then
     # All argv consumed by persistent-flag early-bind. Proceed to root task.
-    export CLIFT_PERSIST_BOUND="$_CLIFT_PERSIST_BOUND"
+    [[ -n "$_CLIFT_PERSIST_BOUND" ]] && export CLIFT_PERSIST_BOUND="$_CLIFT_PERSIST_BOUND"
+    exec task --taskfile "$CLI_DIR/Taskfile.yaml"
+  fi
+  if (( _terminator_seen == 1 )); then
+    # Post-terminator tokens pass through to the root task as literal argv.
+    remaining=()
+    for (( j=i; j<=$#; j++ )); do
+      remaining+=("${!j}")
+    done
+    [[ -n "$_CLIFT_PERSIST_BOUND" ]] && export CLIFT_PERSIST_BOUND="$_CLIFT_PERSIST_BOUND"
+    export CLIFT_ARG_COUNT="${#remaining[@]}"
+    k=0
+    for arg in "${remaining[@]+"${remaining[@]}"}"; do
+      k=$((k+1))
+      export "CLIFT_ARG_$k=$arg"
+    done
     exec task --taskfile "$CLI_DIR/Taskfile.yaml"
   fi
   first="${1:-}"
@@ -336,8 +363,9 @@ for _ha in "${remaining[@]+"${remaining[@]}"}"; do
 done
 
 # Advertise persistent flags the wrapper bound pre-command so the router's
-# parser doesn't clobber them with defaults.
-export CLIFT_PERSIST_BOUND="$_CLIFT_PERSIST_BOUND"
+# parser doesn't clobber them with defaults. Skip the export when nothing was
+# bound — keeps the environment tidy for scripts that introspect it.
+[[ -n "$_CLIFT_PERSIST_BOUND" ]] && export CLIFT_PERSIST_BOUND="$_CLIFT_PERSIST_BOUND"
 
 # Dispatch via indexed env vars. Task can't forward positional args through
 # aliased tasks, so we pass argv out-of-band. The router/parser reassembles

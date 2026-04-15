@@ -92,6 +92,8 @@ Whenever the user supplies `--old` (or an alias, or the short form), the parser 
 
 ## Persistent flags
 
+Use persistent flags when multiple commands share the same flag (profile, verbosity, config-path). For flags specific to one command, prefer per-command `FLAGS`.
+
 CLI-wide flags (e.g., `--profile`, `--config-file`) that every command should accept belong in the root Taskfile under `vars.PERSISTENT_FLAGS`. They're merged into every command's flag table at compile time and may appear either before or after the command token — Cobra's `PersistentFlags()` equivalent:
 
 ```yaml
@@ -105,8 +107,12 @@ Both `mycli --profile=staging deploy prod` and `mycli deploy prod --profile=stag
 Rules:
 
 - A persistent flag cannot share its `name`, `aliases`, or `short` with a reserved framework global (`help`, `verbose`, `quiet`, `no-color`, `version`) or with any per-command flag. Compile fails with an error naming both layers.
-- Persistent flags cannot declare `group`, `exclusive`, or `requires`. Groups are a per-command constraint mechanism; the cross-layer semantics are out of scope.
+- Persistent flags cannot declare `group`, `exclusive`, or `requires` (not yet supported — declare these on per-command flags only). Cross-layer group semantics are a scope decision, not a philosophical restriction.
 - All other flag attributes (`type`, `default`, `required`, `deprecated`, `hidden`, `aliases`) work identically to per-command flags.
+
+### Internal protocol: `CLIFT_PERSIST_BOUND`
+
+`CLIFT_PERSIST_BOUND` is an internal wrapper-to-parser protocol. The wrapper exports the space-separated list of persistent flag names it early-bound (pre-command occurrences) so the parser can skip default application for those names — a wrapper-bound value is a user value and must outrank a default. Users should not set this manually; it is not part of the public contract and may change between releases.
 
 ## Validation
 

@@ -44,6 +44,11 @@ teardown() {
 #   create_test_cli                          # bare CLI, no commands
 #   create_test_cli "greet"                  # command with empty FLAGS
 #   create_test_cli "greet" "- {name: name, short: n, type: string, default: world}"
+#
+# Optional env var:
+#   CLIFT_TEST_PERSISTENT_BLOCK — YAML fragment (full `  PERSISTENT_FLAGS: ...`
+#   block, including the two-space indent) injected under vars: so tests can
+#   declare CLI-wide persistent flags without re-scaffolding the root Taskfile.
 create_test_cli() {
   local cmd_name="${1:-}"
   local cmd_flags="${2:-}"
@@ -64,8 +69,13 @@ vars:
     - {name: quiet, short: q, type: bool, desc: "Quiet"}
     - {name: no-color, type: bool, desc: "No color"}
     - {name: version, type: bool, desc: "Version"}
-includes:
 YAML
+
+  if [[ -n "${CLIFT_TEST_PERSISTENT_BLOCK:-}" ]]; then
+    printf '%s\n' "$CLIFT_TEST_PERSISTENT_BLOCK" >> "$CLI_DIR/Taskfile.yaml"
+  fi
+
+  echo "includes:" >> "$CLI_DIR/Taskfile.yaml"
 
   cat > "$CLI_DIR/.env" <<ENV
 CLI_NAME=$CLI_NAME

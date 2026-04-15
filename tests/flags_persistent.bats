@@ -9,79 +9,40 @@ bats_require_minimum_version 1.5.0
 
 load test_helper
 
-# Build a two-command CLI with one persistent flag declared at the root.
-# Both commands echo the CLIFT_FLAG_PROFILE env var so tests can verify the
-# value flowed all the way down.
+# Build a two-command CLI with a persistent-flag block declared at the root.
+# Uses create_test_cli for the root scaffold (injecting PERSISTENT_FLAGS via
+# CLIFT_TEST_PERSISTENT_BLOCK) and adds a sibling `build` cmd identical to
+# the one create_test_cli produces for `deploy`. Both commands echo
+# CLIFT_FLAG_PROFILE (plus any CLIFT_FLAG_TAG_* list values) so tests can
+# verify the value flowed all the way down.
 _setup_persistent_cli() {
-  local persistent_block="$1"
+  CLIFT_TEST_PERSISTENT_BLOCK="$1" create_test_cli deploy
 
-  cat > "$CLI_DIR/Taskfile.yaml" <<YAML
-version: '3'
-silent: true
-output:
-  group:
-    begin: ''
-    end: ''
-set: [errexit, pipefail]
-dotenv: ['.env']
-vars:
-  FLAGS:
-    - {name: help, short: h, type: bool, desc: "Show help"}
-    - {name: verbose, short: v, type: bool, desc: "Verbose"}
-    - {name: quiet, short: q, type: bool, desc: "Quiet"}
-    - {name: no-color, type: bool, desc: "No color"}
-    - {name: version, type: bool, desc: "Version"}
-${persistent_block}
-includes:
-  deploy:
-    taskfile: ./cmds/deploy
-  build:
-    taskfile: ./cmds/build
-tasks:
-  default:
-    cmd: echo root
-YAML
+  # Splice a second include (build) ahead of the tasks: section so it lives
+  # under includes:, not tasks:. The rewrite is a straight awk substitution
+  # (no sed -i, no in-place edits) to keep this portable across GNU/BSD.
+  awk '
+    /^tasks:/ && !done { print "  build:\n    taskfile: ./cmds/build"; done=1 }
+    { print }
+  ' "$CLI_DIR/Taskfile.yaml" > "$CLI_DIR/Taskfile.yaml.tmp"
+  mv "$CLI_DIR/Taskfile.yaml.tmp" "$CLI_DIR/Taskfile.yaml"
 
-  cat > "$CLI_DIR/.env" <<ENV
-CLI_NAME=$CLI_NAME
-CLI_VERSION=$CLI_VERSION
-CLI_DIR=$CLI_DIR
-FRAMEWORK_DIR=$FRAMEWORK_DIR
-CLIFT_MODE=standard
-LOG_THEME=minimal
-ENV
+  mkdir -p "$CLI_DIR/cmds/build"
+  cp "$CLI_DIR/cmds/deploy/Taskfile.yaml" "$CLI_DIR/cmds/build/Taskfile.yaml"
 
-  mkdir -p "$CLI_DIR/cmds/deploy" "$CLI_DIR/cmds/build"
-
-  # Each command is parsed (FLAGS: []) so the router merges in the persistent
-  # layer and the post-command position of persistent flags works via parser.sh.
   for cmd in deploy build; do
-    cat > "$CLI_DIR/cmds/${cmd}/Taskfile.yaml" <<YAML
-version: '3'
-vars:
-  FLAGS: []
-tasks:
-  default:
-    vars:
-      FLAGS: []
-    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
-YAML
-    cat > "$CLI_DIR/cmds/${cmd}/${cmd}.sh" <<'SH'
+    cat > "$CLI_DIR/cmds/${cmd}/${cmd}.sh" <<SH
 #!/usr/bin/env bash
 set -euo pipefail
-echo "cmd=__CMD__ profile=${CLIFT_FLAG_PROFILE:-<unset>}"
-if [[ -n "${CLIFT_FLAG_TAG_COUNT:-}" ]]; then
-  n="${CLIFT_FLAG_TAG_COUNT}"
+echo "cmd=${cmd} profile=\${CLIFT_FLAG_PROFILE:-<unset>}"
+if [[ -n "\${CLIFT_FLAG_TAG_COUNT:-}" ]]; then
+  n="\${CLIFT_FLAG_TAG_COUNT}"
   for ((i=1;i<=n;i++)); do
-    v="CLIFT_FLAG_TAG_$i"
-    echo "tag=${!v}"
+    v="CLIFT_FLAG_TAG_\$i"
+    echo "tag=\${!v}"
   done
 fi
 SH
-    # Bash doesn't interpolate placeholders in heredoc with quoted marker, so
-    # substitute after the fact.
-    sed -e "s|__CMD__|${cmd}|" "$CLI_DIR/cmds/${cmd}/${cmd}.sh" > "$CLI_DIR/cmds/${cmd}/${cmd}.sh.tmp"
-    mv "$CLI_DIR/cmds/${cmd}/${cmd}.sh.tmp" "$CLI_DIR/cmds/${cmd}/${cmd}.sh"
     chmod +x "$CLI_DIR/cmds/${cmd}/${cmd}.sh"
   done
 
@@ -295,4 +256,65 @@ YAML
   run "$CLI_DIR/bin/$CLI_NAME" deploy
   [ "$status" -eq 0 ]
   [[ "$output" == *"profile=newdefault"* ]]
+}
+
+# [C1] Bare `--` post-command must not crash the wrapper under set -u. Prior
+# to the fix the persistence dispatch tried to index _persist_type[""] on a
+# bare "--" token and tripped a bad-array-subscript abort.
+@test "persistent: post-command bare -- terminates wrapper flag scan (no crash)" {
+  _setup_persistent_cli "  PERSISTENT_FLAGS:
+    - {name: profile, short: p, type: string, default: \"default\", desc: \"Profile\"}"
+
+  run "$CLI_DIR/bin/$CLI_NAME" deploy --
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"cmd=deploy profile=default"* ]]
+}
+
+# [C1] Tokens after `--` pass through verbatim, even ones that would
+# otherwise be persistent flags. `--profile=x` after the terminator must be
+# treated as a literal positional and must NOT bind CLIFT_FLAG_PROFILE.
+@test "persistent: post-command -- passes subsequent flag-looking tokens as literals" {
+  _setup_persistent_cli "  PERSISTENT_FLAGS:
+    - {name: profile, short: p, type: string, default: \"default\", desc: \"Profile\"}"
+
+  run "$CLI_DIR/bin/$CLI_NAME" deploy -- --profile=x
+  [ "$status" -eq 0 ]
+  # The persistent --profile should stay at its default; the post-`--` token
+  # is a literal positional, not a flag. (The deploy script echoes profile
+  # from CLIFT_FLAG_PROFILE which the parser leaves at the declared default.)
+  [[ "$output" == *"cmd=deploy profile=default"* ]]
+}
+
+# [C2] Pre-command `--` terminates wrapper scanning at the first token. A
+# `--profile=x` that follows must NOT bind; it is a literal positional.
+@test "persistent: pre-command -- terminates wrapper flag scan (profile not bound)" {
+  _setup_persistent_cli "  PERSISTENT_FLAGS:
+    - {name: profile, short: p, type: string, default: \"default\", desc: \"Profile\"}"
+
+  run "$CLI_DIR/bin/$CLI_NAME" -- --profile=x deploy
+  [ "$status" -eq 0 ]
+  # Nothing beyond `--` was interpreted as a flag — profile stayed unset
+  # (no default applied either, because no command was dispatched through
+  # the router's parser; the root task runs).
+  [[ "$output" != *"profile=x"* ]]
+  # `deploy` appears in the literal argv forwarded to the root task; see
+  # the root Taskfile's default command output.
+}
+
+# [I3] Persistent list flag default MUST be washed by wrapper binding. With
+# default "a,b", invoking `mycli --tag=c cmd --tag=d` should yield exactly
+# c,d — the wrapper's pre-command bind counts as a user value and must
+# override (not extend) the declared default, then the post-command token
+# appends to that wrapper-bound set. Expected final: c,d (not a,b,c,d).
+@test "persistent list flag: user values replace default, do not concatenate (pre+post)" {
+  _setup_persistent_cli "  PERSISTENT_FLAGS:
+    - {name: tag, type: list, default: \"a,b\", desc: \"Tags\"}"
+
+  run "$CLI_DIR/bin/$CLI_NAME" --tag=c deploy --tag=d
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"tag=c"* ]]
+  [[ "$output" == *"tag=d"* ]]
+  # Default tokens MUST NOT appear once the user has supplied values.
+  [[ "$output" != *"tag=a"* ]]
+  [[ "$output" != *"tag=b"* ]]
 }
