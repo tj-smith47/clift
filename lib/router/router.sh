@@ -98,7 +98,7 @@ if [[ "$merged_table" == '"PASSTHROUGH"' ]] || [[ "$merged_table" == "PASSTHROUG
     log_error "Unknown command: ${local_namespace}"
     exit "$EXIT_NOT_FOUND"
   fi
-  exec bash "$script_path" "${args[@]+"${args[@]}"}"
+  exec bash "${FRAMEWORK_DIR}/lib/runtime/exec.sh" "$script_path" "${args[@]+"${args[@]}"}"
 fi
 
 # Step 7: Parse flags via the merged table.
@@ -153,4 +153,4 @@ if [[ ! -f "$script_path" ]]; then
   exit 1
 fi
 
-exec bash "$script_path"
+exec bash "${FRAMEWORK_DIR}/lib/runtime/exec.sh" "$script_path"

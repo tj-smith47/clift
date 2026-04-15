@@ -122,3 +122,13 @@ log_debug()   { [[ "${VERBOSE:-}" != "true" ]] && return 0; _log_format debug "$
 log_suggest() { [[ "${QUIET:-}" == "true" ]] && return 0; printf '%b  %s%b\n' "$_CLR_DIM" "$*" "$_CLR_RESET" >&2; }
 
 die() { log_error "$1"; exit "${2:-1}"; }
+
+# Export log helpers so subshells spawned by user scripts (e.g.
+# `$(bash -c '…')`) inherit them without having to re-source this file.
+# `_log_format` is the private formatter that every public helper delegates
+# to — it must be exported alongside them or subshells hit "command not found".
+# The theme + color vars must also be exported so subshell output matches
+# parent styling instead of falling through to the default case.
+# `clift_exit` is added in Task 3.6 — do not list it here until it exists.
+export -f log_info log_error log_warn log_success log_debug log_suggest die _log_format 2>/dev/null || true
+export _LOG_THEME _CLR_RESET _CLR_GREEN _CLR_YELLOW _CLR_RED _CLR_BLUE _CLR_CYAN _CLR_DIM
