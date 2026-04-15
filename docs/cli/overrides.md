@@ -60,15 +60,45 @@ keeps user code decoupled from the framework's internal function names.
 
 ## Slots
 
-Populated as Phase 3 tasks land.
+| Slot | Default rendered by | Callback signature | Notes |
+|------|---------------------|--------------------|-------|
+| `help_list` | `lib/help/list.sh` | `clift_override_help_list <default_fn> <CLI_DIR>` | Top-level `mycli --help` listing. Only the CLI-global tier applies — there is no "current command" at the top level. |
+| `help_detail` | `lib/help/detail.sh` | `clift_override_help_detail <default_fn> <task_name> <CLI_DIR>` | Per-command `mycli <cmd> --help` detail view. Per-command tier (`cmds/<cmd>/overrides/help_detail.sh`) takes precedence over CLI-global. |
 
-<!-- Filled in by Tasks 3.2–3.6:
-- `help_list`   — root/help listing (Task 3.2)
-- `help_detail` — per-command help (Task 3.2)
-- `version_print` — `--version` output (Task 3.3)
-- `command_pre`, `command_post` — before/after user script (Task 3.4)
-- `log_<level>` — per-level log formatting (Task 3.5)
--->
+Additional slots (`version_print`, `command_pre`/`command_post`,
+`log_<level>`, …) land with Tasks 3.3 – 3.6.
+
+### Example: wrap `help_list` with a banner
+
+`.clift/overrides/help_list.sh`:
+
+```bash
+clift_override_help_list() {
+  local default_fn="$1"; shift
+  echo "=== ACME CLI ==="
+  "$default_fn" "$@"
+  echo "=== docs: https://acme.example/cli ==="
+}
+```
+
+### Example: replace `help_detail` for one command only
+
+`cmds/deploy/overrides/help_detail.sh`:
+
+```bash
+clift_override_help_detail() {
+  local default_fn="$1" task_name="$2" cli_dir="$3"
+  cat <<'HELP'
+deploy — ship the current branch to an environment
+
+Usage:
+  mycli deploy <env> [--force]
+
+See also:
+  mycli rollback --help
+HELP
+}
+```
 
 ## How it works
 

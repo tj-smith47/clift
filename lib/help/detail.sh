@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # Renders detailed help for a single command.
 # Usage: detail.sh <COMMAND_NAME> <TASKFILE_PATH>
+#
+# Overridable via the `help_detail` slot. Per-command overrides at
+# cmds/<cmd-seg>/overrides/help_detail.sh take precedence over the CLI-global
+# .clift/overrides/help_detail.sh. See docs/cli/overrides.md.
 
 set -euo pipefail
 
@@ -16,111 +20,135 @@ if [[ -z "$COMMAND" || -z "$TASKFILE_PATH" ]]; then
 fi
 
 CLI_NAME="${CLI_NAME:-mycli}"
-
-# The task to look up is "<command>:default" or just "<command>"
 TASKFILE_DIR="$(dirname "$TASKFILE_PATH")"
-TASKS_CACHE="${TASKFILE_DIR}/.clift/tasks.json"
+# CLI_DIR may already be exported by the caller (router / wrapper). Fall back
+# to TASKFILE_DIR so direct invocations still work — the override loader
+# needs CLI_DIR set to resolve per-command / CLI-global overrides.
+CLI_DIR="${CLI_DIR:-$TASKFILE_DIR}"
+export CLI_DIR
 
-if [[ -f "$TASKS_CACHE" ]]; then
-  json="$(<"$TASKS_CACHE")"
-else
-  json=$(task --list-all --json --taskfile "$TASKFILE_PATH" 2>/dev/null) || {
-    echo "error: failed to read task list" >&2
-    exit 1
-  }
-fi
+_clift_help_detail_default() {
+  local command="$1"
+  local cli_dir="${2:-$CLI_DIR}"
+  local taskfile_dir="$cli_dir"
+  local tasks_cache="${taskfile_dir}/.clift/tasks.json"
+  local taskfile_path="${taskfile_dir}/Taskfile.yaml"
 
-# Try <command>:default first, then <command> (single jq pass)
-task_info=$(echo "$json" | jq -c --arg cmd "$COMMAND" '
-  [.. | .tasks? // empty | .[] | select(.name == ($cmd + ":default") or .name == $cmd)]
-  | sort_by(if .name | endswith(":default") then 0 else 1 end)
-  | if length == 0 then null
-    else first | {desc, summary, location: .location.taskfile}
-    end
-' 2>/dev/null)
+  local json
+  if [[ -f "$tasks_cache" ]]; then
+    json="$(<"$tasks_cache")"
+  else
+    json=$(task --list-all --json --taskfile "$taskfile_path" 2>/dev/null) || {
+      echo "error: failed to read task list" >&2
+      return 1
+    }
+  fi
 
-if [[ -z "$task_info" || "$task_info" == "null" ]]; then
-  echo "error: unknown command: $COMMAND" >&2
-  exit 1
-fi
+  # Try <command>:default first, then <command> (single jq pass)
+  local task_info
+  task_info=$(echo "$json" | jq -c --arg cmd "$command" '
+    [.. | .tasks? // empty | .[] | select(.name == ($cmd + ":default") or .name == $cmd)]
+    | sort_by(if .name | endswith(":default") then 0 else 1 end)
+    | if length == 0 then null
+      else first | {desc, summary, location: .location.taskfile}
+      end
+  ' 2>/dev/null)
 
-{
-  IFS= read -r -d '' desc || true
-  IFS= read -r -d '' summary || true
-  IFS= read -r -d '' location || true
-} < <(echo "$task_info" | jq -j '(.desc // "") + "\u0000" + (.summary // "") + "\u0000" + (.location // "") + "\u0000"')
+  if [[ -z "$task_info" || "$task_info" == "null" ]]; then
+    echo "error: unknown command: $command" >&2
+    return 1
+  fi
 
-# Apply colon-to-space display heuristic for user commands (those under /cmds/)
-display_name="$COMMAND"
-if [[ "$location" == *"/cmds/"* ]]; then
-  display_name="${COMMAND//:/ }"
-fi
+  local desc summary location
+  {
+    IFS= read -r -d '' desc || true
+    IFS= read -r -d '' summary || true
+    IFS= read -r -d '' location || true
+  } < <(echo "$task_info" | jq -j '(.desc // "") + "\u0000" + (.summary // "") + "\u0000" + (.location // "") + "\u0000"')
 
-echo "${CLI_NAME} ${display_name} - ${desc}"
-echo ""
+  # Apply colon-to-space display heuristic for user commands (those under /cmds/)
+  local display_name="$command"
+  if [[ "$location" == *"/cmds/"* ]]; then
+    display_name="${command//:/ }"
+  fi
 
-if [[ -n "$summary" && "$summary" != "null" ]]; then
-  echo "$summary"
-else
-  echo "No detailed help available for '${COMMAND}'."
-fi
-
-# List subcommands if this command has children (e.g. deploy has deploy:prod)
-subcmds="$(echo "$json" | jq -r --arg cmd "$COMMAND" '
-  [.. | .tasks? // empty | .[]
-   | select(.name | startswith($cmd + ":"))
-   | select(.name != ($cmd + ":default"))
-   | select(.name | test(":[_]") | not)
-   | {
-       display: (
-         if (.location.taskfile // "" | contains("/cmds/")) then
-           (.name | gsub(":"; " "))
-         else .name end
-       ),
-       desc: (.desc // "")
-     }
-  ] | unique_by(.display) | sort_by(.display)
-  | .[] | "\(.display)\t\(.desc)"
-' 2>/dev/null)"
-
-if [[ -n "$subcmds" ]]; then
+  echo "${CLI_NAME} ${display_name} - ${desc}"
   echo ""
-  echo "Available commands:"
-  echo "$subcmds" | column -t -s $'\t' | sed 's/^/  /'
-  echo ""
-  echo "Run '${CLI_NAME} ${display_name} <command> --help' for more information."
-fi
 
-# Render flag sections from precompiled .clift/index.json (tasks[k].flags)
-INDEX_JSON="${TASKFILE_DIR}/.clift/index.json"
+  if [[ -n "$summary" && "$summary" != "null" ]]; then
+    echo "$summary"
+  else
+    echo "No detailed help available for '${command}'."
+  fi
 
-if [[ -f "$INDEX_JSON" ]]; then
-  # Look up this command's merged flags. Try "cmd:default" first, then "cmd".
-  cmd_flags="$(jq -c --arg cmd "${COMMAND}:default" --arg cmd2 "$COMMAND" '
-    .tasks[$cmd].flags // .tasks[$cmd2].flags // null
-  ' "$INDEX_JSON")"
+  # List subcommands if this command has children (e.g. deploy has deploy:prod)
+  local subcmds
+  subcmds="$(echo "$json" | jq -r --arg cmd "$command" '
+    [.. | .tasks? // empty | .[]
+     | select(.name | startswith($cmd + ":"))
+     | select(.name != ($cmd + ":default"))
+     | select(.name | test(":[_]") | not)
+     | {
+         display: (
+           if (.location.taskfile // "" | contains("/cmds/")) then
+             (.name | gsub(":"; " "))
+           else .name end
+         ),
+         desc: (.desc // "")
+       }
+    ] | unique_by(.display) | sort_by(.display)
+    | .[] | "\(.display)\t\(.desc)"
+  ' 2>/dev/null)"
 
-  if [[ -n "$cmd_flags" && "$cmd_flags" != "null" && "$cmd_flags" != '{"passthrough":true}' ]]; then
-    # Load root globals to split local vs global flags
-    root_globals="$(cat "$_CLIFT_GLOBALS_JSON" 2>/dev/null || echo '[]')"
-    # Split into local flags (not in root globals) and global flags (in root globals)
-    {
-      IFS=$'\t' read -r local_flags global_flags
-    } < <(echo "$cmd_flags" | jq -r --argjson globals "$root_globals" '
-      ([.[] | select(.name as $n | [$globals[].name] | index($n) | not)] | tojson) + "\t" +
-      ([.[] | select(.name as $n | [$globals[].name] | index($n))] | tojson)
-    ')
+  if [[ -n "$subcmds" ]]; then
+    echo ""
+    echo "Available commands:"
+    echo "$subcmds" | column -t -s $'\t' | sed 's/^/  /'
+    echo ""
+    echo "Run '${CLI_NAME} ${display_name} <command> --help' for more information."
+  fi
 
-    if [[ "$local_flags" != "[]" ]]; then
-      echo ""
-      echo "Flags:"
-      clift_render_flags "$local_flags"
-    fi
+  # Render flag sections from precompiled .clift/index.json (tasks[k].flags)
+  local index_json="${taskfile_dir}/.clift/index.json"
 
-    if [[ "$global_flags" != "[]" ]]; then
-      echo ""
-      echo "Global Flags:"
-      clift_render_flags "$global_flags"
+  if [[ -f "$index_json" ]]; then
+    # Look up this command's merged flags. Try "cmd:default" first, then "cmd".
+    local cmd_flags
+    cmd_flags="$(jq -c --arg cmd "${command}:default" --arg cmd2 "$command" '
+      .tasks[$cmd].flags // .tasks[$cmd2].flags // null
+    ' "$index_json")"
+
+    if [[ -n "$cmd_flags" && "$cmd_flags" != "null" && "$cmd_flags" != '{"passthrough":true}' ]]; then
+      # Load root globals to split local vs global flags
+      local root_globals local_flags global_flags
+      root_globals="$(cat "$_CLIFT_GLOBALS_JSON" 2>/dev/null || echo '[]')"
+      # Split into local flags (not in root globals) and global flags (in root globals)
+      {
+        IFS=$'\t' read -r local_flags global_flags
+      } < <(echo "$cmd_flags" | jq -r --argjson globals "$root_globals" '
+        ([.[] | select(.name as $n | [$globals[].name] | index($n) | not)] | tojson) + "\t" +
+        ([.[] | select(.name as $n | [$globals[].name] | index($n))] | tojson)
+      ')
+
+      if [[ "$local_flags" != "[]" ]]; then
+        echo ""
+        echo "Flags:"
+        clift_render_flags "$local_flags"
+      fi
+
+      if [[ "$global_flags" != "[]" ]]; then
+        echo ""
+        echo "Global Flags:"
+        clift_render_flags "$global_flags"
+      fi
     fi
   fi
-fi
+}
+
+_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=../log/log.sh
+source "${_LIB_DIR}/log/log.sh"
+# shellcheck source=../runtime/overrides.sh
+source "${_LIB_DIR}/runtime/overrides.sh"
+
+clift_call_override help_detail _clift_help_detail_default --task "$COMMAND" "$COMMAND" "$CLI_DIR"
