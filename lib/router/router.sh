@@ -116,12 +116,14 @@ echo "$merged_table" > "$tmp_table"
 source "${FRAMEWORK_DIR}/lib/flags/parser.sh"
 clift_parse_args "$tmp_table" "${args[@]+"${args[@]}"}"
 
-# Step 8: Intercept built-in flags BEFORE log setup for fast --help/--version
+# Step 8: Intercept built-in flags BEFORE log setup for fast --help/--version.
+# Note: top-level `mycli --version` is handled by wrapper.sh.tmpl before
+# reaching the router. This block fires only for `mycli <cmd> --version`,
+# where --version is merged in as a global flag from globals.json.
 if [[ "${CLIFT_FLAG_VERSION:-}" == "true" ]]; then
   # shellcheck source=../runtime/overrides.sh
   source "${FRAMEWORK_DIR}/lib/runtime/overrides.sh"
-  _clift_version_print_default() { echo "$1 version $2"; }
-  clift_call_override version_print _clift_version_print_default \
+  clift_call_override version_print clift_default_version_print \
     "${CLI_NAME:-unknown}" "${CLI_VERSION:-0.0.0}" "$CLI_DIR"
   exit 0
 fi

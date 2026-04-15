@@ -97,3 +97,18 @@ clift_call_override() {
     "$default_fn" "$@"
   fi
 }
+
+# ---- Slot defaults ----------------------------------------------------------
+# Framework defaults for built-in override slots. Hoisted here so every call
+# site (wrapper, router, version subcommand, …) shares one definition instead
+# of redeclaring an inline `_default()` next to each clift_call_override call.
+# Each function is `clift_default_<slot>` and forms part of the public surface
+# documented in docs/cli/overrides.md — user overrides MAY invoke them via the
+# default_fn ($1) handle to delegate.
+
+# clift_default_version_print — framework default for the version_print slot.
+# Args: <CLI_NAME> <CLI_VERSION> <CLI_DIR>
+# Override via .clift/overrides/version_print.sh (see docs/cli/overrides.md).
+clift_default_version_print() {
+  echo "$1 version $2"
+}

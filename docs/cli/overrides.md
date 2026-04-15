@@ -64,10 +64,19 @@ keeps user code decoupled from the framework's internal function names.
 |------|---------------------|--------------------|-------|
 | `help_list` | `lib/help/list.sh` | `clift_override_help_list <default_fn> <CLI_DIR>` | Top-level `mycli --help` listing. Only the CLI-global tier applies — there is no "current command" at the top level. |
 | `help_detail` | `lib/help/detail.sh` | `clift_override_help_detail <default_fn> <task_name> <CLI_DIR>` | Per-command `mycli <cmd> --help` detail view. Per-command tier (`cmds/<cmd>/overrides/help_detail.sh`) takes precedence over CLI-global. |
-| `version_print` | `lib/wrapper/wrapper.sh.tmpl`, `lib/router/router.sh`, `lib/version/version.sh` | `clift_override_version_print <default_fn> <CLI_NAME> <CLI_VERSION> <CLI_DIR>` | Controls the line printed by `mycli --version`, `mycli -V`, and the framework's `mycli version` subcommand. The default prints `"<CLI_NAME> version <CLI_VERSION>"`. Override only replaces that one line — the `version` subcommand's cfgd-status block still follows. |
+| `version_print` | `lib/wrapper/wrapper.sh.tmpl`, `lib/router/router.sh`, `lib/version/version.sh` | `clift_override_version_print <default_fn> <CLI_NAME> <CLI_VERSION> <CLI_DIR>` | Controls the line printed by `mycli --version`, `mycli -V`, and the framework's `mycli version` subcommand. The framework default is `clift_default_version_print`, which prints `"<CLI_NAME> version <CLI_VERSION>"`. Override only replaces that one line — the `version` subcommand's cfgd-status block still follows (see [cfgd-status interleaving](#cfgd-status-interleaving) below). |
 
 Additional slots (`command_pre`/`command_post`, `log_<level>`, …) land with
 Tasks 3.4 – 3.6.
+
+#### cfgd-status interleaving
+
+The `mycli version` subcommand prints the override output FIRST, then appends
+the cfgd-status block when `CFGD_VERSIONING=true` is set in the CLI's
+`.env`. An override that fully REPLACES the version line still gets the cfgd
+status appended — the slot only governs the version line itself, not the
+trailing status block. To suppress or restyle the cfgd block, unset
+`CFGD_VERSIONING` or wait for a future `version_status` slot.
 
 ### Example: wrap `help_list` with a banner
 

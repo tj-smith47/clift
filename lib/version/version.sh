@@ -19,8 +19,7 @@ source "${FRAMEWORK_DIR}/lib/runtime/overrides.sh"
 cli_name="${CLI_NAME:-unknown}"
 cli_version="${CLI_VERSION:-0.0.0}"
 
-_clift_version_print_default() { echo "$1 version $2"; }
-clift_call_override version_print _clift_version_print_default \
+clift_call_override version_print clift_default_version_print \
   "$cli_name" "$cli_version" "$CLI_DIR"
 
 if [[ "${CFGD_VERSIONING:-}" != "true" ]]; then

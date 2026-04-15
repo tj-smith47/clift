@@ -84,7 +84,7 @@ SH
 
 # --- router-path mid-command --version ---------------------------------------
 
-@test "version_print override applies via router path (cmd --version)" {
+@test "version override applies when router intercept fires (fixture-driven)" {
   mkdir -p "$CLI_DIR/.clift/overrides"
   cat > "$CLI_DIR/.clift/overrides/version_print.sh" <<'SH'
 clift_override_version_print() {
@@ -92,13 +92,29 @@ clift_override_version_print() {
 }
 SH
 
-  # Drive the router directly with CLIFT_FLAG_VERSION=true to simulate the
-  # parser having set the flag from `mycli greet --version`. This avoids
-  # building a full task fixture; the router path under test is the
-  # interception block that fires before script dispatch.
+  # Drives the router intercept block directly via CLIFT_FLAG_VERSION=true,
+  # bypassing the parser. Locks intercept-block behaviour without a full task
+  # fixture; see the next test for end-to-end coverage through the wrapper.
   CLIFT_FLAG_VERSION=true CLIFT_ARG_COUNT=0 \
     run bash "$FRAMEWORK_DIR/lib/router/router.sh" "greet"
   [ "$status" -eq 0 ]
   [[ "$output" == *"ROUTER-OVERRIDE:${CLI_NAME}:${CLI_VERSION}"* ]]
+  [[ "$output" != *"$CLI_NAME version $CLI_VERSION"* ]]
+}
+
+@test "version_print override applies end-to-end via mycli <cmd> --version" {
+  mkdir -p "$CLI_DIR/.clift/overrides"
+  cat > "$CLI_DIR/.clift/overrides/version_print.sh" <<'SH'
+clift_override_version_print() {
+  echo "E2E-OVERRIDE:${2}:${3}"
+}
+SH
+
+  # Real wrapper invocation: argv flows wrapper -> task -> router -> parser,
+  # parser sets CLIFT_FLAG_VERSION=true from the merged globals, router
+  # intercept fires the override.
+  run "$CLI_DIR/bin/$CLI_NAME" greet --version
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"E2E-OVERRIDE:${CLI_NAME}:${CLI_VERSION}"* ]]
   [[ "$output" != *"$CLI_NAME version $CLI_VERSION"* ]]
 }
