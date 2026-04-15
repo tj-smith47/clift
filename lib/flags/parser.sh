@@ -84,7 +84,10 @@ clift_parse_args() {
       | join("\n")) + "\u0000"
   ' <<< "$table_json")
 
-  declare -A _ft_type _ft_name_by_short _ft_alias_to_name _ft_deprecated
+  # Co-locate all _ft_* lookup maps here so future readers see the full set at
+  # a glance. _ft_choices / _ft_pattern are populated further below from the
+  # value-validation rows.
+  declare -A _ft_type _ft_name_by_short _ft_alias_to_name _ft_deprecated _ft_choices _ft_pattern
   while IFS=$'\x01' read -r _fn _fs _ftype; do
     [[ -z "$_fn" ]] && continue
     _ft_type["$_fn"]="$_ftype"
@@ -118,8 +121,9 @@ clift_parse_args() {
 
   # Populate value-validation maps. _ft_choices[name] is the comma-separated
   # choice list (empty means no constraint); _ft_pattern[name] is the regex
-  # pattern (empty means no constraint). Either or both may be set.
-  declare -A _ft_choices _ft_pattern
+  # pattern (empty means no constraint). Either or both may be set. Arrays
+  # themselves are declared at the top of the function next to the other
+  # _ft_* maps for scan-ability.
   while IFS=$'\x01' read -r _vname _vchoices _vpattern; do
     [[ -z "$_vname" ]] && continue
     [[ -n "$_vchoices" ]] && _ft_choices["$_vname"]="$_vchoices"
@@ -141,6 +145,7 @@ clift_parse_args() {
       fi
     fi
     if [[ -n "$pattern" ]]; then
+      # SC2076: pattern must NOT be quoted — bash =~ requires unquoted regex on RHS.
       # shellcheck disable=SC2076
       if ! [[ "$value" =~ $pattern ]]; then
         clift_err_invalid_pattern "$name" "$value" "$pattern"
@@ -465,8 +470,12 @@ clift_parse_args() {
   # a choices tightening) and BEFORE required-flag validation, so the error
   # named is the one the user can actually fix. For list flags, each element
   # is validated individually; the first failing element reports the error.
+  #
+  # Iterate in lexicographic order of flag name so that when multiple flags
+  # have invalid values the reported error is deterministic across machines —
+  # bash associative-array key order is otherwise undefined.
   local _vn _vtype _vvar _vcount _vi _vitem
-  for _vn in "${!_ft_type[@]}"; do
+  for _vn in $(printf '%s\n' "${!_ft_type[@]}" | sort); do
     # Skip flags with no constraint declared
     if [[ -z "${_ft_choices[$_vn]:-}" && -z "${_ft_pattern[$_vn]:-}" ]]; then
       continue

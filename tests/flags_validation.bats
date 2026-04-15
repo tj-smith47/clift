@@ -40,7 +40,9 @@ JSON
     clift_parse_args '$TEST_DIR/flags.json' --level=bogus
   "
   [ "$status" -ne 0 ]
-  [[ "$output" == *"not one of"* ]]
+  [[ "$output" == *"requires"* ]]
+  [[ "$output" == *"one of"* ]]
+  [[ "$output" == *"got"* ]]
   [[ "$output" == *"low"* ]]
   [[ "$output" == *"mid"* ]]
   [[ "$output" == *"high"* ]]
@@ -61,7 +63,9 @@ JSON
     clift_parse_args '$TEST_DIR/flags.json' --tag=a,zzz,b
   "
   [ "$status" -ne 0 ]
-  [[ "$output" == *"not one of"* ]]
+  [[ "$output" == *"requires"* ]]
+  [[ "$output" == *"one of"* ]]
+  [[ "$output" == *"got"* ]]
   [[ "$output" == *"zzz"* ]]
 }
 
@@ -97,7 +101,7 @@ JSON
   [[ "$output" == *"ADDR=10.0.0.1"* ]]
 }
 
-@test "pattern: non-matching value errors with 'does not match pattern'" {
+@test "pattern: non-matching value errors with 'requires ... pattern'" {
   cat > "$TEST_DIR/flags.json" <<'JSON'
 [
   {"name": "addr", "type": "string", "pattern": "^[0-9]+$"}
@@ -108,7 +112,9 @@ JSON
     clift_parse_args '$TEST_DIR/flags.json' --addr=nope
   "
   [ "$status" -ne 0 ]
-  [[ "$output" == *"does not match pattern"* ]]
+  [[ "$output" == *"requires"* ]]
+  [[ "$output" == *"pattern"* ]]
+  [[ "$output" == *"got"* ]]
   [[ "$output" == *"--addr"* ]]
   [[ "$output" == *"nope"* ]]
 }
@@ -308,7 +314,9 @@ JSON
     clift_parse_args '$TEST_DIR/flags.json' --port=22
   "
   [ "$status" -ne 0 ]
-  [[ "$output" == *"not one of"* ]]
+  [[ "$output" == *"requires"* ]]
+  [[ "$output" == *"one of"* ]]
+  [[ "$output" == *"got"* ]]
   [[ "$output" == *"--port"* ]]
 }
 
@@ -359,4 +367,111 @@ YAML
   [ "$status" -eq 0 ]
   [[ "$output" == *"(one of: s1, s2)"* ]]
   [[ "$output" == *"(matches: ^s[0-9]+\$)"* ]]
+}
+
+# --- I2: Runtime choices on int: negatives + leading zeros -----------------
+
+@test "choices int: negative and zero values accepted when listed" {
+  cat > "$TEST_DIR/flags.json" <<'JSON'
+[
+  {"name": "delta", "type": "int", "choices": ["-1", "0", "1"]}
+]
+JSON
+  # -1 accepted
+  run bash -c "
+    source '$FRAMEWORK_DIR/lib/flags/parser.sh'
+    clift_parse_args '$TEST_DIR/flags.json' --delta=-1
+    echo \"DELTA=\${CLIFT_FLAG_DELTA}\"
+  "
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"DELTA=-1"* ]]
+
+  # 0 accepted
+  run bash -c "
+    source '$FRAMEWORK_DIR/lib/flags/parser.sh'
+    clift_parse_args '$TEST_DIR/flags.json' --delta=0
+    echo \"DELTA=\${CLIFT_FLAG_DELTA}\"
+  "
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"DELTA=0"* ]]
+
+  # 1 accepted
+  run bash -c "
+    source '$FRAMEWORK_DIR/lib/flags/parser.sh'
+    clift_parse_args '$TEST_DIR/flags.json' --delta=1
+    echo \"DELTA=\${CLIFT_FLAG_DELTA}\"
+  "
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"DELTA=1"* ]]
+
+  # 2 rejected
+  run bash -c "
+    source '$FRAMEWORK_DIR/lib/flags/parser.sh'
+    clift_parse_args '$TEST_DIR/flags.json' --delta=2
+  "
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"requires"* ]]
+  [[ "$output" == *"one of"* ]]
+  [[ "$output" == *"got"* ]]
+}
+
+@test "choices int: leading-zero choices match literally; unpadded form rejected" {
+  cat > "$TEST_DIR/flags.json" <<'JSON'
+[
+  {"name": "slot", "type": "int", "choices": ["01", "02"]}
+]
+JSON
+  # "01" accepted (literal string match against the choice list)
+  run bash -c "
+    source '$FRAMEWORK_DIR/lib/flags/parser.sh'
+    clift_parse_args '$TEST_DIR/flags.json' --slot=01
+    echo \"SLOT=\${CLIFT_FLAG_SLOT}\"
+  "
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"SLOT=01"* ]]
+
+  # "1" rejected — passes int type check, fails choices membership
+  run bash -c "
+    source '$FRAMEWORK_DIR/lib/flags/parser.sh'
+    clift_parse_args '$TEST_DIR/flags.json' --slot=1
+  "
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"requires"* ]]
+  [[ "$output" == *"one of"* ]]
+  [[ "$output" == *"got"* ]]
+}
+
+# --- M3: Help-suffix order pin --------------------------------------------
+
+# Lock the exact order of the rendered suffixes so a refactor to the
+# render_flags.sh pipeline can't silently re-order them. Order per the
+# rendering code: (one of: ...) (matches: ...) (required|default: ...) (deprecated).
+@test "render_flags: suffix order is (one of) (matches) (default) (deprecated)" {
+  run bash -c "
+    source '$FRAMEWORK_DIR/lib/help/render_flags.sh'
+    clift_render_flags '[{\"name\":\"tier\",\"type\":\"string\",\"desc\":\"Tier\",\"choices\":[\"s1\",\"s2\"],\"pattern\":\"^s[0-9]+\$\",\"default\":\"s1\",\"deprecated\":\"use --rank\"}]'
+  "
+  [ "$status" -eq 0 ]
+  # Assert the relative order with a single regex covering all four suffixes.
+  echo "$output" | grep -Eq '\(one of: s1, s2\).*\(matches: \^s\[0-9\]\+\$\).*\(default: s1\).*\(deprecated\)'
+}
+
+# --- S2: choices declared but flag never passed ---------------------------
+
+# Without a default and without the flag being supplied, no validation should
+# fire. Locks the [[ -z "${!_vvar+x}" ]] skip in parser.sh.
+@test "choices declared but flag never passed: parser exits 0" {
+  cat > "$TEST_DIR/flags.json" <<'JSON'
+[
+  {"name": "level", "type": "string", "choices": ["a", "b", "c"]}
+]
+JSON
+  run bash -c "
+    source '$FRAMEWORK_DIR/lib/flags/parser.sh'
+    clift_parse_args '$TEST_DIR/flags.json'
+    echo \"SET=\${CLIFT_FLAG_LEVEL+yes}\"
+  "
+  [ "$status" -eq 0 ]
+  # The flag should be unset — no default, not passed, no validation fired.
+  [[ "$output" != *"SET=yes"* ]]
 }
