@@ -73,11 +73,17 @@ Populated as Phase 3 tasks land.
 ## How it works
 
 The runtime prelude (`lib/runtime/prelude.sh`) sources
-`lib/runtime/overrides.sh`, which exports two functions:
+`lib/runtime/overrides.sh`, which exposes **one public function**:
 
-- `clift_load_override <slot> [task]` — resolves and sources the right file
-  for `<slot>` (no-op when nothing matches).
 - `clift_call_override <slot> <default_fn> [--task <name>] [args...]` —
   loads the override, then calls `clift_override_<slot>` if defined, else
   calls `default_fn` directly. Framework call sites use this to make every
   slot overridable with one line.
+
+  Positional contract: when `--task <name>` is supplied, it MUST be the
+  first pair of args after `<default_fn>`. Everything else is forwarded
+  verbatim to the override (or the default).
+
+The internal resolver (`_clift_load_override`) is not part of the public
+surface — prefixed with `_` by convention. Call sites should always go
+through `clift_call_override`.
