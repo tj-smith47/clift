@@ -3,13 +3,22 @@ set -euo pipefail
 
 # log_info / log_error / log_warn / log_success / log_debug are auto-loaded by clift.
 
-# Flag values arrive as CLIFT_FLAG_<NAME> (uppercased, dashes→underscores).
+# Flag values are available two ways (both are populated — pick whichever reads best):
+#   ${CLIFT_FLAGS[dry-run]}    — assoc array, dash-preserving keys (Cobra-style)
+#   ${CLIFT_FLAG_DRY_RUN}      — env var, uppercased with dashes→underscores (back-compat)
+#
 # Positional args: CLIFT_POS_1, CLIFT_POS_2, ... CLIFT_POS_COUNT.
 # Task name: CLIFT_TASK (e.g. "%%CMD_NAME%%" or "%%CMD_NAME%%:sub").
 #
 # Examples:
-#   if [[ "${CLIFT_FLAG_DRY_RUN:-}" == "true" ]]; then log_info "dry run"; fi
-#   target="${CLIFT_FLAG_TARGET:-staging}"
+#   if [[ "${CLIFT_FLAGS[dry-run]:-}" == "true" ]]; then log_info "dry run"; fi
+#   # equivalent:
+#   # if [[ "${CLIFT_FLAG_DRY_RUN:-}" == "true" ]]; then log_info "dry run"; fi
+#   target="${CLIFT_FLAGS[target]:-staging}"
 #   file="${CLIFT_POS_1:?missing file argument}"
+#
+# List flags:
+#   CLIFT_FLAGS[tag]              — comma-joined: "a,b,c"
+#   CLIFT_FLAG_TAG_1 … _TAG_COUNT — per-element access (unchanged)
 
 log_info "Hello from %%CMD_NAME%% (task=${CLIFT_TASK:-%%CMD_NAME%%})"

@@ -156,6 +156,50 @@ Rules:
 
 `CLIFT_PERSIST_BOUND` is an internal wrapper-to-parser protocol. The wrapper exports the space-separated list of persistent flag names it early-bound (pre-command occurrences) so the parser can skip default application for those names — a wrapper-bound value is a user value and must outrank a default. Users should not set this manually; it is not part of the public contract and may change between releases.
 
+## Accessing parsed flags from your script
+
+Every parsed flag is exposed via **two** populated surfaces. Pick whichever reads best — they always agree on the same value.
+
+### `${CLIFT_FLAGS[name]}` -- associative array, dash-preserving
+
+```bash
+if [[ "${CLIFT_FLAGS[dry-run]:-}" == "true" ]]; then
+  log_info "dry run"
+fi
+target="${CLIFT_FLAGS[target]:-staging}"
+```
+
+Keys match the declared flag `name` exactly — including dashes. `CLIFT_FLAGS[dry-run]`, not `CLIFT_FLAGS[DRY_RUN]`. Absent keys mean "not provided and no default" (use `${CLIFT_FLAGS[key]:-fallback}` as normal).
+
+Requires bash 4.2+ (clift's documented floor). The framework sources the array from a tempfile during the runtime prelude; subshells that don't re-source the prelude fall back to the env-var form below.
+
+### `${CLIFT_FLAG_<UPPER>}` -- env var, underscore-substituted (back-compat)
+
+```bash
+if [[ "${CLIFT_FLAG_DRY_RUN:-}" == "true" ]]; then
+  log_info "dry run"
+fi
+target="${CLIFT_FLAG_TARGET:-staging}"
+```
+
+Name is uppercased and dashes become underscores (`dry-run` → `DRY_RUN`). These env vars are inherited by subshells (`$(bash -c …)`) natively.
+
+### List flags
+
+Both surfaces see list flags:
+
+| Access | Value |
+|---|---|
+| `${CLIFT_FLAGS[tag]}` | comma-joined: `"a,b,c"` |
+| `CLIFT_FLAG_TAG_1`, `CLIFT_FLAG_TAG_2`, … | per-element |
+| `CLIFT_FLAG_TAG_COUNT` | element count |
+
+Splitting `${CLIFT_FLAGS[tag]}` on `,` is lossy if an element itself contains a comma — use the indexed env vars for that case.
+
+### Persistent flags
+
+Persistent flags (declared in the root `vars.PERSISTENT_FLAGS`) appear in `CLIFT_FLAGS` under their declared name like any other flag. Wrapper pre-binds and post-command occurrences resolve to a single final value (last-write-wins) before the array is materialized.
+
 ## Validation
 
 Schemas are validated at scaffold time by `new:cmd` and `new:subcmd`, at `setup:cli`, and at cache rebuild. Errors surface immediately, not at first invocation.

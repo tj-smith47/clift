@@ -104,7 +104,12 @@ fi
 # Step 7: Parse flags via the merged table.
 
 tmp_table="$(mktemp)"
-trap 'rm -f "$tmp_table"' EXIT
+# CLIFT_FLAGS_FILE: NUL-separated <name>=<value> records written by the parser
+# for the prelude to materialize as declare -A CLIFT_FLAGS in the user script.
+# Exported so the exec.sh → prelude chain (different process) can read it.
+CLIFT_FLAGS_FILE="$(mktemp)"
+export CLIFT_FLAGS_FILE
+trap 'rm -f "$tmp_table" "$CLIFT_FLAGS_FILE"' EXIT
 echo "$merged_table" > "$tmp_table"
 
 # shellcheck source=/dev/null

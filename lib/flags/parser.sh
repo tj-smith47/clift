@@ -510,5 +510,47 @@ clift_parse_args() {
     fi
   done <<< "$_required_names"
 
+  # Emit the CLIFT_FLAGS assoc-array source-of-truth. The prelude reads this
+  # file (NUL-separated <name>=<value> records) and materializes
+  # declare -A CLIFT_FLAGS with dash-preserving keys. The existing
+  # CLIFT_FLAG_<NAME> env vars above stay untouched for back-compat.
+  #
+  # Emit once at end-of-parse (not per-assignment) so:
+  #   - list flags record a single comma-joined value (no dup key rewrite)
+  #   - defaults, persistent-flag pre-binds, and user values are all included
+  #   - a failing parse writes nothing (router's trap still cleans the file)
+  if [[ -n "${CLIFT_FLAGS_FILE:-}" ]]; then
+    local _en _etype _evar _ecount _ei _eval _ejoined _eitem_var
+    : > "$CLIFT_FLAGS_FILE"
+    for _en in "${!_ft_type[@]}"; do
+      _etype="${_ft_type[$_en]}"
+      _clift_var_name "$_en"; _evar="$_CLIFT_VAR"
+      case "$_etype" in
+        list)
+          _ecount_var="${_evar}_COUNT"
+          _ecount="${!_ecount_var:-0}"
+          (( _ecount == 0 )) && continue
+          _ejoined=""
+          for (( _ei=1; _ei<=_ecount; _ei++ )); do
+            _eitem_var="${_evar}_${_ei}"
+            if (( _ei == 1 )); then
+              _ejoined="${!_eitem_var:-}"
+            else
+              _ejoined="${_ejoined},${!_eitem_var:-}"
+            fi
+          done
+          printf '%s=%s\0' "$_en" "$_ejoined" >> "$CLIFT_FLAGS_FILE"
+          ;;
+        *)
+          # bool / string / int: record only if the env var is set.
+          # Unset bool means "not provided" — absent from CLIFT_FLAGS too.
+          [[ -z "${!_evar+x}" ]] && continue
+          _eval="${!_evar}"
+          printf '%s=%s\0' "$_en" "$_eval" >> "$CLIFT_FLAGS_FILE"
+          ;;
+      esac
+    done
+  fi
+
   return 0
 }
