@@ -18,6 +18,11 @@ Overrides resolve with first-hit-wins precedence:
 When both files exist for the same slot on the same invocation, the
 per-command file is sourced and the CLI-global file is not. No merging.
 
+**Tier depth is one segment.** Only the first segment of a colon-separated
+task is used to resolve the per-command tier — `deploy:prod` resolves to
+`cmds/deploy/overrides/<slot>.sh`; nested `cmds/deploy/prod/overrides/...`
+is NOT consulted. This rule is consistent across every slot.
+
 ## Naming convention
 
 Override functions follow one of two patterns:
@@ -139,6 +144,13 @@ log_warn() { printf '[WARN ] %s\n' "$*" >&2; }
 That's the entire override. No `clift_override_log_info` wrapper, no
 `default_fn` argument — just redefine the helpers you want to change.
 
+**Definitions only.** Put only function definitions in `log.sh`; executable
+code at source-time sees a partial environment. In particular, `CLIFT_FLAGS`
+is built by the prelude AFTER this override is sourced — a top-level line
+like `if [[ "${CLIFT_FLAGS[verbose]}" == true ]]; then …` in `log.sh`
+observes an empty map and will not do what you expect. Reference such state
+from inside the redefined helper, where it is evaluated per call.
+
 ### Recipe — wrap and delegate to the framework default
 
 To call the framework default from within the override, save the original
@@ -157,27 +169,33 @@ log_info() {
 The `eval`+`tail -n +2` trick copies the function body; calling
 `_orig_log_info` from the override runs the framework's original logic.
 
+**Order matters.** The `declare -f log_info` line MUST run BEFORE you
+redefine `log_info`. If you reverse the order — redefine `log_info` first,
+then run `declare -f log_info` — `_orig_log_info` captures your override
+instead of the framework default, and calling it from the override produces
+infinite recursion.
+
 ### Subshell inheritance — the export caveat
 
-The framework already runs `export -f log_info log_warn log_error
-log_success log_debug log_suggest die _clift_log_format` in
-`lib/log/log.sh`. Bash propagates the LATEST definition of an
-already-exported function to subshells via `BASH_FUNC_<name>%%` env vars,
-so in practice an unexported user redefinition still reaches subshells
-(`$(bash -c 'log_info x')`) — bash re-stamps the exported value on
-every redefinition.
+The shadow contract is "redefine and you win in this shell." Subshell
+propagation is a free-but-implementation-dependent bonus on top — rely on
+explicit `export -f` when you need it to cross a process boundary.
 
-That said, if you DO disable the framework's exports (or define an
-entirely new helper your scripts will call from subshells), `export -f` it
-yourself to be safe:
+The bonus works because the framework runs `export -f log_info log_warn
+log_error log_success log_debug log_suggest die _clift_log_format` in
+`lib/log/log.sh`. Once a function has been exported, bash propagates the
+LATEST definition to subshells via `BASH_FUNC_<name>%%` env vars, so in
+practice an unexported user redefinition also reaches subshells
+(`$(bash -c 'log_info x')`) — bash re-stamps the exported value on every
+redefinition.
+
+If you DO disable the framework's exports (or define an entirely new helper
+your scripts will call from subshells), `export -f` it yourself to be safe:
 
 ```bash
 log_info() { printf '[INFO ] %s\n' "$*"; }
 export -f log_info
 ```
-
-The shadow contract is "redefine and you win in this shell"; subshell
-propagation is a free-but-implementation-dependent bonus on top.
 
 ### Per-command tier
 
@@ -185,6 +203,14 @@ propagation is a free-but-implementation-dependent bonus on top.
 first segment matches `<cmd>`. Same first-hit-wins precedence as the
 callback-style slots — when both files exist, the per-command file is
 sourced and the CLI-global file is not.
+
+### Composition with other slots
+
+Because the log slot is shadow-based, log-helper redefinitions are visible
+everywhere in the same process. Callback-slot bodies (`help_list`,
+`help_detail`, `version_print`, future `command_pre` / `command_post`, …)
+that call `log_info` / `log_error` / `log_debug` pick up log-shadow
+overrides automatically — no extra plumbing required.
 
 ## How it works
 

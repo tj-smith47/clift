@@ -43,8 +43,11 @@ SH
   [ "$status" -eq 0 ]
   [[ "$output" == *"PREFIX-CUSTOM: hello from greet"* ]]
   # Framework default's "minimal" theme would emit just "hello from greet"
-  # on its own line — the override replaces that path entirely.
-  [[ "$output" != $'hello from greet' ]]
+  # on its own line — the override must fully REPLACE that path, not run
+  # alongside it. A bare inequality check ([[ "$output" != "hello from greet" ]])
+  # passes even if both paths fire, so we assert the default line is absent
+  # on its own line specifically.
+  ! grep -qE '^hello from greet$' <<<"$output"
 }
 
 # --- 2. Framework default remains when no override file exists ---------------
@@ -119,6 +122,76 @@ SH
   [ "$status" -eq 0 ]
   [[ "$output" == *"IMPLICIT: parent-msg"* ]]
   [[ "$output" == *"IMPLICIT: subshell-msg"* ]]
+}
+
+# --- 4c. log_error shadow works on the stderr path ---------------------------
+
+@test "log: CLI-global override of log_error shadows framework default (stderr)" {
+  # Symmetry with test 1, but for the stderr-bound helper. log_error writes
+  # to fd 2 — if a future refactor forgets to re-stamp the exported function
+  # for helpers that redirect to stderr, only this test will catch it.
+  mkdir -p "$CLI_DIR/.clift/overrides"
+  cat > "$CLI_DIR/.clift/overrides/log.sh" <<'SH'
+log_error() { printf 'ERR-CUSTOM: %s\n' "$*" >&2; }
+SH
+
+  cat > "$CLI_DIR/cmds/greet/greet.sh" <<'SH'
+log_error "boom from greet"
+SH
+
+  run "$CLI_DIR/bin/$CLI_NAME" greet
+  [ "$status" -eq 0 ]
+  # BATS merges stderr into $output for `run` by default.
+  [[ "$output" == *"ERR-CUSTOM: boom from greet"* ]]
+  # Framework default's "minimal" theme emits "error: boom from greet";
+  # the override must replace that path entirely.
+  ! grep -qE '^error: boom from greet$' <<<"$output"
+}
+
+# --- 4d. log_error override reaches subshells via implicit re-export --------
+
+@test "log: redefining an already-exported log_error implicitly re-exports for subshells" {
+  # Same mechanism as test 4b, but exercised on the stderr helper. Locks the
+  # claim that implicit re-export works for every log_* helper, not just
+  # log_info — so a future refactor that drops `export -f` on log_error
+  # specifically cannot silently break this contract.
+  mkdir -p "$CLI_DIR/.clift/overrides"
+  cat > "$CLI_DIR/.clift/overrides/log.sh" <<'SH'
+log_error() { printf 'IMPLICIT-ERR: %s\n' "$*" >&2; }
+SH
+
+  cat > "$CLI_DIR/cmds/greet/greet.sh" <<'SH'
+log_error parent-err
+bash -c 'log_error subshell-err'
+SH
+
+  run "$CLI_DIR/bin/$CLI_NAME" greet
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"IMPLICIT-ERR: parent-err"* ]]
+  [[ "$output" == *"IMPLICIT-ERR: subshell-err"* ]]
+}
+
+# --- 4e. log_debug shadow works under the VERBOSE gate -----------------------
+
+@test "log: CLI-global override of log_debug shadows framework default (verbose-gated)" {
+  # log_debug short-circuits unless VERBOSE=true. The override should replace
+  # the gated path too — and the caller enables verbose via --verbose, which
+  # the prelude/router translate into the VERBOSE env var consumed by log.sh.
+  mkdir -p "$CLI_DIR/.clift/overrides"
+  cat > "$CLI_DIR/.clift/overrides/log.sh" <<'SH'
+log_debug() { printf 'DBG-CUSTOM: %s\n' "$*" >&2; }
+SH
+
+  cat > "$CLI_DIR/cmds/greet/greet.sh" <<'SH'
+log_debug "trace from greet"
+SH
+
+  run "$CLI_DIR/bin/$CLI_NAME" greet --verbose
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"DBG-CUSTOM: trace from greet"* ]]
+  # Framework default's "minimal" theme emits "debug: trace from greet";
+  # the override must replace that path entirely.
+  ! grep -qE '^debug: trace from greet$' <<<"$output"
 }
 
 # --- 5. Calling the framework default via the rename idiom -------------------
