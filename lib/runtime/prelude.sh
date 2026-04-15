@@ -20,6 +20,19 @@ fi
 # shellcheck source=/dev/null
 source "${FRAMEWORK_DIR}/lib/log/log.sh"
 
+# Override loader is sourced here (early) so we can apply the log.sh slot
+# right after log.sh is loaded but before user scripts run. Other slots are
+# resolved lazily at their respective call sites via clift_call_override —
+# log overrides are special: they use FUNCTION SHADOWING (not callback
+# indirection) for performance. Logging is on the hot path of every user
+# script; a callback per log call would be too costly. Instead we let the
+# user redefine log_info / log_error / etc. and bash's "last-defined-wins"
+# semantics make the user's version transparently shadow the framework's.
+# See docs/cli/overrides.md for the full rationale + caveats.
+# shellcheck source=/dev/null
+source "${FRAMEWORK_DIR}/lib/runtime/overrides.sh"
+_clift_load_override log "${CLIFT_TASK:-}"
+
 # CLIFT_FLAGS — associative array mirror of parsed flags, dash-preserving keys
 # (e.g., ${CLIFT_FLAGS[dry-run]}). The legacy CLIFT_FLAG_<UPPER_NAME> env vars
 # (dashes → underscores) are unchanged and still exported by the parser.
@@ -57,8 +70,6 @@ if [[ -n "${CLIFT_FLAGS_FILE:-}" && -f "${CLIFT_FLAGS_FILE}" ]]; then
   unset CLIFT_FLAGS_FILE
 fi
 
-# Override loader — after log.sh and CLIFT_FLAGS so override functions can use
-# both. Sourcing is a plain file-read; the loader itself resolves override
-# files lazily at call sites via clift_call_override.
-# shellcheck source=/dev/null
-source "${FRAMEWORK_DIR}/lib/runtime/overrides.sh"
+# Override loader was sourced earlier (right after log.sh) so the log slot
+# could shadow the defaults before any user code runs. The source guard in
+# overrides.sh makes this comment a no-op note rather than a re-source.

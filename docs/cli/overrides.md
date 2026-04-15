@@ -65,9 +65,9 @@ keeps user code decoupled from the framework's internal function names.
 | `help_list` | `lib/help/list.sh` | `clift_override_help_list <default_fn> <CLI_DIR>` | Top-level `mycli --help` listing. Only the CLI-global tier applies — there is no "current command" at the top level. |
 | `help_detail` | `lib/help/detail.sh` | `clift_override_help_detail <default_fn> <task_name> <CLI_DIR>` | Per-command `mycli <cmd> --help` detail view. Per-command tier (`cmds/<cmd>/overrides/help_detail.sh`) takes precedence over CLI-global. |
 | `version_print` | `lib/wrapper/wrapper.sh.tmpl`, `lib/router/router.sh`, `lib/version/version.sh` | `clift_override_version_print <default_fn> <CLI_NAME> <CLI_VERSION> <CLI_DIR>` | Controls the line printed by `mycli --version`, `mycli -V`, and the framework's `mycli version` subcommand. The framework default is `clift_default_version_print`, which prints `"<CLI_NAME> version <CLI_VERSION>"`. Override only replaces that one line — the `version` subcommand's cfgd-status block still follows (see [cfgd-status interleaving](#cfgd-status-interleaving) below). |
+| `log` | `lib/log/log.sh` | **shadow-based** — see [Logging slot](#logging-slot-shadow-based-exception) below | Sourced by the prelude AFTER `lib/log/log.sh`. The user redefines any of `log_info`, `log_error`, `log_warn`, `log_success`, `log_debug` directly. **Does not use the `clift_override_<slot>` callback signature.** Per-command tier (`cmds/<cmd>/overrides/log.sh`) takes precedence. |
 
-Additional slots (`command_pre`/`command_post`, `log_<level>`, …) land with
-Tasks 3.4 – 3.6.
+Additional slots (`command_pre`/`command_post`, …) land with Tasks 3.5 – 3.6.
 
 #### cfgd-status interleaving
 
@@ -109,6 +109,82 @@ See also:
 HELP
 }
 ```
+
+## Logging slot (shadow-based exception)
+
+The `log` slot is the one slot that does NOT use the
+`clift_override_<slot>(default_fn, …)` callback pattern. Instead, it relies
+on bash's "last-defined-wins" function semantics: the user's
+`.clift/overrides/log.sh` is sourced AFTER `lib/log/log.sh`, and any
+function the user redefines transparently shadows the framework version.
+
+### Why a shadow exception?
+
+Logging is on the hot path of every user script — `log_info`, `log_debug`,
+and friends are called hundreds-to-thousands of times per command in larger
+scripts. A callback indirection per call (`clift_call_override log_info …`)
+would add a measurable overhead at scale. Shadow-redefinition is zero cost
+per call: bash resolves the user's function the same way it resolves any
+other function.
+
+### Recipe — full replacement
+
+`.clift/overrides/log.sh`:
+
+```bash
+log_info() { printf '[INFO ] %s\n' "$*"; }
+log_warn() { printf '[WARN ] %s\n' "$*" >&2; }
+```
+
+That's the entire override. No `clift_override_log_info` wrapper, no
+`default_fn` argument — just redefine the helpers you want to change.
+
+### Recipe — wrap and delegate to the framework default
+
+To call the framework default from within the override, save the original
+under a new name BEFORE redefining:
+
+```bash
+# Snapshot the framework's log_info into _orig_log_info, then redefine.
+eval "_orig_log_info() $(declare -f log_info | tail -n +2)"
+log_info() {
+  printf 'BEFORE\n'
+  _orig_log_info "$@"
+  printf 'AFTER\n'
+}
+```
+
+The `eval`+`tail -n +2` trick copies the function body; calling
+`_orig_log_info` from the override runs the framework's original logic.
+
+### Subshell inheritance — the export caveat
+
+The framework already runs `export -f log_info log_warn log_error
+log_success log_debug log_suggest die _clift_log_format` in
+`lib/log/log.sh`. Bash propagates the LATEST definition of an
+already-exported function to subshells via `BASH_FUNC_<name>%%` env vars,
+so in practice an unexported user redefinition still reaches subshells
+(`$(bash -c 'log_info x')`) — bash re-stamps the exported value on
+every redefinition.
+
+That said, if you DO disable the framework's exports (or define an
+entirely new helper your scripts will call from subshells), `export -f` it
+yourself to be safe:
+
+```bash
+log_info() { printf '[INFO ] %s\n' "$*"; }
+export -f log_info
+```
+
+The shadow contract is "redefine and you win in this shell"; subshell
+propagation is a free-but-implementation-dependent bonus on top.
+
+### Per-command tier
+
+`cmds/<cmd>/overrides/log.sh` overrides apply only when the invoked task's
+first segment matches `<cmd>`. Same first-hit-wins precedence as the
+callback-style slots — when both files exist, the per-command file is
+sourced and the CLI-global file is not.
 
 ## How it works
 
