@@ -121,7 +121,11 @@ _clift_help_detail_default() {
     if [[ -n "$cmd_flags" && "$cmd_flags" != "null" && "$cmd_flags" != '{"passthrough":true}' ]]; then
       # Load root globals to split local vs global flags
       local root_globals local_flags global_flags
-      root_globals="$(cat "$_CLIFT_GLOBALS_JSON" 2>/dev/null || echo '[]')"
+      if [[ -f "$_CLIFT_GLOBALS_JSON" ]]; then
+        root_globals="$(<"$_CLIFT_GLOBALS_JSON")"
+      else
+        root_globals='[]'
+      fi
       # Split into local flags (not in root globals) and global flags (in root globals)
       {
         IFS=$'\t' read -r local_flags global_flags
@@ -145,7 +149,7 @@ _clift_help_detail_default() {
   fi
 }
 
-_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+_LIB_DIR="${_LIB_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 # shellcheck source=../log/log.sh
 source "${_LIB_DIR}/log/log.sh"
 # shellcheck source=../runtime/overrides.sh

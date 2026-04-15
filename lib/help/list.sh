@@ -27,6 +27,23 @@ TASKFILE_DIR="$(dirname "$TASKFILE_PATH")"
 CLI_DIR="${CLI_DIR:-$TASKFILE_DIR}"
 export CLI_DIR
 
+# Helper: render Global Flags section from root Taskfile vars.FLAGS.
+# Lifted to file scope so it isn't redefined on every call of
+# `_clift_help_list_default` (e.g. when a wrapping override invokes it).
+_render_global_flags() {
+  local gf
+  if [[ -f "$_CLIFT_GLOBALS_JSON" ]]; then
+    gf="$(<"$_CLIFT_GLOBALS_JSON")"
+  else
+    gf='[]'
+  fi
+  if [[ -n "$gf" && "$gf" != "[]" && "$gf" != "null" ]]; then
+    echo "Global Flags:"
+    clift_render_flags "$gf"
+    echo ""
+  fi
+}
+
 # Default implementation — rendered when no override is defined, or invoked
 # as the `$1` callback by a wrapping override.
 _clift_help_list_default() {
@@ -112,17 +129,6 @@ _clift_help_list_default() {
     )
   ')
 
-  # Helper: render Global Flags section from root Taskfile vars.FLAGS
-  _render_global_flags() {
-    local gf
-    gf="$(cat "$_CLIFT_GLOBALS_JSON" 2>/dev/null || echo '[]')"
-    if [[ -n "$gf" && "$gf" != "[]" && "$gf" != "null" ]]; then
-      echo "Global Flags:"
-      clift_render_flags "$gf"
-      echo ""
-    fi
-  }
-
   if [[ -z "$all_entries" ]]; then
     echo ""
     echo "  (no commands found)"
@@ -180,7 +186,7 @@ _clift_help_list_default() {
   fi
 }
 
-_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+_LIB_DIR="${_LIB_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 # shellcheck source=../log/log.sh
 source "${_LIB_DIR}/log/log.sh"
 # shellcheck source=../runtime/overrides.sh
