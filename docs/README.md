@@ -10,6 +10,11 @@ User-facing documentation for clift, the CLI framework built on go-task.
 - [Scripts](scripts.md) — command scripts and the env-var contract.
 - [Cache](cache.md) — `.clift/` layout and staleness rules.
 - [Errors](errors.md) — error-message conventions and exit codes.
+
+## CLI-author reference
+
+Deeper references for people building a CLI on top of clift. Future Phase 3/4 docs (e.g. `cli/caching.md`, `cli/overrides.md`) land in this section.
+
 - [go-task features](cli/task-features.md) — passthrough task fields (`deps`, `preconditions`, `sources`, etc.) available in command Taskfiles.
 
 For the canonical go-task reference, see [taskfile.dev](https://taskfile.dev).

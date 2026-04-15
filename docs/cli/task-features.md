@@ -63,6 +63,8 @@ dotenv: [".env.staging"]
 
 Shell options passed to the task's shell invocation. Equivalent to `set -o <opt>` at the top of the cmd. Common choices: `pipefail`, `errexit`, `nounset`.
 
+clift's router already runs user scripts under `set -euo pipefail`; `set:` on a task affects go-task's shell (e.g. for inline `cmd:` blocks), not your routed `.sh` script.
+
 ```yaml
 set: [pipefail, errexit]
 ```
@@ -70,6 +72,8 @@ set: [pipefail, errexit]
 ## prompt / interactive
 
 `prompt:` asks the user to confirm before running (good for destructive commands). `interactive: true` tells go-task the task needs a TTY (don't capture output, don't run in parallel groups that buffer).
+
+`prompt:` only fires when attached to an interactive TTY; non-interactive runs (CI) auto-skip the confirmation. Pass `--yes` to go-task (or confirm your CI has no TTY) for predictable behavior.
 
 ```yaml
 prompt: "This will drop the staging DB. Continue?"

@@ -2,7 +2,8 @@ version: '3'
 
 vars:
   FLAGS: []
-  # Example flag declarations (uncomment and adapt):
+  # To add flags: drop the trailing '[]' from the FLAGS line above, then
+  # uncomment example(s) below (they become list items under FLAGS):
   #   - {name: force, short: f, type: bool, desc: "Skip confirmation"}
   #   - {name: tag, type: list, desc: "Repeatable — --tag a --tag b or --tag=a,b"}
 
@@ -16,6 +17,10 @@ tasks:
         %%CLI_NAME%% %%CMD_NAME%% [flags]
     vars:
       FLAGS: []
+      # To add flags: drop the trailing '[]' from the FLAGS line above, then
+      # uncomment example(s) below (they become list items under FLAGS):
+      #   - {name: force, short: f, type: bool, desc: "Skip confirmation"}
+      #   - {name: tag, type: list, desc: "Repeatable — --tag a --tag b or --tag=a,b"}
     cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
     # Optional go-task task fields (all pass through untouched — see docs/cli/task-features.md):
     #   deps: [other:task]                        # run before this task
