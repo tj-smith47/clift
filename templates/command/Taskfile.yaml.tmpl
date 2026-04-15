@@ -2,6 +2,9 @@ version: '3'
 
 vars:
   FLAGS: []
+  # Example flag declarations (uncomment and adapt):
+  #   - {name: force, short: f, type: bool, desc: "Skip confirmation"}
+  #   - {name: tag, type: list, desc: "Repeatable — --tag a --tag b or --tag=a,b"}
 
 tasks:
   default:
@@ -14,6 +17,22 @@ tasks:
     vars:
       FLAGS: []
     cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
+    # Optional go-task task fields (all pass through untouched — see docs/cli/task-features.md):
+    #   deps: [other:task]                        # run before this task
+    #   preconditions:                            # fail fast if unmet
+    #     - {sh: 'test -f config.yaml', msg: "config.yaml missing"}
+    #   requires:                                 # fail if vars unset
+    #     vars: [PROFILE]
+    #   sources: ["src/**/*.go"]                  # fingerprint inputs (with method:)
+    #   generates: ["bin/app"]                    # fingerprint outputs
+    #   method: checksum                          # or: timestamp, none
+    #   status: ["test -f bin/app"]               # custom up-to-date check
+    #   dotenv: [".env"]                          # load env-file
+    #   set: [pipefail, errexit]                  # shell options
+    #   silent: true                              # don't echo cmd
+    #   interactive: true                         # task needs a TTY
+    #   prompt: "Deploy to prod?"                 # confirm before running
+    #   summary: "Long multi-line description"    # shown in `task --summary`
 
   help:
     desc: "Show help for %%CMD_NAME%%"

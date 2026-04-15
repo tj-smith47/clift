@@ -17,8 +17,14 @@ set -euo pipefail
 #   target="${CLIFT_FLAGS[target]:-staging}"
 #   file="${CLIFT_POS_1:?missing file argument}"
 #
-# List flags:
+# List flags (declare with `type: list`, pass as `--tag a --tag b` or `--tag=a,b`):
 #   CLIFT_FLAGS[tag]              — comma-joined: "a,b,c"
 #   CLIFT_FLAG_TAG_1 … _TAG_COUNT — per-element access (unchanged)
+#
+#   # Iterate elements (subshell-safe; prefer over splitting the comma-joined form):
+#   # for ((i=1; i<=${CLIFT_FLAG_TAG_COUNT:-0}; i++)); do
+#   #   v="CLIFT_FLAG_TAG_$i"
+#   #   echo "${!v}"
+#   # done
 
 log_info "Hello from %%CMD_NAME%% (task=${CLIFT_TASK:-%%CMD_NAME%%})"

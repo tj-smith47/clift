@@ -66,7 +66,29 @@ Parser validates integer; negative values (`--count -5`) work.
 - {name: tag, type: list, default: "a,b", desc: "Tags"}
 ```
 
-Script reads: `CLIFT_FLAG_TAG_1`, `CLIFT_FLAG_TAG_2`, ..., `CLIFT_FLAG_TAG_COUNT`.
+Repeatable / list flags accept two user-facing forms:
+
+- Repeated flag: `mycli build --tag a --tag b --tag c`
+- Comma-separated value: `mycli build --tag=a,b,c`
+
+Both forms produce identical env vars — `a,b,c` in every case. With the `default: "a,b"` above, absent-on-command-line resolves to two elements (`a` and `b`).
+
+Script reads (indexed env vars, subshell-safe):
+
+```bash
+for ((i=1; i<=${CLIFT_FLAG_TAG_COUNT:-0}; i++)); do
+  v="CLIFT_FLAG_TAG_$i"
+  echo "${!v}"
+done
+```
+
+Or via the associative array (bash 4.2+, main process only — see [Accessing parsed flags](#accessing-parsed-flags-from-your-script)):
+
+```bash
+# Comma-joined string: "a,b,c". Lossy if an element contains a literal comma —
+# use the indexed env vars above for that case.
+IFS=',' read -ra tags <<< "${CLIFT_FLAGS[tag]:-}"
+```
 
 ### Choices
 
