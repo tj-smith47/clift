@@ -21,6 +21,10 @@ _clift_render_flag_row() {
     (if .type and .type != "bool" then "=<\(.type)>" else "" end) +
     "\t" +
     (.desc // "") +
+    (if (((.choices // null) | type) == "array") and (((.choices // []) | length) > 0)
+     then " (one of: \((.choices // []) | join(", ")))"
+     else "" end) +
+    (if (.pattern // "") != "" then " (matches: \(.pattern))" else "" end) +
     (if .required == true then " (required)" elif .default then " (default: \(.default))" else "" end) +
     (if (.deprecated // "") != "" then " (deprecated)" else "" end)
   ' | column -t -s $'\t' | sed 's/^/  /'

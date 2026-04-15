@@ -38,6 +38,10 @@ _validate_entry_fields() {
   local exclusive="${11:-false}"
   local has_requires="${12:-false}"
   local requires="${13:-}"
+  local has_choices="${14:-false}"
+  local choices_csv="${15:-}"
+  local has_pattern="${16:-false}"
+  local pattern="${17:-}"
 
   # I4: bare-string (or any non-map) entries produce a clean error, no jq leak
   if [[ "$entry_type" != "object" ]]; then
@@ -147,6 +151,93 @@ _validate_entry_fields() {
     return 1
   fi
 
+  # Rule 8: choices/pattern — value validation constraints.
+  # Bool flags carry no user-supplied value (presence is the value), so
+  # declaring either field on a bool is a compile error.
+  if [[ "$type" == "bool" ]]; then
+    if [[ "$has_choices" == "true" ]]; then
+      echo "error: ${context}: flag '$name' is bool and cannot declare 'choices'" >&2
+      return 1
+    fi
+    if [[ "$has_pattern" == "true" ]]; then
+      echo "error: ${context}: flag '$name' is bool and cannot declare 'pattern'" >&2
+      return 1
+    fi
+  fi
+
+  if [[ "$has_choices" == "true" ]]; then
+    # Empty choices array compiles down to empty csv (jq produced empty string
+    # for zero-length array). Reject as meaningless — no value could pass.
+    if [[ -z "$choices_csv" ]]; then
+      echo "error: ${context}: flag '$name' has empty 'choices' array" >&2
+      return 1
+    fi
+    # For int-typed flags, every choice must itself parse as an integer —
+    # otherwise no user value could ever satisfy both the type check and the
+    # choices check. Catch this at compile rather than ship a dead rule.
+    if [[ "$type" == "int" ]]; then
+      local _ci _citems
+      IFS=',' read -ra _citems <<< "$choices_csv"
+      for _ci in "${_citems[@]}"; do
+        if [[ ! "$_ci" =~ ^-?[0-9]+$ ]]; then
+          echo "error: ${context}: flag '$name' is int but 'choices' contains non-integer '$_ci'" >&2
+          return 1
+        fi
+      done
+    fi
+    # Default must be one of the listed choices. For list-type defaults, each
+    # comma-split element must appear. Defense against narrowing `choices` and
+    # forgetting to update a stale default.
+    if [[ "$has_default" == "true" && "$type" != "bool" ]]; then
+      local _choice_list=" ${choices_csv//,/ } "
+      if [[ "$type" == "list" ]]; then
+        local _d _dflt_items
+        IFS=',' read -ra _dflt_items <<< "$default_val"
+        for _d in "${_dflt_items[@]}"; do
+          [[ -z "$_d" ]] && continue
+          if [[ "$_choice_list" != *" $_d "* ]]; then
+            echo "error: ${context}: flag '$name' default element '$_d' is not in choices (${choices_csv//,/, })" >&2
+            return 1
+          fi
+        done
+      else
+        if [[ "$_choice_list" != *" $default_val "* ]]; then
+          echo "error: ${context}: flag '$name' default '$default_val' is not in choices (${choices_csv//,/, })" >&2
+          return 1
+        fi
+      fi
+    fi
+  fi
+
+  if [[ "$has_pattern" == "true" ]]; then
+    # Literal newlines in a pattern break the runtime `[[ =~ ]]` test and are
+    # almost always a YAML-literal mishap. Reject early with a clear message.
+    if [[ "$pattern" == *$'\n'* ]]; then
+      echo "error: ${context}: flag '$name' pattern contains a literal newline" >&2
+      return 1
+    fi
+    if [[ -z "$pattern" ]]; then
+      echo "error: ${context}: flag '$name' has empty 'pattern'" >&2
+      return 1
+    fi
+    # Syntactically validate the regex by running it through bash's own `[[ =~ ]]`
+    # in a subshell (runtime uses the same operator, so compile-time rejection
+    # here exactly matches runtime acceptance). A malformed regex makes `[[ =~ ]]`
+    # exit non-zero with "syntax error" on stderr — we suppress that and surface
+    # our own framed error.
+    if ! ( [[ "" =~ $pattern ]] ) 2>/dev/null; then
+      # Re-test outside the `!` to tell a "no match on empty string" (which is
+      # fine) apart from a real regex syntax error. Bash exits 2 for syntax
+      # errors inside `[[ =~ ]]`; 1 for plain no-match.
+      local _rc
+      ( [[ "" =~ $pattern ]] ) 2>/dev/null; _rc=$?
+      if (( _rc == 2 )); then
+        echo "error: ${context}: flag '$name' has invalid regex pattern '$pattern'" >&2
+        return 1
+      fi
+    fi
+  fi
+
   return 0
 }
 
@@ -192,7 +283,15 @@ _validate_layer() {
       "x" + (if (.value|type) == "object" then (.value | has("exclusive") | tostring) else "false" end),
       "x" + (if (.value|type) == "object" then (.value.exclusive // false | tostring) else "false" end),
       "x" + (if (.value|type) == "object" then (.value | has("requires") | tostring) else "false" end),
-      "x" + (if (.value|type) == "object" then (.value.requires // "" | tostring) else "" end)
+      "x" + (if (.value|type) == "object" then (.value.requires // "" | tostring) else "" end),
+      "x" + (if (.value|type) == "object" then (.value | has("choices") | tostring) else "false" end),
+      "x" + (if (.value|type) == "object"
+             then (if ((.value.choices // null) | type) == "array"
+                   then (.value.choices | map(tostring) | join(","))
+                   else "__CLIFT_NONARRAY__" end)
+             else "" end),
+      "x" + (if (.value|type) == "object" then (.value | has("pattern") | tostring) else "false" end),
+      "x" + (if (.value|type) == "object" then (.value.pattern // "" | tostring) else "" end)
     ] | @tsv
   ')"
 
@@ -212,7 +311,8 @@ _validate_layer() {
   declare -A group_first_owner
   declare -A group_member_count
   while IFS=$'\t' read -r idx entry_type name short type required has_default default_val aliases_csv \
-      group has_exclusive exclusive has_requires requires; do
+      group has_exclusive exclusive has_requires requires \
+      has_choices choices_csv has_pattern pattern; do
     [[ -z "$idx" ]] && continue
     # Strip sentinel prefix from each field
     idx="${idx#x}"
@@ -229,8 +329,21 @@ _validate_layer() {
     exclusive="${exclusive#x}"
     has_requires="${has_requires#x}"
     requires="${requires#x}"
+    has_choices="${has_choices#x}"
+    choices_csv="${choices_csv#x}"
+    has_pattern="${has_pattern#x}"
+    pattern="${pattern#x}"
+
+    # Non-array choices get a sentinel from the jq emitter; surface a clean
+    # error instead of passing the sentinel to value-validation.
+    if [[ "$has_choices" == "true" && "$choices_csv" == "__CLIFT_NONARRAY__" ]]; then
+      echo "error: ${context}[${idx}]: flag '$name' 'choices' must be a non-empty array of strings" >&2
+      return 1
+    fi
+
     _validate_entry_fields "${context}[${idx}]" "$entry_type" "$name" "$short" "$type" "$required" "$has_default" "$default_val" \
-      "$group" "$has_exclusive" "$exclusive" "$has_requires" "$requires" || return 1
+      "$group" "$has_exclusive" "$exclusive" "$has_requires" "$requires" \
+      "$has_choices" "$choices_csv" "$has_pattern" "$pattern" || return 1
 
     # Cross-member group consistency: every flag sharing a group name must
     # agree on the modifier — either ALL declare the same modifier

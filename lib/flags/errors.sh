@@ -136,6 +136,20 @@ clift_err_wrong_type() {
   return 1
 }
 
+clift_err_invalid_choice() {
+  local name="$1" value="$2" choices_csv="$3"
+  # Render choices as comma+space separated for readability
+  local pretty="${choices_csv//,/, }"
+  echo "error: value '$value' for flag '--$name' is not one of: $pretty" >&2
+  return 1
+}
+
+clift_err_invalid_pattern() {
+  local name="$1" value="$2" pattern="$3"
+  echo "error: value '$value' for flag '--$name' does not match pattern '$pattern'" >&2
+  return 1
+}
+
 clift_err_nonbool_in_cluster() {
   local short="$1" cluster="$2" layer="$3"
   echo "error: short flag '-$short' cannot appear in cluster '$cluster'" >&2

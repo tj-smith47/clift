@@ -33,7 +33,7 @@ clift_parse_args() {
 
   # Pre-build lookup tables, known names, required flags, AND defaults in a
   # single jq call — the only fork in the parser init path.
-  # Output: seven NUL-separated sections via process substitution (NUL bytes
+  # Output: eight NUL-separated sections via process substitution (NUL bytes
   # can't survive bash command substitution, so we read from an fd).
   #   1. name\x01short\x01type lines  (lookup tables)
   #   2. space-joined known names      (error suggestions; includes aliases)
@@ -42,7 +42,9 @@ clift_parse_args() {
   #   5. alias\x01canonical-name lines (alias -> canonical lookup)
   #   6. name\x01message lines         (deprecated flags; empty/null filtered)
   #   7. name\x01group\x01mode lines   (group membership; mode="exclusive"|"requires-all")
-  local _ft_lines="" known_names="" _required_names="" _defaults_tsv="" _alias_lines="" _deprecated_lines="" _group_lines=""
+  #   8. name\x01choices-csv\x01pattern lines (value validation; empty fields
+  #                                    mean "no constraint" for that column)
+  local _ft_lines="" known_names="" _required_names="" _defaults_tsv="" _alias_lines="" _deprecated_lines="" _group_lines="" _valid_lines=""
   {
     IFS= read -r -d '' _ft_lines || true
     IFS= read -r -d '' known_names || true
@@ -51,6 +53,7 @@ clift_parse_args() {
     IFS= read -r -d '' _alias_lines || true
     IFS= read -r -d '' _deprecated_lines || true
     IFS= read -r -d '' _group_lines || true
+    IFS= read -r -d '' _valid_lines || true
   } < <(jq -j '
     ([.[] | [.name, (.short // ""), .type] | join("\u0001")] | join("\n")) + "\u0000" +
     ([.[] | [.name] + (.aliases // []) | .[]] | join(" ")) + "\u0000" +
@@ -69,6 +72,14 @@ clift_parse_args() {
           elif (.requires // "") == "all" then "requires-all"
           else "" end)]
       | select(.[2] != "")
+      | join("\u0001")]
+      | join("\n")) + "\u0000" +
+    ([.[] | select(((.choices // null) != null) or ((.pattern // "") != ""))
+      | [.name,
+         (if ((.choices // null) | type) == "array"
+          then (.choices | map(tostring) | join(","))
+          else "" end),
+         (.pattern // "")]
       | join("\u0001")]
       | join("\n")) + "\u0000"
   ' <<< "$table_json")
@@ -104,6 +115,40 @@ clift_parse_args() {
     _group_members["$_ggroup"]="${_group_members[$_ggroup]:+${_group_members[$_ggroup]} }$_gname"
     _group_mode["$_ggroup"]="$_gmode"
   done <<< "$_group_lines"
+
+  # Populate value-validation maps. _ft_choices[name] is the comma-separated
+  # choice list (empty means no constraint); _ft_pattern[name] is the regex
+  # pattern (empty means no constraint). Either or both may be set.
+  declare -A _ft_choices _ft_pattern
+  while IFS=$'\x01' read -r _vname _vchoices _vpattern; do
+    [[ -z "$_vname" ]] && continue
+    [[ -n "$_vchoices" ]] && _ft_choices["$_vname"]="$_vchoices"
+    [[ -n "$_vpattern" ]] && _ft_pattern["$_vname"]="$_vpattern"
+  done <<< "$_valid_lines"
+
+  # Validate a scalar value against a flag's choices/pattern constraints.
+  # Returns 1 (via the err helper) on failure. For list flags, the caller
+  # invokes this once per element.
+  _clift_validate_value() {
+    local name="$1" value="$2"
+    local choices="${_ft_choices[$name]:-}"
+    local pattern="${_ft_pattern[$name]:-}"
+    if [[ -n "$choices" ]]; then
+      local _cl=" ${choices//,/ } "
+      if [[ "$_cl" != *" $value "* ]]; then
+        clift_err_invalid_choice "$name" "$value" "$choices"
+        return 1
+      fi
+    fi
+    if [[ -n "$pattern" ]]; then
+      # shellcheck disable=SC2076
+      if ! [[ "$value" =~ $pattern ]]; then
+        clift_err_invalid_pattern "$name" "$value" "$pattern"
+        return 1
+      fi
+    fi
+    return 0
+  }
 
   # Emit a one-shot deprecation warning for a canonical flag name if one is
   # registered. The warning fires per-invocation, not per-occurrence, so
@@ -413,6 +458,38 @@ clift_parse_args() {
         fi
         ;;
     esac
+  done
+
+  # Value validation: choices + pattern. Runs AFTER assignment (so defaults
+  # are also validated — catching stale defaults that would otherwise slip past
+  # a choices tightening) and BEFORE required-flag validation, so the error
+  # named is the one the user can actually fix. For list flags, each element
+  # is validated individually; the first failing element reports the error.
+  local _vn _vtype _vvar _vcount _vi _vitem
+  for _vn in "${!_ft_type[@]}"; do
+    # Skip flags with no constraint declared
+    if [[ -z "${_ft_choices[$_vn]:-}" && -z "${_ft_pattern[$_vn]:-}" ]]; then
+      continue
+    fi
+    _vtype="${_ft_type[$_vn]}"
+    # Bool flags reject choices/pattern at compile; defensively skip here too.
+    [[ "$_vtype" == "bool" ]] && continue
+    _clift_var_name "$_vn"; _vvar="$_CLIFT_VAR"
+
+    if [[ "$_vtype" == "list" ]]; then
+      _vcount_var="${_vvar}_COUNT"
+      _vcount="${!_vcount_var:-0}"
+      (( _vcount == 0 )) && continue
+      for (( _vi=1; _vi<=_vcount; _vi++ )); do
+        _vitem_var="${_vvar}_${_vi}"
+        _vitem="${!_vitem_var:-}"
+        _clift_validate_value "$_vn" "$_vitem" || return 1
+      done
+    else
+      # string/int — unset means "not provided, not defaulted"; skip.
+      [[ -z "${!_vvar+x}" ]] && continue
+      _clift_validate_value "$_vn" "${!_vvar}" || return 1
+    fi
   done
 
   # Required-flag validation (uses pre-computed list from initial jq batch)

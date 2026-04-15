@@ -27,6 +27,8 @@ Each flag is a map:
 | `required` | no | bool | Error if absent; cannot combine with `default` |
 | `deprecated` | no | string | Deprecation message. Using the flag emits `warning: --<name> is deprecated: <msg>` to stderr once per invocation and marks the flag `(deprecated)` in help output. Empty string is treated as "not deprecated". |
 | `hidden` | no | bool | If `true`, the flag is omitted from `--help` and shell completion but still parses normally when invoked. Useful for internal/experimental flags. |
+| `choices` | no | list of string | Enumerated allowed values. Value must be one of the listed strings (case-sensitive). Invalid at runtime with `error: value '<val>' for flag '--<name>' is not one of: a, b, c`. For `type: list`, each element is validated. Cannot combine with `type: bool`. For `type: int`, each choice must itself parse as an integer (compile error otherwise). A `default` that is not in `choices` is a compile error. Rendered in `--help` as `(one of: a, b, c)`. |
+| `pattern` | no | string | Bash-compatible regex (`[[ =~ ]]`). Value must match. Anchor with `^…$` yourself — not auto-wrapped. Invalid at runtime with `error: value '<val>' for flag '--<name>' does not match pattern '<regex>'`. For `type: list`, each element is validated. Cannot combine with `type: bool`. Pattern is syntax-checked at compile time. Rendered in `--help` as `(matches: <pattern>)`. May be combined with `choices` (both checks run; choices first). |
 
 ## Reserved names
 
@@ -66,6 +68,22 @@ Parser validates integer; negative values (`--count -5`) work.
 
 Script reads: `CLIFT_FLAG_TAG_1`, `CLIFT_FLAG_TAG_2`, ..., `CLIFT_FLAG_TAG_COUNT`.
 
+### Choices
+
+```yaml
+- {name: level, type: string, choices: [low, mid, high], default: mid, desc: "Verbosity"}
+```
+
+`--level=bogus` fails at runtime: `error: value 'bogus' for flag '--level' is not one of: low, mid, high`. Help rendering appends ` (one of: low, mid, high)` to the description. For `type: list`, each comma-split element must be in `choices`; the first invalid element is the one named in the error.
+
+### Pattern
+
+```yaml
+- {name: tag, type: string, pattern: "^v[0-9]+\\.[0-9]+\\.[0-9]+$", desc: "Semver tag"}
+```
+
+`--tag=v1` fails at runtime: `error: value 'v1' for flag '--tag' does not match pattern '^v[0-9]+\.[0-9]+\.[0-9]+$'`. The regex is evaluated by bash's `[[ =~ ]]`; anchor with `^…$` yourself. `pattern` and `choices` may be combined; both must pass. For `type: list`, the pattern is applied per element.
+
 ### Aliases
 
 ```yaml
@@ -89,6 +107,30 @@ Users can invoke any of `--format`, `--output`, or `--fmt` -- all resolve to the
 ```
 
 Whenever the user supplies `--old` (or an alias, or the short form), the parser emits `warning: --old is deprecated: use --new instead` to stderr and continues to honor the flag's value. The warning fires at most once per invocation. In `--help` output the flag's description column gets a trailing ` (deprecated)` marker. An empty `deprecated: ""` is treated as "not deprecated" — no warning, no help marker.
+
+## Value validation
+
+Two optional fields constrain accepted values beyond the type check: `choices` (enumerated allow-list) and `pattern` (regex). Both apply after the type check and after default application, so a stale default that is not in `choices` surfaces as a runtime error even when the user supplied no value.
+
+### choices
+
+```yaml
+- {name: level, type: string, choices: [low, mid, high], default: mid, desc: "Log level"}
+```
+
+Value must be an exact-string match (case-sensitive) against one of the entries. For `type: list`, every element is validated; the first failing element reports the error naming the bad value. Combining `choices` with `type: bool` is a compile error (a bool carries no user-supplied value). For `type: int`, every entry in the list must itself parse as an integer — `choices: ["one", "two"]` on an int flag is a compile error, since no user value could ever satisfy both the type and the choice list. An empty `choices: []` is rejected at compile (no value could pass), and a `default` that is not a member of `choices` is rejected at compile (catches narrowing `choices` without updating a stale default).
+
+### pattern
+
+```yaml
+- {name: ref, type: string, pattern: "^v[0-9]+\\.[0-9]+\\.[0-9]+$", desc: "Semver tag"}
+```
+
+Regex is applied with bash's `[[ =~ ]]` operator. Anchor with `^…$` yourself — the framework does not wrap. The pattern is syntax-checked at compile time (an invalid regex is rejected with a clear error; malformed patterns cannot ship). Same list / bool / empty-string rules as `choices`.
+
+### Combining choices and pattern
+
+The two fields may appear on the same flag. Both checks run; `choices` is checked first, so a value failing both fails against `choices`. In `--help`, both suffixes render: `(one of: s1, s2) (matches: ^s[0-9]+$)`.
 
 ## Persistent flags
 
