@@ -155,7 +155,7 @@ clift_err_mutex_group() {
       formatted="$formatted, '--$m'"
     fi
   done
-  echo "error: flags $formatted are mutually exclusive (group '$group')" >&2
+  echo "error: flags $formatted in group '$group' are mutually exclusive" >&2
   return 1
 }
 
@@ -179,6 +179,6 @@ clift_err_requires_all_group() {
       set_fmt="$set_fmt, '--$m'"
     fi
   done
-  echo "error: flag(s) $missing_fmt required when $set_fmt is provided (group '$group')" >&2
+  echo "error: in group '$group', flag(s) $missing_fmt required when $set_fmt is provided" >&2
   return 1
 }

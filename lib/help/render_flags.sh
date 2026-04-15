@@ -51,6 +51,8 @@ clift_render_flags() {
   _groups="$(echo "$flags_json" | jq -r '[.[] | (.group // "")] | map(select(. != "")) | unique | .[]')"
   [[ -z "$_groups" ]] && return 0
 
+  # Note: groups render with ~3 jq calls each; acceptable for cold-path help.
+  # Consolidate to one labeled-section jq pass if N grows large.
   local _g _subset _mode _label _first
   _first=true
   while IFS= read -r _g; do

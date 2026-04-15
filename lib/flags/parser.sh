@@ -100,7 +100,8 @@ clift_parse_args() {
   declare -A _group_members _group_mode
   while IFS=$'\x01' read -r _gname _ggroup _gmode; do
     [[ -z "$_gname" ]] && continue
-    _group_members["$_ggroup"]="${_group_members[$_ggroup]:-} $_gname"
+    # Safe: group name regex-restricted at compile (see validate.sh)
+    _group_members["$_ggroup"]="${_group_members[$_ggroup]:+${_group_members[$_ggroup]} }$_gname"
     _group_mode["$_ggroup"]="$_gmode"
   done <<< "$_group_lines"
 
@@ -378,7 +379,6 @@ clift_parse_args() {
     local _set_members="" _missing_members="" _set_count=0 _total=0
     local _m
     for _m in $_members; do
-      [[ -z "$_m" ]] && continue
       _total=$((_total+1))
       if [[ " $seen_names " == *" $_m "* ]]; then
         _set_members="$_set_members $_m"

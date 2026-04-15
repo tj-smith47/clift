@@ -200,11 +200,17 @@ _validate_layer() {
   # seen_name_owner maps a name/alias back to the flag that introduced it, so
   # a collision error can name both ends of the conflict.
   declare -A seen_name_owner
-  # Track group → modifier ("exclusive"|"requires-all") for the cross-member
-  # consistency check. A named group must have exactly one modifier across all
-  # its members; mixing is a compile error.
+  # Track group → modifier ("exclusive"|"requires-all"|"none") for the
+  # cross-member consistency check. A named group must have exactly one
+  # modifier across ALL its members (or none — purely cosmetic group).
+  # Mixing — including any member without a modifier when others have one —
+  # is a compile error. group_first_owner records the first-seen member so
+  # the error can name both endpoints of the inconsistency.
+  # group_member_count tallies members per group for the single-member
+  # modifier-with-one-flag check.
   declare -A group_modifier
   declare -A group_first_owner
+  declare -A group_member_count
   while IFS=$'\t' read -r idx entry_type name short type required has_default default_val aliases_csv \
       group has_exclusive exclusive has_requires requires; do
     [[ -z "$idx" ]] && continue
@@ -226,26 +232,46 @@ _validate_layer() {
     _validate_entry_fields "${context}[${idx}]" "$entry_type" "$name" "$short" "$type" "$required" "$has_default" "$default_val" \
       "$group" "$has_exclusive" "$exclusive" "$has_requires" "$requires" || return 1
 
-    # Cross-member group consistency: all flags sharing a group name must
-    # agree on the modifier. Record the first member's modifier and reject
-    # any later member whose modifier differs.
+    # Cross-member group consistency: every flag sharing a group name must
+    # agree on the modifier — either ALL declare the same modifier
+    # (exclusive | requires-all) or NONE declare one (purely cosmetic group
+    # used only for help partitioning). The first member fixes the group's
+    # mode (including "none"); any later member that disagrees is a compile
+    # error. This catches the trap where the first-seen member is bare and
+    # later members silently turn the group into a no-op constraint.
     if [[ -n "$group" ]]; then
-      local this_mod=""
+      local this_mod="none"
       if [[ "$exclusive" == "true" ]]; then
         this_mod="exclusive"
       elif [[ "$has_requires" == "true" ]]; then
         this_mod="requires-all"
       fi
-      if [[ -n "$this_mod" ]]; then
-        if [[ -n "${group_modifier[$group]:-}" ]]; then
-          if [[ "${group_modifier[$group]}" != "$this_mod" ]]; then
-            echo "error: ${context}: flag '$name' in group '$group' uses '$this_mod' but flag '${group_first_owner[$group]}' uses '${group_modifier[$group]}' (group must be consistent)" >&2
-            return 1
+      group_member_count["$group"]=$(( ${group_member_count[$group]:-0} + 1 ))
+      if [[ -n "${group_modifier[$group]:-}" ]]; then
+        if [[ "${group_modifier[$group]}" != "$this_mod" ]]; then
+          local _first_owner="${group_first_owner[$group]}"
+          local _first_mod="${group_modifier[$group]}"
+          local _msg_this _msg_first
+          if [[ "$this_mod" == "none" ]]; then
+            _msg_this="declares neither 'exclusive' nor 'requires'"
+          elif [[ "$this_mod" == "exclusive" ]]; then
+            _msg_this="declares 'exclusive: true'"
+          else
+            _msg_this="declares 'requires: all'"
           fi
-        else
-          group_modifier["$group"]="$this_mod"
-          group_first_owner["$group"]="$name"
+          if [[ "$_first_mod" == "none" ]]; then
+            _msg_first="declares neither 'exclusive' nor 'requires'"
+          elif [[ "$_first_mod" == "exclusive" ]]; then
+            _msg_first="declares 'exclusive: true'"
+          else
+            _msg_first="declares 'requires: all'"
+          fi
+          echo "error: ${context}: flag '$name' in group '$group' $_msg_this but flag '$_first_owner' in the same group $_msg_first (group modifier must be consistent across all members)" >&2
+          return 1
         fi
+      else
+        group_modifier["$group"]="$this_mod"
+        group_first_owner["$group"]="$name"
       fi
     fi
 
@@ -308,6 +334,21 @@ _validate_layer() {
       seen_envs="$seen_envs $env_form"
     fi
   done <<< "$tsv"
+
+  # Single-member group with a modifier is silently a no-op at runtime — a
+  # lone flag can't violate exclusivity, and a lone requires-all trivially
+  # satisfies. Almost always a typo (wrong group name on the would-be
+  # second member), so reject at compile time rather than ship a dead rule.
+  local _g
+  for _g in "${!group_modifier[@]}"; do
+    local _mod="${group_modifier[$_g]}"
+    [[ "$_mod" == "none" ]] && continue
+    local _count="${group_member_count[$_g]:-0}"
+    if (( _count < 2 )); then
+      echo "error: ${context}: group '$_g' with '$_mod' must have >=2 members (got $_count)" >&2
+      return 1
+    fi
+  done
 
   return 0
 }
