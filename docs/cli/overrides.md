@@ -64,9 +64,10 @@ keeps user code decoupled from the framework's internal function names.
 |------|---------------------|--------------------|-------|
 | `help_list` | `lib/help/list.sh` | `clift_override_help_list <default_fn> <CLI_DIR>` | Top-level `mycli --help` listing. Only the CLI-global tier applies — there is no "current command" at the top level. |
 | `help_detail` | `lib/help/detail.sh` | `clift_override_help_detail <default_fn> <task_name> <CLI_DIR>` | Per-command `mycli <cmd> --help` detail view. Per-command tier (`cmds/<cmd>/overrides/help_detail.sh`) takes precedence over CLI-global. |
+| `version_print` | `lib/wrapper/wrapper.sh.tmpl`, `lib/router/router.sh`, `lib/version/version.sh` | `clift_override_version_print <default_fn> <CLI_NAME> <CLI_VERSION> <CLI_DIR>` | Controls the line printed by `mycli --version`, `mycli -V`, and the framework's `mycli version` subcommand. The default prints `"<CLI_NAME> version <CLI_VERSION>"`. Override only replaces that one line — the `version` subcommand's cfgd-status block still follows. |
 
-Additional slots (`version_print`, `command_pre`/`command_post`,
-`log_<level>`, …) land with Tasks 3.3 – 3.6.
+Additional slots (`command_pre`/`command_post`, `log_<level>`, …) land with
+Tasks 3.4 – 3.6.
 
 ### Example: wrap `help_list` with a banner
 

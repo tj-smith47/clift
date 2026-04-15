@@ -118,7 +118,11 @@ clift_parse_args "$tmp_table" "${args[@]+"${args[@]}"}"
 
 # Step 8: Intercept built-in flags BEFORE log setup for fast --help/--version
 if [[ "${CLIFT_FLAG_VERSION:-}" == "true" ]]; then
-  echo "${CLI_NAME:-unknown} version ${CLI_VERSION:-0.0.0}"
+  # shellcheck source=../runtime/overrides.sh
+  source "${FRAMEWORK_DIR}/lib/runtime/overrides.sh"
+  _clift_version_print_default() { echo "$1 version $2"; }
+  clift_call_override version_print _clift_version_print_default \
+    "${CLI_NAME:-unknown}" "${CLI_VERSION:-0.0.0}" "$CLI_DIR"
   exit 0
 fi
 
