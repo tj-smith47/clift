@@ -248,3 +248,19 @@ YAML
   [ "$status" -eq 0 ]
   [[ "$output" == *"--no-color"* ]]
 }
+
+@test "detail.sh merges globals.json so pre-4.1 CLIs see new globals" {
+  # The root Taskfile in setup() predates --no-cache (no `no-cache` entry in
+  # its vars.FLAGS), simulating a CLI scaffolded before 4.1. detail.sh must
+  # merge globals.json at render time so the user sees the new flag in
+  # `<cmd> --help` without re-scaffolding.
+  run bash "$FRAMEWORK_DIR/lib/help/detail.sh" "greet" "$TEST_DIR/Taskfile.yaml"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Global Flags:"* ]]
+  [[ "$output" == *"--no-cache"* ]]
+  # Defensive: the old --help entry from the root Taskfile must still be
+  # present and not duplicated.
+  local help_count
+  help_count=$(echo "$output" | grep -c -- '--help' || true)
+  [ "$help_count" -eq 1 ]
+}

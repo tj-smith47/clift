@@ -126,12 +126,22 @@ _clift_help_detail_default() {
       else
         root_globals='[]'
       fi
-      # Split into local flags (not in root globals) and global flags (in root globals)
+      # Merge globals.json into the command's flag list before rendering, then
+      # split into local vs global. Mirrors the router's runtime merge (see
+      # router.sh step 5) so pre-4.1 CLIs that scaffolded before --no-cache
+      # was added to globals.json still see the new flag in `<cmd> --help`
+      # without re-running setup. Dedupe on `.name` so CLIs whose root
+      # Taskfile DID declare the flag don't show it twice.
       {
         IFS=$'\t' read -r local_flags global_flags
       } < <(echo "$cmd_flags" | jq -r --argjson globals "$root_globals" '
-        ([.[] | select(.name as $n | [$globals[].name] | index($n) | not)] | tojson) + "\t" +
-        ([.[] | select(.name as $n | [$globals[].name] | index($n))] | tojson)
+        . as $cmd
+        | ($globals | map(.name)) as $gnames
+        | ($cmd | map(.name)) as $cnames
+        | ($cmd + ($globals | map(select(.name as $n | $cnames | index($n) | not))))
+          as $merged
+        | ([$merged[] | select(.name as $n | $gnames | index($n) | not)] | tojson) + "\t" +
+          ([$merged[] | select(.name as $n | $gnames | index($n))] | tojson)
       ')
 
       if [[ "$local_flags" != "[]" ]]; then
