@@ -134,6 +134,18 @@ Only these go-task flags are exposed:
 
 Unknown `--task:foo` is a hard error with the whitelist surfaced — typos won't silently pass through.
 
+### `mycli watch <cmd>`
+
+Because `--task:watch` is the most-used runner-flag, clift exposes a shorthand: `mycli watch <cmd> [args...]` is rewritten to `mycli --task:watch <cmd> [args...]` before dispatch.
+
+```bash
+mycli watch build              # equivalent to: mycli --task:watch build
+mycli watch deploy --force     # equivalent to: mycli --task:watch deploy --force
+mycli watch                    # error: watch requires a command
+```
+
+The reservation only matches a literal `watch` as the first argv token — a nested namespace like `watch:foo` (single token containing a colon) is unaffected and dispatches normally. A user-defined command literally named `watch` at the top level would collide; rename it (e.g., `watcher`, `monitor`) to avoid the conflict.
+
 ### Position rules
 
 - `--task:*` flags may appear anywhere in argv; the wrapper scans the whole argv before dispatch.

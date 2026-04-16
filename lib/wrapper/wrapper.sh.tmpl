@@ -121,6 +121,26 @@ if [[ "$*" == *--task:* ]]; then
         _tf_inline _tf_has_inline _tf_kind _tf_next
 fi
 
+# `watch` alias: mycli watch <cmd> → mycli --task:watch <cmd>. The rewrite
+# only fires for the bare first token literally equal to "watch"; a nested
+# namespace like `watch:foo` contains a colon and is left alone.
+#
+# Placed AFTER the --task:* scan so `mycli watch --task:dry build` also
+# works (the --task:dry is consumed first, then watch rewrites, then the
+# recursive exec re-enters this scan with an empty --task:* set).
+if [[ "${1:-}" == "watch" ]]; then
+  shift
+  if (( $# == 0 )); then
+    echo "error: watch requires a command (e.g., $CLI_NAME watch build)" >&2
+    exit 1
+  fi
+  # Re-exec through the wrapper with --task:watch prepended. The recursion
+  # terminates on the second invocation because the first token is now
+  # --task:watch, not `watch`. Any --task:* flags consumed in this pass
+  # ride along as well (they were already stripped from $@ above).
+  exec "$0" "${_task_flags[@]+"${_task_flags[@]}"}" --task:watch "$@"
+fi
+
 # --no-cache scan: translate the flag to CLIFT_CACHE=rebuild and strip it
 # from argv so the router's parser doesn't see it twice (it IS a global
 # flag, but the wrapper owns it — cache work runs before the parser).
