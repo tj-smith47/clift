@@ -82,6 +82,12 @@ fi
 # Step 4: Ensure cache is fresh (only when we have a root Taskfile)
 source "${FRAMEWORK_DIR}/lib/cache.sh"
 
+# CLIFT_CACHE=bypass is checked both here (to save a function-call frame on
+# the hot path — no source+call when the env var already says "skip") and
+# inside clift_ensure_cache at lib/cache.sh. Do not drop either guard in a
+# refactor; the belt-and-suspenders is intentional. The inner guard covers
+# direct callers of clift_ensure_cache (compile.sh, tests) that don't pass
+# through this gate.
 if [[ "$no_root_taskfile" != "true" ]] \
   && [[ -z "${CLIFT_CACHE_VERIFIED:-}" ]] \
   && [[ "${CLIFT_CACHE:-}" != "bypass" ]]; then
