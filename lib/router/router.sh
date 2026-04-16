@@ -74,15 +74,15 @@ fi
 # minimal test fixture), treat everything as passthrough: skip cache management
 # and parser entirely.
 if [[ ! -f "$CLI_DIR/Taskfile.yaml" ]]; then
-  is_passthrough_no_cache=true
+  no_root_taskfile=true
 else
-  is_passthrough_no_cache=false
+  no_root_taskfile=false
 fi
 
 # Step 4: Ensure cache is fresh (only when we have a root Taskfile)
 source "${FRAMEWORK_DIR}/lib/cache.sh"
 
-if [[ "$is_passthrough_no_cache" != "true" ]] \
+if [[ "$no_root_taskfile" != "true" ]] \
   && [[ -z "${CLIFT_CACHE_VERIFIED:-}" ]] \
   && [[ "${CLIFT_CACHE:-}" != "bypass" ]]; then
   clift_ensure_cache "$CLI_DIR" "$FRAMEWORK_DIR"
@@ -92,7 +92,7 @@ fi
 # Result is either "LEGACY" (no flags / not in cache) or the merged JSON array.
 # Reads from the consolidated .clift/index.json (shape: {tasks: {<name>: {flags, aliases, hidden, summary}}}).
 INDEX_FILE="$CLI_DIR/.clift/index.json"
-if [[ "$is_passthrough_no_cache" == "true" ]] || [[ ! -f "$INDEX_FILE" ]]; then
+if [[ "$no_root_taskfile" == "true" ]] || [[ ! -f "$INDEX_FILE" ]]; then
   merged_table="LEGACY"
 else
   merged_table="$(jq -c --arg k "$TASK_NAME" \

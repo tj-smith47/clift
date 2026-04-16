@@ -241,7 +241,7 @@ SCRIPT
 }
 
 @test "router handles no-Taskfile passthrough path" {
-  # Remove root Taskfile so is_passthrough_no_cache=true
+  # Remove root Taskfile so no_root_taskfile=true
   rm -f "$TEST_DIR/Taskfile.yaml"
   # The task will still be "hello" but there's no root taskfile
   # Router should fall through to passthrough mode
