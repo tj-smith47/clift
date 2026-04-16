@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# log_info / log_error / log_warn / log_success / log_debug are auto-loaded by clift.
+# log_info / log_error / log_warn / log_success / log_debug / log_suggest / die / clift_exit
+# are auto-loaded by clift.
 
 # Flag values are available two ways (both are populated — pick whichever reads best):
 #   ${CLIFT_FLAGS[dry-run]}    — assoc array, dash-preserving keys (Cobra-style)

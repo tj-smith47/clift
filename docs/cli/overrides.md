@@ -213,13 +213,13 @@ The shadow contract is "redefine and you win in this shell." Subshell
 propagation is a free-but-implementation-dependent bonus on top — rely on
 explicit `export -f` when you need it to cross a process boundary.
 
-The bonus works because the framework runs `export -f log_info log_warn
-log_error log_success log_debug log_suggest die _clift_log_format` in
-`lib/log/log.sh`. Once a function has been exported, bash propagates the
-LATEST definition to subshells via `BASH_FUNC_<name>%%` env vars, so in
-practice an unexported user redefinition also reaches subshells
-(`$(bash -c 'log_info x')`) — bash re-stamps the exported value on every
-redefinition.
+The bonus works because the framework runs `export -f log_info log_error
+log_warn log_success log_debug log_suggest die clift_exit
+_clift_log_format` in `lib/log/log.sh`. Once a function has been exported,
+bash propagates the LATEST definition to subshells via
+`BASH_FUNC_<name>%%` env vars, so in practice an unexported user
+redefinition also reaches subshells (`$(bash -c 'log_info x')`) — bash
+re-stamps the exported value on every redefinition.
 
 If you DO disable the framework's exports (or define an entirely new helper
 your scripts will call from subshells), `export -f` it yourself to be safe:
