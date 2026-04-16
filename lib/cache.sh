@@ -120,7 +120,13 @@ clift_ensure_cache() {
       done
       # Stale lock guard: if still present after timeout, the holder likely
       # crashed. Remove the lock so the next invocation can rebuild.
-      [[ -d "$lockdir" ]] && rm -rf "$lockdir"
+      # Explicit if-then avoids returning non-zero from the function when
+      # the lock is already gone — loser's fall-through return code must
+      # be 0, not "test-failed".
+      if [[ -d "$lockdir" ]]; then
+        rm -rf "$lockdir"
+      fi
     fi
   fi
+  return 0
 }

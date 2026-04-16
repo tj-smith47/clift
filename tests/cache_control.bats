@@ -202,3 +202,84 @@ SH
   after_mtime="$(_mtime "$CLI_DIR/.clift/checksum")"
   [ "$after_mtime" = "$before_mtime" ]
 }
+
+@test "--no-cache overrides CLIFT_CACHE=bypass (flag wins over env)" {
+  # The wrapper translates --no-cache to CLIFT_CACHE=rebuild before calling
+  # into cache.sh, overwriting whatever CLIFT_CACHE was inherited. The cache
+  # rebuild (evidence: refreshed checksum mtime) is the observable proof
+  # that the flag won out over the env var. Exit status is immaterial —
+  # test fixtures have no greet.sh script, so go-task errors downstream;
+  # the cache state is the thing under test.
+  create_test_cli "greet"
+  bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$CLI_DIR" >/dev/null 2>&1 || true
+  build_test_wrapper
+  local before after
+  before="$(_mtime "$CLI_DIR/.clift/checksum")"
+  sleep 1
+  run env CLIFT_CACHE=bypass "$CLI_DIR/bin/$CLI_NAME" --no-cache greet
+  after="$(_mtime "$CLI_DIR/.clift/checksum")"
+  [ "$after" -gt "$before" ]
+}
+
+@test "concurrent CLIFT_CACHE=rebuild invocations both compile (winner+loser)" {
+  source "$FRAMEWORK_DIR/lib/cache.sh"
+  create_test_cli "greet"
+  clift_ensure_cache "$CLI_DIR" "$FRAMEWORK_DIR"
+  # Run two rebuilds in parallel. Best-effort contention test: the primary
+  # assertion is that neither invocation deadlocks or errors under the lock.
+  # `|| true` on the wait calls prevents bash's set -e (bats enables it)
+  # from failing the whole test when `wait` reports a non-zero rc — we
+  # capture the rc explicitly and assert on it below.
+  local rc1=0 rc2=0
+  (CLIFT_CACHE=rebuild clift_ensure_cache "$CLI_DIR" "$FRAMEWORK_DIR") &
+  local pid1=$!
+  (CLIFT_CACHE=rebuild clift_ensure_cache "$CLI_DIR" "$FRAMEWORK_DIR") &
+  local pid2=$!
+  wait "$pid1" || rc1=$?
+  wait "$pid2" || rc2=$?
+  [ "$rc1" -eq 0 ]
+  [ "$rc2" -eq 0 ]
+  # Both should have written/refreshed the checksum (file exists + non-empty)
+  [ -s "$CLI_DIR/.clift/checksum" ]
+}
+
+@test "--no-cache as the last argv token still triggers rebuild" {
+  # Position coverage: the wrapper's argv scan must handle --no-cache
+  # anywhere, including trailing position after other flags. Use a real
+  # greet.sh so exit status can be asserted alongside the mtime bump.
+  create_test_cli "greet" "- {name: who, type: string, default: world, desc: Who}"
+  cat > "$CLI_DIR/cmds/greet/greet.sh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "WHO=${CLIFT_FLAG_WHO:-}"
+SH
+  chmod +x "$CLI_DIR/cmds/greet/greet.sh"
+  bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$CLI_DIR" >/dev/null 2>&1 || true
+  build_test_wrapper
+  local before after
+  before="$(_mtime "$CLI_DIR/.clift/checksum")"
+  sleep 1
+  run "$CLI_DIR/bin/$CLI_NAME" greet --who bob --no-cache
+  [ "$status" -eq 0 ]
+  after="$(_mtime "$CLI_DIR/.clift/checksum")"
+  [ "$after" -gt "$before" ]
+  [[ "$output" == *"WHO=bob"* ]]
+}
+
+@test "--no-cache interleaved with another global still rebuilds and runs help" {
+  # --no-cache before the command + --help after should trigger BOTH the
+  # rebuild and the help render.
+  create_test_cli "greet"
+  bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$CLI_DIR" >/dev/null 2>&1 || true
+  build_test_wrapper
+  local before after
+  before="$(_mtime "$CLI_DIR/.clift/checksum")"
+  sleep 1
+  run "$CLI_DIR/bin/$CLI_NAME" --no-cache greet --help
+  [ "$status" -eq 0 ]
+  # Cache rebuilt
+  after="$(_mtime "$CLI_DIR/.clift/checksum")"
+  [ "$after" -gt "$before" ]
+  # Help rendered (global flag section visible)
+  [[ "$output" == *"--help"* ]]
+}

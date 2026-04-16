@@ -38,6 +38,19 @@ YAML
   [[ "$output" == *"reserved"* ]]
 }
 
+@test "reserved flag name 'no-cache' rejected" {
+  # globals.json owns no-cache since 4.1 — user flags cannot redeclare it.
+  cat > "$TEST_DIR/Taskfile.yaml" <<'YAML'
+version: '3'
+vars:
+  FLAGS:
+    - {name: no-cache, type: bool}
+YAML
+  run bash "$FRAMEWORK_DIR/lib/flags/validate.sh" "$TEST_DIR/Taskfile.yaml"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"reserved"* ]]
+}
+
 @test "missing type rejected" {
   cat > "$TEST_DIR/Taskfile.yaml" <<'YAML'
 version: '3'
