@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # clift Logging System
-# Provides: log_info, log_warn, log_error, log_success, log_debug, log_suggest, die
+# Provides: log_info, log_warn, log_error, log_success, log_debug, log_suggest, die, clift_exit
 # Reads LOG_THEME, LOG_COLOR, NO_COLOR, VERBOSE, QUIET from environment.
 # Themes: icons, icons-color, brackets, brackets-color, minimal, minimal-color, custom
 
@@ -125,6 +125,21 @@ log_suggest() { [[ "${QUIET:-}" == "true" ]] && return 0; printf '%b  %s%b\n' "$
 
 die() { log_error "$1"; exit "${2:-1}"; }
 
+# clift_exit <code> [msg]
+# Domain-specific exit for user scripts — logs msg as error (if given) then
+# exits with the given code. When code is omitted, defaults to 1 (matching
+# die()'s fallback). Prefer clift_exit over die() in new code: the
+# code-first signature lets you express intent without remembering which
+# arg position carries the exit code.
+clift_exit() {
+  local code="${1:-1}"
+  local msg="${2:-}"
+  if [[ -n "$msg" ]]; then
+    log_error "$msg"
+  fi
+  exit "$code"
+}
+
 # Export log helpers so subshells spawned by user scripts (e.g.
 # `$(bash -c '…')`) inherit them without having to re-source this file.
 # `_clift_log_format` is the private formatter that every public helper
@@ -133,5 +148,5 @@ die() { log_error "$1"; exit "${2:-1}"; }
 # subshell output matches parent styling instead of falling through to the
 # default case. Internal names are CLIFT_-prefixed to avoid colliding with
 # variables defined inside user scripts.
-export -f log_info log_error log_warn log_success log_debug log_suggest die _clift_log_format 2>/dev/null || true
+export -f log_info log_error log_warn log_success log_debug log_suggest die clift_exit _clift_log_format 2>/dev/null || true
 export CLIFT_LOG_THEME CLIFT_CLR_RESET CLIFT_CLR_GREEN CLIFT_CLR_YELLOW CLIFT_CLR_RED CLIFT_CLR_BLUE CLIFT_CLR_CYAN CLIFT_CLR_DIM

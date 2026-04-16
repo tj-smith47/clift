@@ -35,10 +35,11 @@ the same process where `set -euo pipefail` is established. Two consequences:
   `set +o pipefail`) locally, then restore with `set -e`. You do not need to
   re-enable these at the top of your own script — they are already on.
 - **Log helpers (`log_info`, `log_error`, `log_warn`, `log_success`,
-  `log_debug`, `log_suggest`, `die`) are auto-loaded.** An explicit
-  `source "${FRAMEWORK_DIR}/lib/log/log.sh"` line is no longer required in
-  new scripts. Existing scripts that still source it keep working — the
-  source guard makes the second load a no-op.
+  `log_debug`, `log_suggest`, `die`, `clift_exit`) are auto-loaded.** An
+  explicit `source "${FRAMEWORK_DIR}/lib/log/log.sh"` line is no longer
+  required in new scripts. Existing scripts that still source it keep
+  working — the source guard makes the second load a no-op.
+- **`die` vs `clift_exit`.** `die <msg> [<code>]` is the original pattern — message first, optional code second (default 1). `clift_exit <code> [<msg>]` flips the order to make the exit code explicit and primary; use it when the code carries meaning (e.g., `clift_exit 3 "no matching config"`). Both emit via `log_error` so theme + color handling is identical. `die` stays for backward compatibility; `clift_exit` is preferred for new code.
 - **Use `${BASH_SOURCE[0]}` (not `$0`) to locate your script.** Because the
   boot wrapper `source`s the user script, `$0` resolves to the boot wrapper
   (or parent bash), not the script path. `${BASH_SOURCE[0]}` still resolves
@@ -51,8 +52,8 @@ the same process where `set -euo pipefail` is established. Two consequences:
 # set -euo pipefail is already in effect; redeclare only if you prefer
 # to be explicit. Use `set +e` locally for opt-out regions.
 
-# log_info / log_error / log_warn / log_success / log_debug / die are
-# auto-loaded — no explicit source needed.
+# log_info / log_error / log_warn / log_success / log_debug / die / clift_exit
+# are auto-loaded — no explicit source needed.
 
 # Bool flag
 if [[ "${CLIFT_FLAG_DRY_RUN:-}" == "true" ]]; then
