@@ -121,7 +121,7 @@ HELP
 
 ```bash
 clift_override_command_pre() {
-  CLIFT_CMD_START_TS=$EPOCHREALTIME
+  CLIFT_CMD_START_TS=$(date +%s)
   export CLIFT_CMD_START_TS
 }
 ```
@@ -131,8 +131,7 @@ clift_override_command_pre() {
 ```bash
 clift_override_command_post() {
   local _default_fn="$1" task="$2" rc="$3"
-  local elapsed
-  elapsed=$(awk "BEGIN {printf \"%.3f\", $EPOCHREALTIME - $CLIFT_CMD_START_TS}")
+  local elapsed=$(( $(date +%s) - CLIFT_CMD_START_TS ))
   printf '[%s] rc=%s elapsed=%ss\n' "$task" "$rc" "$elapsed" >&2
 }
 ```
@@ -142,6 +141,11 @@ back and prints elapsed time to stderr. Because the post-hook runs in the
 same process as the user script (via the EXIT trap in `exec.sh`), it sees
 both `CLIFT_CMD_START_TS` and the script's own env vars. The post-hook
 cannot change the exit code — the script's code wins regardless.
+
+`date +%s` gives seconds resolution and works on every POSIX shell clift
+targets. If you need sub-second timing, `$EPOCHREALTIME` (bash 5.0+) is
+an option — but clift's documented floor is bash 4.2, so the portable
+recipe uses `date`.
 
 ## Logging slot (shadow-based exception)
 
