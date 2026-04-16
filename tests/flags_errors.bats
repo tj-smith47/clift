@@ -55,3 +55,44 @@ load test_helper
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
+
+@test "bool flag --help=true is rejected" {
+  # Bool flags never accept inline values; --help=true must error.
+  create_test_cli "greet"
+  bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$CLI_DIR" >/dev/null 2>&1 || true
+  build_test_wrapper
+  run "$CLI_DIR/bin/$CLI_NAME" greet --help=true
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"--help"* ]]
+  [[ "$output" == *"does not take a value"* ]]
+}
+
+@test "bool flag --no-cache=foo is rejected" {
+  create_test_cli "greet"
+  bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$CLI_DIR" >/dev/null 2>&1 || true
+  build_test_wrapper
+  run "$CLI_DIR/bin/$CLI_NAME" greet --no-cache=foo
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"--no-cache"* ]]
+  [[ "$output" == *"does not take a value"* ]]
+}
+
+@test "bool flag --quiet=1 is rejected" {
+  create_test_cli "greet"
+  bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$CLI_DIR" >/dev/null 2>&1 || true
+  build_test_wrapper
+  run "$CLI_DIR/bin/$CLI_NAME" greet --quiet=1
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"--quiet"* ]]
+  [[ "$output" == *"does not take a value"* ]]
+}
+
+@test "bool short flag -h=true is rejected" {
+  # Short form with inline value should also reject for bool flags.
+  create_test_cli "greet"
+  bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$CLI_DIR" >/dev/null 2>&1 || true
+  build_test_wrapper
+  run "$CLI_DIR/bin/$CLI_NAME" greet -h=true
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"does not take a value"* ]]
+}

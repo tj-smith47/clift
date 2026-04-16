@@ -297,15 +297,17 @@ JSON
   [[ "$output" == *"P1=file.txt"* ]]
 }
 
-@test "bool flag with explicit =true and =false" {
+@test "bool flag with explicit =true or =false is rejected" {
+  # Bool flags do not accept inline values — `--force=true` and `--force=false`
+  # both error. Using `--force` alone is the only way to set it; absence is the
+  # only way to leave it unset.
   run bash -c "
     source '$FRAMEWORK_DIR/lib/flags/parser.sh'
-    clift_parse_args '$TEST_DIR/flags.json' --force=true --verbose=false --required-one x
-    echo \"FORCE=\${CLIFT_FLAG_FORCE}\"
-    echo \"VERBOSE=\${CLIFT_FLAG_VERBOSE}\"
+    clift_parse_args '$TEST_DIR/flags.json' --force=true --required-one x
   "
-  [[ "$output" == *"FORCE=true"* ]]
-  [[ "$output" == *"VERBOSE=false"* ]]
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"--force"* ]]
+  [[ "$output" == *"does not take a value"* ]]
 }
 
 @test "empty list default produces COUNT=0" {

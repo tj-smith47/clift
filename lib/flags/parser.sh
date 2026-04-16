@@ -340,11 +340,14 @@ clift_parse_args() {
       _clift_var_name "$name"; var="$_CLIFT_VAR"
 
       if [[ "$type" == "bool" ]]; then
+        # Bool flags do not accept inline values. Writing `--flag=foo`
+        # silently storing "foo" (or treating empty as "true") led to
+        # confusing command scripts; explicit rejection is the right UX.
         if [[ "$has_inline" == true ]]; then
-          _clift_set_flag_value "$tok" "$name" "$type" "$inline_val" || return 1
-        else
-          _clift_set_flag_value "$tok" "$name" "$type" "true" || return 1
+          clift_err_bool_with_value "$name" "$inline_val"
+          return 1
         fi
+        _clift_set_flag_value "$tok" "$name" "$type" "true" || return 1
       else
         local value
         if [[ "$has_inline" == true ]]; then
@@ -382,6 +385,12 @@ clift_parse_args() {
         local type="${_ft_type[$name]}"
         local var
         _clift_var_name "$name"; var="$_CLIFT_VAR"
+
+        # Mirror the long-flag rule: bool flags reject inline values.
+        if [[ "$type" == "bool" ]]; then
+          clift_err_bool_with_value "$name" "$value"
+          return 1
+        fi
 
         _clift_set_flag_value "$tok" "$name" "$type" "$value" || return 1
         seen_names="$seen_names $name"

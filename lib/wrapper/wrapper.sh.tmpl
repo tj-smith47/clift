@@ -264,11 +264,11 @@ while (( i <= $# )); do
         if [[ -n "${_persist_type[$_lname]+x}" ]]; then
           _ltype="${_persist_type[$_lname]}"
           if [[ "$_ltype" == "bool" ]]; then
+            # Bool persistent flags reject inline values; match parser.sh.
             if [[ "$_lhas_inline" == true ]]; then
-              _clift_persist_set "$_lname" "$_ltype" "$_linline"
-            else
-              _clift_persist_set "$_lname" "$_ltype" "true"
+              clift_err_bool_with_value "$_lname" "$_linline" || exit 1
             fi
+            _clift_persist_set "$_lname" "$_ltype" "true"
             i=$((i+1))
           else
             if [[ "$_lhas_inline" == true ]]; then
@@ -294,7 +294,12 @@ while (( i <= $# )); do
           _sval="${_rest#*=}"
           _sname="${_persist_name_by_short[$_sh]:-}"
           if [[ -n "$_sname" ]]; then
-            _clift_persist_set "$_sname" "${_persist_type[$_sname]}" "$_sval"
+            _stype="${_persist_type[$_sname]}"
+            # Bool persistent flags reject inline values; match parser.sh.
+            if [[ "$_stype" == "bool" ]]; then
+              clift_err_bool_with_value "$_sname" "$_sval" || exit 1
+            fi
+            _clift_persist_set "$_sname" "$_stype" "$_sval"
             i=$((i+1))
             _consumed_persist=1
           fi

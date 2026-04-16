@@ -184,11 +184,11 @@ SH
   [[ "$output" == *"--no-cache"* ]]
 }
 
-@test "--no-cache=anything is passed through unchanged (value-form not matched)" {
+@test "--no-cache=anything is rejected by the parser (bool with inline value)" {
   # The flag is declared as bool and does not accept inline values. The
   # wrapper's scan matches exactly "--no-cache" (no `=` form), so
   # `--no-cache=foo` falls through to the parser, which rejects it with
-  # the normal "unknown flag" / "flag takes no value" error path.
+  # the bool-with-value error path.
   create_test_cli "greet"
   bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$CLI_DIR" >/dev/null 2>&1 || true
   build_test_wrapper
@@ -196,6 +196,8 @@ SH
   before_mtime="$(_mtime "$CLI_DIR/.clift/checksum")"
   sleep 1
   run "$CLI_DIR/bin/$CLI_NAME" greet --no-cache=foo
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"does not take a value"* ]]
   # Cache must NOT have been rebuilt (the value-form isn't treated as the flag)
   after_mtime="$(_mtime "$CLI_DIR/.clift/checksum")"
   [ "$after_mtime" = "$before_mtime" ]

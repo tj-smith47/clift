@@ -150,6 +150,12 @@ clift_err_invalid_pattern() {
   return 1
 }
 
+clift_err_bool_with_value() {
+  local name="$1" value="$2"
+  echo "error: flag '--$name' is a bool flag and does not take a value; got '--$name=$value'" >&2
+  return 1
+}
+
 clift_err_nonbool_in_cluster() {
   local short="$1" cluster="$2" layer="$3"
   echo "error: short flag '-$short' cannot appear in cluster '$cluster'" >&2
