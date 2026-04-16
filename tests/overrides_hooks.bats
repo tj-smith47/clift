@@ -102,6 +102,22 @@ SH
   [[ "$output" != *"POST-SENTINEL-SHOULD-NOT-APPEAR"* ]]
 }
 
+@test "pre-hook sees CLIFT_TASK and CLIFT_FLAG_* env vars" {
+  setup_parsed_cli
+  mkdir -p "$CLI_DIR/.clift/overrides"
+  cat > "$CLI_DIR/.clift/overrides/command_pre.sh" <<'SH'
+clift_override_command_pre() {
+  echo "TASK:${CLIFT_TASK:-UNSET}"
+  echo "WHO:${CLIFT_FLAG_WHO:-UNSET}"
+}
+SH
+
+  run "$CLI_DIR/bin/$CLI_NAME" greet --who bob
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"TASK:greet"* ]]
+  [[ "$output" == *"WHO:bob"* ]]
+}
+
 @test "command_pre non-zero return (no exit) aborts the command with that code" {
   # Covers the `return N` abort path — distinct from `exit N` because a
   # function return lets the caller's if/||/$? plumbing see the code.
