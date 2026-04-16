@@ -52,8 +52,8 @@ the same process where `set -euo pipefail` is established. Two consequences:
 # set -euo pipefail is already in effect; redeclare only if you prefer
 # to be explicit. Use `set +e` locally for opt-out regions.
 
-# log_info / log_error / log_warn / log_success / log_debug / die / clift_exit
-# are auto-loaded — no explicit source needed.
+# log_info / log_error / log_warn / log_success / log_debug / log_suggest /
+# die / clift_exit are auto-loaded — no explicit source needed.
 
 # Bool flag
 if [[ "${CLIFT_FLAG_DRY_RUN:-}" == "true" ]]; then
