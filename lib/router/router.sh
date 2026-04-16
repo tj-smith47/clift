@@ -82,12 +82,12 @@ fi
 # Step 4: Ensure cache is fresh (only when we have a root Taskfile)
 source "${FRAMEWORK_DIR}/lib/cache.sh"
 
-# CLIFT_CACHE=bypass is checked both here (to save a function-call frame on
-# the hot path — no source+call when the env var already says "skip") and
-# inside clift_ensure_cache at lib/cache.sh. Do not drop either guard in a
-# refactor; the belt-and-suspenders is intentional. The inner guard covers
-# direct callers of clift_ensure_cache (compile.sh, tests) that don't pass
-# through this gate.
+# CLIFT_CACHE=bypass is checked both here (to skip one function call on the
+# hot path when the env var already says "skip") and inside clift_ensure_cache
+# at lib/cache.sh. Do not drop either guard in a refactor; the
+# belt-and-suspenders is intentional. The inner guard covers direct callers
+# of clift_ensure_cache (compile.sh, tests) that don't pass through this
+# gate.
 if [[ "$no_root_taskfile" != "true" ]] \
   && [[ -z "${CLIFT_CACHE_VERIFIED:-}" ]] \
   && [[ "${CLIFT_CACHE:-}" != "bypass" ]]; then
@@ -97,6 +97,13 @@ fi
 # Step 5: Load flag table for this task, merge with globals — single jq call.
 # Result is either "LEGACY" (no flags / not in cache) or the merged JSON array.
 # Reads from the consolidated .clift/index.json (shape: {tasks: {<name>: {flags, aliases, hidden, summary}}}).
+#
+# Under CLIFT_CACHE=bypass without a .clift/ directory, INDEX_FILE is absent
+# and we land in the "LEGACY" branch — parser.sh then treats argv as pure
+# positionals (no flag parsing, no --help interception). Dispatch still works
+# because wrapper.sh.tmpl short-circuits to `exec task` before reaching the
+# router in that scenario. This comment exists so future readers don't
+# assume the LEGACY branch is only for the no-root-Taskfile case.
 INDEX_FILE="$CLI_DIR/.clift/index.json"
 if [[ "$no_root_taskfile" == "true" ]] || [[ ! -f "$INDEX_FILE" ]]; then
   merged_table="LEGACY"

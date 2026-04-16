@@ -65,9 +65,9 @@ clift_ensure_cache() {
   # re-source cheap) so standalone callers still get a warning via the
   # echo fallback when log.sh isn't reachable.
   if [[ -n "$_cache_mode" && "$_cache_mode" != "rebuild" ]]; then
-    if [[ -f "${2:-}/lib/log/log.sh" ]]; then
+    if [[ -f "$fw_dir/lib/log/log.sh" ]]; then
       # shellcheck source=/dev/null
-      source "$2/lib/log/log.sh" 2>/dev/null || true
+      source "$fw_dir/lib/log/log.sh" 2>/dev/null || true
     fi
     if declare -F log_warn >/dev/null 2>&1; then
       log_warn "CLIFT_CACHE='$_cache_mode' not recognized (expected: rebuild, bypass); falling through to default"
