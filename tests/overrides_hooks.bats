@@ -387,3 +387,164 @@ SH
   [[ "$output" != *"PRE:"* ]]
   [[ "$output" != *"POST:"* ]]
 }
+
+# ---------------------------------------------------------------------------
+# Wrap pattern — overrides call "$1" "${@:2}" to delegate
+# ---------------------------------------------------------------------------
+
+@test "command_pre wrap pattern: override delegates to default then continues" {
+  # The default command_pre is a no-op, so "delegates" is tautological
+  # output-wise — the assertion is that calling `"$1" "${@:2}"` from the
+  # override does not error and the command completes successfully.
+  setup_parsed_cli
+  mkdir -p "$CLI_DIR/.clift/overrides"
+  cat > "$CLI_DIR/.clift/overrides/command_pre.sh" <<'SH'
+clift_override_command_pre() {
+  "$1" "${@:2}"
+  echo "WRAPPED-PRE:$2"
+}
+SH
+
+  run "$CLI_DIR/bin/$CLI_NAME" greet
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"WRAPPED-PRE:greet"* ]]
+  [[ "$output" == *"SCRIPT-RAN"* ]]
+}
+
+@test "command_post wrap pattern: override delegates to default then continues" {
+  setup_parsed_cli
+  mkdir -p "$CLI_DIR/.clift/overrides"
+  cat > "$CLI_DIR/.clift/overrides/command_post.sh" <<'SH'
+clift_override_command_post() {
+  "$1" "${@:2}"
+  echo "WRAPPED-POST:$3"
+}
+SH
+
+  run "$CLI_DIR/bin/$CLI_NAME" greet
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"SCRIPT-RAN"* ]]
+  [[ "$output" == *"WRAPPED-POST:0"* ]]
+}
+
+# ---------------------------------------------------------------------------
+# post-hook return semantics (complement to the existing exit N test)
+# ---------------------------------------------------------------------------
+
+@test "command_post return N does not change the final exit code" {
+  # Companion to "command_post exit N does not change the final exit code":
+  # proves `return N` is contained by the function-return path (not the
+  # subshell wrap). Script exits 3; override `return 77`; final rc stays 3.
+  setup_parsed_cli
+  cat > "$CLI_DIR/cmds/greet/greet.sh" <<'SH'
+#!/usr/bin/env bash
+exit 3
+SH
+  chmod +x "$CLI_DIR/cmds/greet/greet.sh"
+
+  mkdir -p "$CLI_DIR/.clift/overrides"
+  cat > "$CLI_DIR/.clift/overrides/command_post.sh" <<'SH'
+clift_override_command_post() {
+  echo "POST-RETURN:$3"
+  return 77
+}
+SH
+
+  CLIFT_ARG_COUNT=0 run bash "$FRAMEWORK_DIR/lib/router/router.sh" "greet"
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"POST-RETURN:3"* ]]
+}
+
+# ---------------------------------------------------------------------------
+# Passthrough post-hook with non-zero script exit
+# ---------------------------------------------------------------------------
+
+@test "command_post on passthrough with non-zero script exit preserves rc" {
+  # Locks the contract that the passthrough path and parsed path both
+  # surface the script's real rc to the post-hook, not a remapped code.
+  setup_passthrough_cli
+  cat > "$CLI_DIR/cmds/raw/raw.sh" <<'SH'
+#!/usr/bin/env bash
+echo "PASSTHROUGH-RAN args=$*"
+exit 4
+SH
+  chmod +x "$CLI_DIR/cmds/raw/raw.sh"
+
+  mkdir -p "$CLI_DIR/.clift/overrides"
+  cat > "$CLI_DIR/.clift/overrides/command_post.sh" <<'SH'
+clift_override_command_post() {
+  echo "PASSTHROUGH-POST:$3"
+}
+SH
+
+  # Drive the router directly to get the real exit code (4, not task's 201).
+  CLIFT_ARG_COUNT=0 run bash "$FRAMEWORK_DIR/lib/router/router.sh" "raw"
+  [ "$status" -eq 4 ]
+  [[ "$output" == *"PASSTHROUGH-RAN"* ]]
+  [[ "$output" == *"PASSTHROUGH-POST:4"* ]]
+}
+
+# ---------------------------------------------------------------------------
+# Tier depth — nested cmds/<a>/<b>/overrides/ must NOT be consulted
+# ---------------------------------------------------------------------------
+
+@test "nested tier depth is NOT consulted for command_pre (only first segment)" {
+  # Rule: cmds/<first-seg>/overrides/<slot>.sh applies — any deeper nesting
+  # (cmds/deploy/prod/overrides/…) is ignored. Set up a fixture for the
+  # deploy:prod task, place an override at both the valid first-seg path
+  # and the disallowed nested path, and assert only the first-seg sentinel
+  # appears in output.
+  create_test_cli "deploy" "- {name: region, type: string, default: us, desc: 'Region'}"
+
+  # Rename the scaffolded command to deploy:prod shape.
+  rm -rf "$CLI_DIR/cmds/deploy"
+  mkdir -p "$CLI_DIR/cmds/deploy/prod/overrides"
+  mkdir -p "$CLI_DIR/cmds/deploy/overrides"
+
+  cat > "$CLI_DIR/cmds/deploy/Taskfile.yaml" <<'YAML'
+version: '3'
+tasks:
+  prod:
+    vars:
+      FLAGS: []
+    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
+YAML
+
+  cat > "$CLI_DIR/cmds/deploy/deploy.prod.sh" <<'SH'
+#!/usr/bin/env bash
+echo "DEPLOY-PROD-RAN"
+SH
+  chmod +x "$CLI_DIR/cmds/deploy/deploy.prod.sh"
+
+  # Re-wire root Taskfile to include the deploy namespace.
+  cat > "$CLI_DIR/Taskfile.yaml" <<'YAML'
+version: '3'
+includes:
+  deploy: ./cmds/deploy
+tasks:
+  default:
+    cmd: echo "root default"
+YAML
+
+  # Valid first-segment tier — SHOULD fire on `deploy:prod`.
+  cat > "$CLI_DIR/cmds/deploy/overrides/command_pre.sh" <<'SH'
+clift_override_command_pre() {
+  echo "FIRST-SEG-FIRED:$2"
+}
+SH
+  # Disallowed nested tier — must NOT fire.
+  cat > "$CLI_DIR/cmds/deploy/prod/overrides/command_pre.sh" <<'SH'
+clift_override_command_pre() {
+  echo "NESTED-SHOULD-NOT-FIRE"
+}
+SH
+
+  bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$CLI_DIR" >/dev/null 2>&1 || true
+  build_test_wrapper
+
+  run "$CLI_DIR/bin/$CLI_NAME" deploy prod
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"FIRST-SEG-FIRED:deploy:prod"* ]]
+  [[ "$output" == *"DEPLOY-PROD-RAN"* ]]
+  [[ "$output" != *"NESTED-SHOULD-NOT-FIRE"* ]]
+}
