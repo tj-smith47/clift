@@ -35,9 +35,23 @@ if [[ -z "${CLI_DIR:-}" ]]; then
   exit 1
 fi
 
+# Invariant: CLIFT_TASK is exported for the whole router lifetime, not just
+# per-path. Both the pre-hook and the override loader key on it, so the
+# single hoist here eliminates two duplicate exports further down and
+# removes a "was this set before that source?" question from the code.
+export CLIFT_TASK="$TASK_NAME"
+
 # Step 1: Dependency check (fast — command presence only)
 source "${FRAMEWORK_DIR}/lib/check/deps.sh"
 clift_check_deps_fast
+
+# Load the override loader once near the top; source-guarded so re-sourcing
+# elsewhere (e.g., from prelude.sh when exec.sh runs) is a no-op. Hoisted
+# here instead of per-call-site because all three sites (version_print,
+# passthrough pre-hook, parsed pre-hook) need it, and the source guard
+# makes the hoist semantically identical to three scoped sources.
+# shellcheck source=../runtime/overrides.sh
+source "${FRAMEWORK_DIR}/lib/runtime/overrides.sh"
 
 # Step 2: Reconstruct argv from either CLIFT_ARG_* (standard mode) or
 # CLI_ARGS (task mode, legacy)
@@ -99,13 +113,7 @@ if [[ "$merged_table" == '"PASSTHROUGH"' ]] || [[ "$merged_table" == "PASSTHROUG
     exit "$EXIT_NOT_FOUND"
   fi
   # Pre-hook: fires before the user script on the passthrough path.
-  # shellcheck source=../runtime/overrides.sh
-  source "${FRAMEWORK_DIR}/lib/runtime/overrides.sh"
-  export CLIFT_TASK="$TASK_NAME"
-  clift_call_override command_pre clift_default_command_pre --task "$TASK_NAME" "$TASK_NAME" || {
-    _clift_pre_rc=$?
-    exit "$_clift_pre_rc"
-  }
+  clift_run_command_pre "$TASK_NAME"
   exec bash "${FRAMEWORK_DIR}/lib/runtime/exec.sh" "$script_path" "${args[@]+"${args[@]}"}"
 fi
 
@@ -129,8 +137,6 @@ clift_parse_args "$tmp_table" "${args[@]+"${args[@]}"}"
 # reaching the router. This block fires only for `mycli <cmd> --version`,
 # where --version is merged in as a global flag from globals.json.
 if [[ "${CLIFT_FLAG_VERSION:-}" == "true" ]]; then
-  # shellcheck source=../runtime/overrides.sh
-  source "${FRAMEWORK_DIR}/lib/runtime/overrides.sh"
   clift_call_override version_print clift_default_version_print \
     "${CLI_NAME:-unknown}" "${CLI_VERSION:-0.0.0}" "$CLI_DIR"
   exit 0
@@ -148,8 +154,9 @@ if [[ "${CLIFT_FLAG_NO_COLOR:-}" == "true" ]]; then export NO_COLOR=1; fi
 
 source "${FRAMEWORK_DIR}/lib/log/log.sh"
 
-# Step 10: Resolve script path
-export CLIFT_TASK="$TASK_NAME"
+# Step 10: Resolve script path.
+# CLIFT_TASK is already exported at the top of the router — see the
+# single-hoist comment there.
 first_seg="${TASK_NAME%%:*}"
 cmd_dir="${CLI_DIR}/cmds/${first_seg}"
 
@@ -173,11 +180,6 @@ if [[ ! -f "$script_path" ]]; then
 fi
 
 # Pre-hook: fires before the user script on the parsed path.
-# shellcheck source=../runtime/overrides.sh
-source "${FRAMEWORK_DIR}/lib/runtime/overrides.sh"
-clift_call_override command_pre clift_default_command_pre --task "$TASK_NAME" "$TASK_NAME" || {
-  _clift_pre_rc=$?
-  exit "$_clift_pre_rc"
-}
+clift_run_command_pre "$TASK_NAME"
 
 exec bash "${FRAMEWORK_DIR}/lib/runtime/exec.sh" "$script_path"

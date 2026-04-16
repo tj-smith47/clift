@@ -125,3 +125,17 @@ clift_default_command_pre() { :; }
 # change the framework's exit code — the script's exit code wins regardless
 # of what happens inside the override.
 clift_default_command_post() { :; }
+
+# clift_run_command_pre — dispatch the command_pre slot with standard
+# abort semantics. Captures the override's exit code via `|| { rc=$?; … }`
+# so a failing override aborts the router process with the override's code.
+# `if ! fn` / `fn || true` would mask the code as 0; this form preserves it.
+#
+# Called from both exec sites in lib/router/router.sh (passthrough path and
+# parsed path) — extracting the duplication keeps the abort-semantics
+# contract in one place.
+clift_run_command_pre() {
+  local task="$1"
+  clift_call_override command_pre clift_default_command_pre \
+    --task "$task" "$task" || { local rc=$?; exit "$rc"; }
+}
