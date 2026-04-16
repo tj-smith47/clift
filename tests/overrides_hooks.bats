@@ -232,6 +232,32 @@ SH
   [ "$status" -eq 3 ]
 }
 
+@test "command_post exit N does not change the final exit code" {
+  # Regression: a user `exit N` inside command_post must NOT preempt the
+  # trap's final `exit "$rc"`. Containment relies on the subshell wrap in
+  # lib/runtime/exec.sh (the `( … ) || true` around clift_call_override).
+  # `return N` is tested above; `exit N` is the complementary escape path.
+  setup_parsed_cli
+  cat > "$CLI_DIR/cmds/greet/greet.sh" <<'SH'
+#!/usr/bin/env bash
+exit 5
+SH
+  chmod +x "$CLI_DIR/cmds/greet/greet.sh"
+
+  mkdir -p "$CLI_DIR/.clift/overrides"
+  cat > "$CLI_DIR/.clift/overrides/command_post.sh" <<'SH'
+clift_override_command_post() {
+  echo "POST-BEFORE-EXIT:$3"
+  exit 99
+}
+SH
+
+  # Drive the router directly to get the real exit code (5, not task's 201).
+  CLIFT_ARG_COUNT=0 run bash "$FRAMEWORK_DIR/lib/router/router.sh" "greet"
+  [ "$status" -eq 5 ]
+  [[ "$output" == *"POST-BEFORE-EXIT:5"* ]]
+}
+
 @test "command_post fires via SIGINT" {
   if ! command -v timeout >/dev/null 2>&1; then
     skip "timeout not available"

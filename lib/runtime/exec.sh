@@ -46,8 +46,14 @@ _clift_run_command_post() {
   set +e
   # shellcheck source=/dev/null
   source "${FRAMEWORK_DIR}/lib/runtime/overrides.sh"
-  clift_call_override command_post clift_default_command_post \
-    --task "${CLIFT_TASK:-}" "${CLIFT_TASK:-}" "$rc"
+  # Subshell-wrap the override so a user `exit N` inside command_post is
+  # contained — otherwise it preempts our `exit "$rc"` below and the
+  # post-hook silently wins the exit code. `return N` is already contained
+  # by clift_call_override's function-return semantics; the subshell closes
+  # the only remaining escape. Fork cost is on the terminate path (once per
+  # command), not a hot loop — acceptable.
+  ( clift_call_override command_post clift_default_command_post \
+      --task "${CLIFT_TASK:-}" "${CLIFT_TASK:-}" "$rc" ) || true
   exit "$rc"
 }
 trap _clift_run_command_post EXIT
