@@ -18,6 +18,109 @@ fi
 # shellcheck source=/dev/null
 source "$FRAMEWORK_DIR/lib/flags/errors.sh"
 
+# --task:* passthrough scan: consume whitelisted go-task runner flags
+# (--task:watch, --task:dry, etc.) and queue them for injection into the
+# final `exec task …` call with the `--task:` prefix stripped.
+#
+# Whitelist rationale: only flags that are meaningful at the runner layer
+# and don't conflict with clift's own flag parsing. `watch`, `dry`,
+# `parallel`, `status`, `summary`, `list-all`, `list`, `force`, `silent`
+# are boolean; `interval` and `concurrency` take values.
+#
+# Position: this scan runs BEFORE --no-cache and BEFORE the longest-prefix
+# walk so the stripped tokens never reach the wrapper's dispatch logic or
+# the router. Value-flags consume the next token (or parse an inline
+# `--task:interval=500ms` form). Stops at `--` per bash convention.
+#
+# Unknown --task:foo is a hard error: the whitelist is small and curated,
+# a typo is far likelier than a missing entry. We print the allowed set.
+declare -A _TASK_FLAG_WHITELIST=(
+  [watch]=bool
+  [dry]=bool
+  [parallel]=bool
+  [status]=bool
+  [summary]=bool
+  [list-all]=bool
+  [list]=bool
+  [force]=bool
+  [silent]=bool
+  [interval]=value
+  [concurrency]=value
+)
+_TASK_FLAG_NAMES_SORTED="concurrency dry force interval list list-all parallel silent status summary watch"
+
+_task_flags=()
+# Fast path: skip the scan entirely when no --task:* token is present. A
+# single substring check on "$*" is one fork-free `[[ ]]` test; the full
+# scan below allocates an array and iterates per-token, which is wasted
+# work for the common case (no passthrough).
+if [[ "$*" == *--task:* ]]; then
+  _tf_new_args=()
+  _tf_saw_terminator=0
+  _tf_i=1
+  while (( _tf_i <= $# )); do
+    _tf_tok="${!_tf_i}"
+    if (( _tf_saw_terminator == 1 )); then
+      _tf_new_args+=("$_tf_tok")
+      _tf_i=$((_tf_i+1))
+      continue
+    fi
+    if [[ "$_tf_tok" == "--" ]]; then
+      _tf_saw_terminator=1
+      _tf_new_args+=("$_tf_tok")
+      _tf_i=$((_tf_i+1))
+      continue
+    fi
+    if [[ "$_tf_tok" == --task:* ]]; then
+      _tf_name="${_tf_tok#--task:}"
+      _tf_inline=""
+      _tf_has_inline=0
+      if [[ "$_tf_name" == *=* ]]; then
+        _tf_inline="${_tf_name#*=}"
+        _tf_name="${_tf_name%%=*}"
+        _tf_has_inline=1
+      fi
+      # Validate whitelist BEFORE consuming any value token. If we consumed
+      # the value first and then rejected the name, the value would be
+      # silently eaten from argv — violating the user's mental model.
+      if [[ -z "${_TASK_FLAG_WHITELIST[$_tf_name]+x}" ]]; then
+        echo "error: unknown --task: flag '$_tf_name'; allowed: $_TASK_FLAG_NAMES_SORTED" >&2
+        exit 1
+      fi
+      _tf_kind="${_TASK_FLAG_WHITELIST[$_tf_name]}"
+      if [[ "$_tf_kind" == bool ]]; then
+        if (( _tf_has_inline == 1 )); then
+          echo "error: --task:$_tf_name is a bool flag and does not take a value; got '--task:$_tf_name=$_tf_inline'" >&2
+          exit 1
+        fi
+        _task_flags+=("--$_tf_name")
+        _tf_i=$((_tf_i+1))
+      else
+        if (( _tf_has_inline == 1 )); then
+          _task_flags+=("--$_tf_name" "$_tf_inline")
+          _tf_i=$((_tf_i+1))
+        else
+          if (( _tf_i + 1 > $# )); then
+            echo "error: flag --task:$_tf_name requires a value" >&2
+            exit 1
+          fi
+          _tf_next=$((_tf_i+1))
+          _task_flags+=("--$_tf_name" "${!_tf_next}")
+          _tf_i=$((_tf_i+2))
+        fi
+      fi
+      continue
+    fi
+    _tf_new_args+=("$_tf_tok")
+    _tf_i=$((_tf_i+1))
+  done
+  if (( ${#_task_flags[@]} > 0 )); then
+    set -- "${_tf_new_args[@]+"${_tf_new_args[@]}"}"
+  fi
+  unset _tf_new_args _tf_saw_terminator _tf_i _tf_tok _tf_name \
+        _tf_inline _tf_has_inline _tf_kind _tf_next
+fi
+
 # --no-cache scan: translate the flag to CLIFT_CACHE=rebuild and strip it
 # from argv so the router's parser doesn't see it twice (it IS a global
 # flag, but the wrapper owns it — cache work runs before the parser).
@@ -54,7 +157,7 @@ fi
 
 # Special top-level cases that short-circuit the dispatch walk.
 if (( $# == 0 )); then
-  exec task --taskfile "$CLI_DIR/Taskfile.yaml"
+  exec task "${_task_flags[@]+"${_task_flags[@]}"}" --taskfile "$CLI_DIR/Taskfile.yaml"
 fi
 
 case "$1" in
@@ -98,7 +201,7 @@ if [[ ! -f "$TASKS_JSON" ]]; then
       export "CLIFT_ARG_$_k=$_a"
     done
     unset _k _a
-    exec task --taskfile "$CLI_DIR/Taskfile.yaml" "$@"
+    exec task "${_task_flags[@]+"${_task_flags[@]}"}" --taskfile "$CLI_DIR/Taskfile.yaml" "$@"
   else
     echo "error: task cache missing: $TASKS_JSON" >&2
     echo "  try: rm -rf '$CLI_DIR/.clift' and re-run" >&2
@@ -357,7 +460,7 @@ if (( ${#path[@]} == 0 )); then
   if (( i > $# )); then
     # All argv consumed by persistent-flag early-bind. Proceed to root task.
     [[ -n "$_CLIFT_PERSIST_BOUND" ]] && export CLIFT_PERSIST_BOUND="$_CLIFT_PERSIST_BOUND"
-    exec task --taskfile "$CLI_DIR/Taskfile.yaml"
+    exec task "${_task_flags[@]+"${_task_flags[@]}"}" --taskfile "$CLI_DIR/Taskfile.yaml"
   fi
   if (( _terminator_seen == 1 )); then
     # Post-terminator tokens pass through to the root task as literal argv.
@@ -372,7 +475,7 @@ if (( ${#path[@]} == 0 )); then
       k=$((k+1))
       export "CLIFT_ARG_$k=$arg"
     done
-    exec task --taskfile "$CLI_DIR/Taskfile.yaml"
+    exec task "${_task_flags[@]+"${_task_flags[@]}"}" --taskfile "$CLI_DIR/Taskfile.yaml"
   fi
   first="${1:-}"
   if [[ "$first" == -* ]]; then
@@ -435,4 +538,4 @@ for arg in "${remaining[@]+"${remaining[@]}"}"; do
   export "CLIFT_ARG_$k=$arg"
 done
 
-exec task --taskfile "$CLI_DIR/Taskfile.yaml" "$matched_task"
+exec task "${_task_flags[@]+"${_task_flags[@]}"}" --taskfile "$CLI_DIR/Taskfile.yaml" "$matched_task"

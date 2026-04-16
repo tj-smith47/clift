@@ -34,6 +34,8 @@ Each flag is a map:
 
 `help`, `verbose`, `quiet`, `no-color`, `no-cache`, `version` are reserved. Additionally, `task`, `mode`, and names starting with `arg-` are reserved to avoid env-var namespace collisions (`CLIFT_TASK`, `CLIFT_MODE`, `CLIFT_ARG_*`). You can override the *short* alias (e.g., `-v` = `--value`) but not the long name.
 
+The `--task:` prefix is reserved for go-task runner-flag passthrough — `--task:watch`, `--task:dry`, `--task:interval`, etc. are wrapper-owned and never reach the parser. See [docs/cli/task-features.md](cli/task-features.md#-task-runner-flag-passthrough) for the whitelist and behavior.
+
 ## Examples
 
 ### Bool

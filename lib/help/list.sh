@@ -44,6 +44,26 @@ _render_global_flags() {
   fi
 }
 
+# Helper: render the --task:* passthrough section. These flags are consumed
+# by the wrapper and forwarded to the go-task runner with the `--task:`
+# prefix stripped. Kept inside the default help body (not a post-processor)
+# so wrapping overrides automatically inherit the footer.
+_render_task_runner_flags() {
+  echo "Task runner flags (passthrough):"
+  printf '  %-24s  %s\n' "--task:watch"           "Re-run on file changes (go-task --watch)"
+  printf '  %-24s  %s\n' "--task:dry"             "Print tasks without executing (go-task --dry)"
+  printf '  %-24s  %s\n' "--task:parallel"        "Run deps in parallel (go-task --parallel)"
+  printf '  %-24s  %s\n' "--task:status"          "Check status and exit (go-task --status)"
+  printf '  %-24s  %s\n' "--task:summary"         "Show task summary (go-task --summary)"
+  printf '  %-24s  %s\n' "--task:list"            "List go-task tasks (go-task --list)"
+  printf '  %-24s  %s\n' "--task:list-all"        "List all go-task tasks (go-task --list-all)"
+  printf '  %-24s  %s\n' "--task:force"           "Force-run even when up-to-date (go-task --force)"
+  printf '  %-24s  %s\n' "--task:silent"          "Suppress task announcements (go-task --silent)"
+  printf '  %-24s  %s\n' "--task:interval <dur>"  "Watch poll interval (go-task --interval)"
+  printf '  %-24s  %s\n' "--task:concurrency <n>" "Max parallel tasks (go-task --concurrency)"
+  echo ""
+}
+
 # Default implementation — rendered when no override is defined, or invoked
 # as the `$1` callback by a wrapping override.
 _clift_help_list_default() {
@@ -134,6 +154,7 @@ _clift_help_list_default() {
     echo "  (no commands found)"
     echo ""
     _render_global_flags
+    _render_task_runner_flags
     if [[ "${CLIFT_MODE:-task}" == "standard" ]]; then
       echo "Run '${CLI_NAME} <command> --help' for details on a command."
     else
@@ -178,6 +199,7 @@ _clift_help_list_default() {
   done <<< "$ordered_groups"
 
   _render_global_flags
+  _render_task_runner_flags
 
   if [[ "${CLIFT_MODE:-task}" == "standard" ]]; then
     echo "Run '${CLI_NAME} <command> --help' for details on a command."

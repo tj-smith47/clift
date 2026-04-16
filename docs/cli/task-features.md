@@ -101,6 +101,45 @@ summary: |
     mycli deploy --profile=staging prod
 ```
 
+## `--task:*` runner flag passthrough
+
+Some go-task runner flags (the ones you'd normally pass to `task` itself, not declare on a task) are useful from the user's CLI surface — the obvious cases being `--watch`, `--dry`, `--list-all`. clift exposes these via a `--task:` prefix:
+
+```bash
+mycli --task:watch deploy prod        # re-run on file changes
+mycli --task:dry deploy prod          # print plan, don't execute
+mycli --task:list-all                 # list every available task
+mycli --task:interval 500ms watch greet
+```
+
+The wrapper consumes these tokens before dispatch, strips the `--task:` prefix, and forwards them to the underlying `task` invocation. Flags that don't accept a value (`--task:watch`) are recognised standalone; flags that do accept a value (`--task:interval`) take the next token, or an inline `--task:interval=500ms` form.
+
+### Whitelist
+
+Only these go-task flags are exposed:
+
+| Flag | Type | Forwards as |
+|---|---|---|
+| `--task:watch` | bool | `--watch` |
+| `--task:dry` | bool | `--dry` |
+| `--task:parallel` | bool | `--parallel` |
+| `--task:status` | bool | `--status` |
+| `--task:summary` | bool | `--summary` |
+| `--task:list` | bool | `--list` |
+| `--task:list-all` | bool | `--list-all` |
+| `--task:force` | bool | `--force` |
+| `--task:silent` | bool | `--silent` |
+| `--task:interval <dur>` | value | `--interval <dur>` |
+| `--task:concurrency <n>` | value | `--concurrency <n>` |
+
+Unknown `--task:foo` is a hard error with the whitelist surfaced — typos won't silently pass through.
+
+### Position rules
+
+- `--task:*` flags may appear anywhere in argv; the wrapper scans the whole argv before dispatch.
+- Tokens after a bare `--` terminator are treated as literal positionals — `mycli build -- --task:watch foo.txt` passes `--task:watch foo.txt` as raw arguments to your script.
+- The whitelist is enforced before any value token is consumed: `mycli --task:typo 500ms greet` errors on `--task:typo` without eating `500ms`.
+
 ---
 
 For fields not covered here, see the [go-task schema reference](https://taskfile.dev/reference/schema/). Everything documented there is supported — clift does not strip or rewrite task fields at compile time.
