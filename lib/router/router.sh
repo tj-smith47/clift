@@ -102,9 +102,10 @@ if [[ "$merged_table" == '"PASSTHROUGH"' ]] || [[ "$merged_table" == "PASSTHROUG
   # shellcheck source=../runtime/overrides.sh
   source "${FRAMEWORK_DIR}/lib/runtime/overrides.sh"
   export CLIFT_TASK="$TASK_NAME"
-  if ! clift_call_override command_pre clift_default_command_pre --task "$TASK_NAME" "$TASK_NAME"; then
-    exit $?
-  fi
+  clift_call_override command_pre clift_default_command_pre --task "$TASK_NAME" "$TASK_NAME" || {
+    _clift_pre_rc=$?
+    exit "$_clift_pre_rc"
+  }
   exec bash "${FRAMEWORK_DIR}/lib/runtime/exec.sh" "$script_path" "${args[@]+"${args[@]}"}"
 fi
 

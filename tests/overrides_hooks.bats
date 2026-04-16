@@ -136,6 +136,33 @@ SH
   [[ "$output" != *"SCRIPT-RAN"* ]]
 }
 
+@test "passthrough command_pre non-zero return aborts with that code and skips post-hook" {
+  # Mirror of the parsed `return N` abort test for the passthrough path.
+  # Guards against the `if ! fn; then exit $?; fi` regression where $?
+  # reads as 0 inside the then-branch, silently dropping the abort code.
+  setup_passthrough_cli
+  mkdir -p "$CLI_DIR/.clift/overrides"
+  cat > "$CLI_DIR/.clift/overrides/command_pre.sh" <<'SH'
+clift_override_command_pre() {
+  echo "PRE-PT-RETURN"
+  return 9
+}
+SH
+  cat > "$CLI_DIR/.clift/overrides/command_post.sh" <<'SH'
+clift_override_command_post() {
+  echo "POST-PT-SENTINEL-SHOULD-NOT-APPEAR"
+}
+SH
+
+  # Drive the router directly to get the real exit code. The wrapper path
+  # goes through `task`, which remaps all non-zero exits to 201.
+  CLIFT_ARG_COUNT=0 run bash "$FRAMEWORK_DIR/lib/router/router.sh" "raw"
+  [ "$status" -eq 9 ]
+  [[ "$output" == *"PRE-PT-RETURN"* ]]
+  [[ "$output" != *"PASSTHROUGH-RAN"* ]]
+  [[ "$output" != *"POST-PT-SENTINEL-SHOULD-NOT-APPEAR"* ]]
+}
+
 # ---------------------------------------------------------------------------
 # Post-hook
 # ---------------------------------------------------------------------------
