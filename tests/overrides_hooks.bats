@@ -258,7 +258,7 @@ SH
   [[ "$output" == *"POST-BEFORE-EXIT:5"* ]]
 }
 
-@test "command_post fires via SIGINT" {
+@test "command_post fires via SIGINT with rc=130" {
   if ! command -v timeout >/dev/null 2>&1; then
     skip "timeout not available"
   fi
@@ -279,11 +279,37 @@ clift_override_command_post() {
 SH
 
   run timeout --signal=INT 0.5 "$CLI_DIR/bin/$CLI_NAME" greet
-  # Exit code on SIGINT is 130 (128 + SIGINT); timeout itself exits 124 or
-  # forwards the signal-based exit. Accept either as long as the post-hook
-  # fired.
+  # SIGINT must propagate as 130 into the post-hook's $3. The wrapper's
+  # outer exit code may differ (task-runner may remap), but the post-hook
+  # output is load-bearing: it proves our INT handler stashed _clift_user_rc.
   [[ "$output" == *"SLEEP-START"* ]]
-  [[ "$output" == *"POST-SIGINT:"* ]]
+  [[ "$output" == *"POST-SIGINT:130"* ]]
+  [[ "$output" != *"SLEEP-END-SHOULD-NOT-APPEAR"* ]]
+}
+
+@test "command_post fires via SIGTERM with rc=143" {
+  if ! command -v timeout >/dev/null 2>&1; then
+    skip "timeout not available"
+  fi
+  setup_parsed_cli
+  cat > "$CLI_DIR/cmds/greet/greet.sh" <<'SH'
+#!/usr/bin/env bash
+echo "SLEEP-START"
+sleep 5
+echo "SLEEP-END-SHOULD-NOT-APPEAR"
+SH
+  chmod +x "$CLI_DIR/cmds/greet/greet.sh"
+
+  mkdir -p "$CLI_DIR/.clift/overrides"
+  cat > "$CLI_DIR/.clift/overrides/command_post.sh" <<'SH'
+clift_override_command_post() {
+  echo "POST-SIGTERM:$3"
+}
+SH
+
+  run timeout --signal=TERM 0.5 "$CLI_DIR/bin/$CLI_NAME" greet
+  [[ "$output" == *"SLEEP-START"* ]]
+  [[ "$output" == *"POST-SIGTERM:143"* ]]
   [[ "$output" != *"SLEEP-END-SHOULD-NOT-APPEAR"* ]]
 }
 

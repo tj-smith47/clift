@@ -27,10 +27,17 @@ source "${FRAMEWORK_DIR}/lib/runtime/prelude.sh"
 _clift_user_script="$1"
 shift
 
-# Register the command_post hook via EXIT trap. The trap fires on:
+# Register the command_post hook. The EXIT trap fires on:
 #   - Normal exit (exit 0)
 #   - set -e bailout (non-zero exit)
 #   - SIGINT/SIGTERM (signals trigger EXIT before the process terminates)
+#
+# Signal rc capture: bash's default EXIT trap sees `$?=0` when a signal
+# interrupts `source user_script` mid-run — the nominal 130/143 exit code
+# is NOT reflected in $? for the EXIT trap. We install explicit INT/TERM
+# handlers that stash the canonical signal rc in _clift_user_rc, then
+# call `exit` to transfer control to the EXIT trap. The EXIT handler
+# reads _clift_user_rc (falling back to $? for the non-signal paths).
 #
 # The post-hook receives the original exit code but CANNOT change it.
 # Whatever the user script exited with is what the process exits with.
@@ -39,8 +46,10 @@ shift
 # clift_call_override is available. The explicit source inside the handler
 # is belt-and-suspenders against future refactors that might remove the
 # prelude→overrides dependency.
+_clift_on_sigint() { _clift_user_rc=130; exit 130; }
+_clift_on_sigterm() { _clift_user_rc=143; exit 143; }
 _clift_run_command_post() {
-  local rc=$?
+  local rc="${_clift_user_rc:-$?}"
   # Disable set -e inside the trap handler so the override running does
   # not accidentally abort the trap before we can re-assert the exit code.
   set +e
@@ -56,6 +65,8 @@ _clift_run_command_post() {
       --task "${CLIFT_TASK:-}" "${CLIFT_TASK:-}" "$rc" ) || true
   exit "$rc"
 }
+trap _clift_on_sigint INT
+trap _clift_on_sigterm TERM
 trap _clift_run_command_post EXIT
 
 # shellcheck source=/dev/null
