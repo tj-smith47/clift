@@ -58,6 +58,24 @@ clift_ensure_cache() {
     return 0
   fi
 
+  # Warn on unrecognized non-empty CLIFT_CACHE values so typos like
+  # `CLIFT_CACHE=rebiuld` don't silently become no-ops. `rebuild` is handled
+  # below; `bypass` and empty/unset already returned above. Non-fatal — the
+  # env var is additive, not a gate. Source log.sh on demand (guard makes
+  # re-source cheap) so standalone callers still get a warning via the
+  # echo fallback when log.sh isn't reachable.
+  if [[ -n "$_cache_mode" && "$_cache_mode" != "rebuild" ]]; then
+    if [[ -f "${2:-}/lib/log/log.sh" ]]; then
+      # shellcheck source=/dev/null
+      source "$2/lib/log/log.sh" 2>/dev/null || true
+    fi
+    if declare -F log_warn >/dev/null 2>&1; then
+      log_warn "CLIFT_CACHE='$_cache_mode' not recognized (expected: rebuild, bypass); falling through to default"
+    else
+      echo "warn: CLIFT_CACHE='$_cache_mode' not recognized (expected: rebuild, bypass); falling through to default" >&2
+    fi
+  fi
+
   local cache_dir="$cli_dir/.clift"
   local checksum_file="$cache_dir/checksum"
   local sources_file="$cache_dir/sources"

@@ -53,6 +53,19 @@ _mtime() {
   [ -f "$CLI_DIR/.clift/checksum" ]
 }
 
+@test "unknown CLIFT_CACHE value emits warning on stderr" {
+  # Typo protection: `CLIFT_CACHE=rebiuld` must surface as a warning, not
+  # silent fall-through. Behavior still passes through to default.
+  source "$FRAMEWORK_DIR/lib/cache.sh"
+  create_test_cli "greet"
+  run bash -c "
+    source '$FRAMEWORK_DIR/lib/cache.sh'
+    CLIFT_CACHE=typo clift_ensure_cache '$CLI_DIR' '$FRAMEWORK_DIR'
+  "
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"CLIFT_CACHE='typo' not recognized"* ]]
+}
+
 @test "empty CLIFT_CACHE value falls through to default behavior" {
   source "$FRAMEWORK_DIR/lib/cache.sh"
   create_test_cli "greet"
