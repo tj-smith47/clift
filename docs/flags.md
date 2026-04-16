@@ -6,7 +6,7 @@ Flags are declared inside your command's `Taskfile.yaml` under `vars.FLAGS`.
 
 Three layers, merged at precompile time:
 
-1. **Framework globals** (`lib/flags/globals.json`) -- `--help`, `--verbose`, `--quiet`, `--no-color`, `--version`. Merged into every parsed command at compile time (from the root Taskfile's `vars.FLAGS`) and at runtime (from `globals.json`).
+1. **Framework globals** (`lib/flags/globals.json`) -- `--help`, `--verbose`, `--quiet`, `--no-color`, `--no-cache`, `--version`. Merged into every parsed command at compile time (from the root Taskfile's `vars.FLAGS`) and at runtime (from `globals.json`). `--no-cache` is a cache-control override owned by the wrapper — see [docs/cache.md](cache.md#cache-control).
 2. **Command Taskfile** -- top-level `vars.FLAGS`. Applies to the command and all its subcommands.
 3. **Subcommand** -- `tasks.<sub>.vars.FLAGS`. Applies to that one subcommand.
 
@@ -32,7 +32,7 @@ Each flag is a map:
 
 ## Reserved names
 
-`help`, `verbose`, `quiet`, `no-color`, `version` are reserved. Additionally, `task`, `mode`, and names starting with `arg-` are reserved to avoid env-var namespace collisions (`CLIFT_TASK`, `CLIFT_MODE`, `CLIFT_ARG_*`). You can override the *short* alias (e.g., `-v` = `--value`) but not the long name.
+`help`, `verbose`, `quiet`, `no-color`, `no-cache`, `version` are reserved. Additionally, `task`, `mode`, and names starting with `arg-` are reserved to avoid env-var namespace collisions (`CLIFT_TASK`, `CLIFT_MODE`, `CLIFT_ARG_*`). You can override the *short* alias (e.g., `-v` = `--value`) but not the long name.
 
 ## Examples
 
@@ -170,7 +170,7 @@ Both `mycli --profile=staging deploy prod` and `mycli deploy prod --profile=stag
 
 Rules:
 
-- A persistent flag cannot share its `name`, `aliases`, or `short` with a reserved framework global (`help`, `verbose`, `quiet`, `no-color`, `version`) or with any per-command flag. Compile fails with an error naming both layers.
+- A persistent flag cannot share its `name`, `aliases`, or `short` with a reserved framework global (`help`, `verbose`, `quiet`, `no-color`, `no-cache`, `version`) or with any per-command flag. Compile fails with an error naming both layers.
 - Persistent flags cannot declare `group`, `exclusive`, or `requires` (not yet supported — declare these on per-command flags only). Cross-layer group semantics are a scope decision, not a philosophical restriction.
 - All other flag attributes (`type`, `default`, `required`, `deprecated`, `hidden`, `aliases`) work identically to per-command flags.
 

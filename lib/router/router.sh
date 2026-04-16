@@ -82,7 +82,9 @@ fi
 # Step 4: Ensure cache is fresh (only when we have a root Taskfile)
 source "${FRAMEWORK_DIR}/lib/cache.sh"
 
-if [[ "$is_passthrough_no_cache" != "true" ]] && [[ -z "${CLIFT_CACHE_VERIFIED:-}" ]]; then
+if [[ "$is_passthrough_no_cache" != "true" ]] \
+  && [[ -z "${CLIFT_CACHE_VERIFIED:-}" ]] \
+  && [[ "${CLIFT_CACHE:-}" != "bypass" ]]; then
   clift_ensure_cache "$CLI_DIR" "$FRAMEWORK_DIR"
 fi
 

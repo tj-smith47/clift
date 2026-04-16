@@ -18,10 +18,39 @@ fi
 # shellcheck source=/dev/null
 source "$FRAMEWORK_DIR/lib/flags/errors.sh"
 
+# --no-cache scan: translate the flag to CLIFT_CACHE=rebuild and strip it
+# from argv so the router's parser doesn't see it twice (it IS a global
+# flag, but the wrapper owns it — cache work runs before the parser).
+# Only the exact bare form `--no-cache` is consumed; `--no-cache=foo` is
+# bool-invalid and falls through to the parser's error path. Stops at `--`
+# per bash convention: tokens after the terminator are literal.
+_nc_new_args=()
+_nc_saw_terminator=0
+for _nc_a in "$@"; do
+  if (( _nc_saw_terminator == 0 )); then
+    if [[ "$_nc_a" == "--" ]]; then
+      _nc_saw_terminator=1
+    elif [[ "$_nc_a" == "--no-cache" ]]; then
+      export CLIFT_CACHE=rebuild
+      continue
+    fi
+  fi
+  _nc_new_args+=("$_nc_a")
+done
+if (( ${#_nc_new_args[@]} != $# )); then
+  set -- "${_nc_new_args[@]+"${_nc_new_args[@]}"}"
+fi
+unset _nc_new_args _nc_a _nc_saw_terminator
+
 # shellcheck source=/dev/null
 source "$FRAMEWORK_DIR/lib/cache.sh"
 clift_ensure_cache "$CLI_DIR" "$FRAMEWORK_DIR"
-export CLIFT_CACHE_VERIFIED=1
+# Under bypass mode the cache is intentionally not verified — downstream
+# consumers (router) must run their own bypass check. Setting VERIFIED=1
+# would defeat the `skip cache entirely` contract.
+if [[ "${CLIFT_CACHE:-}" != "bypass" ]]; then
+  export CLIFT_CACHE_VERIFIED=1
+fi
 
 # Special top-level cases that short-circuit the dispatch walk.
 if (( $# == 0 )); then
@@ -50,35 +79,46 @@ esac
 # prefixed at any segment).
 TASKS_JSON="$CLI_DIR/.clift/tasks.json"
 INDEX_JSON="$CLI_DIR/.clift/index.json"
+# Graceful degrade under CLIFT_CACHE=bypass: if tasks.json is absent, fall
+# through with empty dispatch state so go-task handles unknown-task errors.
+# Under default/rebuild modes a missing tasks.json is a hard failure — the
+# user's cache is broken and they need a clean slate.
 if [[ ! -f "$TASKS_JSON" ]]; then
-  echo "error: task cache missing: $TASKS_JSON" >&2
-  echo "  try: rm -rf '$CLI_DIR/.clift' and re-run" >&2
-  exit 1
+  if [[ "${CLIFT_CACHE:-}" == "bypass" ]]; then
+    known_tasks=""
+    root_cmds=""
+    persistent_tsv=""
+  else
+    echo "error: task cache missing: $TASKS_JSON" >&2
+    echo "  try: rm -rf '$CLI_DIR/.clift' and re-run" >&2
+    exit 1
+  fi
+else
+  # One jq call extracts everything the wrapper's dispatch walk needs:
+  #   1. known_tasks   — every task name (for prefix lookup)
+  #   2. root_cmds     — root command names + namespaces (for did-you-mean)
+  #   3. persistent_tsv — one row per persistent flag: name<\x01>short<\x01>type
+  # jq reads both tasks.json (positional input) and index.json (--slurpfile) in
+  # a single invocation so there's no extra fork on the wrapper hot path.
+  # index.json may be absent on a stale/partially-built cache — jq's null
+  # arithmetic handles that via `// []` defaults.
+  {
+    IFS= read -r -d '' known_tasks || true
+    IFS= read -r -d '' root_cmds || true
+    IFS= read -r -d '' persistent_tsv || true
+  } < <(jq -j --slurpfile idx_wrap <(
+      if [[ -f "$INDEX_JSON" ]]; then cat "$INDEX_JSON"; else echo '{"persistent_flags":[]}'; fi
+    ) '
+    ([.. | .tasks? // empty | .[] | .name | select(test("^_|:_") | not)]
+      | join("\n")) + "\u0000" +
+    ([.tasks[]?.name // empty, (.namespaces // {} | keys)[]]
+      | map(select(startswith("_") | not))
+      | unique | join(" ")) + "\u0000" +
+    (($idx_wrap[0].persistent_flags // [])
+      | map([.name, (.short // ""), .type] | join("\u0001"))
+      | join("\n")) + "\u0000"
+  ' "$TASKS_JSON")
 fi
-# One jq call extracts everything the wrapper's dispatch walk needs:
-#   1. known_tasks   — every task name (for prefix lookup)
-#   2. root_cmds     — root command names + namespaces (for did-you-mean)
-#   3. persistent_tsv — one row per persistent flag: name<\x01>short<\x01>type
-# jq reads both tasks.json (positional input) and index.json (--slurpfile) in
-# a single invocation so there's no extra fork on the wrapper hot path.
-# index.json may be absent on a stale/partially-built cache — jq's null
-# arithmetic handles that via `// []` defaults.
-{
-  IFS= read -r -d '' known_tasks || true
-  IFS= read -r -d '' root_cmds || true
-  IFS= read -r -d '' persistent_tsv || true
-} < <(jq -j --slurpfile idx_wrap <(
-    if [[ -f "$INDEX_JSON" ]]; then cat "$INDEX_JSON"; else echo '{"persistent_flags":[]}'; fi
-  ) '
-  ([.. | .tasks? // empty | .[] | .name | select(test("^_|:_") | not)]
-    | join("\n")) + "\u0000" +
-  ([.tasks[]?.name // empty, (.namespaces // {} | keys)[]]
-    | map(select(startswith("_") | not))
-    | unique | join(" ")) + "\u0000" +
-  (($idx_wrap[0].persistent_flags // [])
-    | map([.name, (.short // ""), .type] | join("\u0001"))
-    | join("\n")) + "\u0000"
-' "$TASKS_JSON")
 
 # Build persistent-flag lookup tables. Empty list is the common case and costs
 # essentially nothing (one empty read).

@@ -68,6 +68,7 @@ vars:
     - {name: verbose, short: v, type: bool, desc: "Verbose"}
     - {name: quiet, short: q, type: bool, desc: "Quiet"}
     - {name: no-color, type: bool, desc: "No color"}
+    - {name: no-cache, type: bool, desc: "Force-rebuild the .clift cache before this command"}
     - {name: version, type: bool, desc: "Version"}
 YAML
 

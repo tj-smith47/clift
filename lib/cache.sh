@@ -36,9 +36,28 @@ clift_max_mtime() {
 # Ensure the .clift/ cache is fresh. Rebuilds if checksum differs or is missing.
 # Uses mkdir-based locking to prevent concurrent rebuilds (portable — works on
 # macOS and Linux without flock).
+#
+# CLIFT_CACHE env var overrides:
+#   unset/empty/other — default behavior (stat-based staleness check)
+#   rebuild           — force compile, skip staleness check (but still honor
+#                       the lock so concurrent rebuild requests serialize
+#                       correctly; every explicit `rebuild` request compiles,
+#                       so after-lock-acquire we skip the "another process
+#                       already refreshed" shortcut)
+#   bypass            — return 0 immediately; no cache dir created, no compile
+#
 # Usage: clift_ensure_cache <CLI_DIR> <FRAMEWORK_DIR>
 clift_ensure_cache() {
   local cli_dir="$1" fw_dir="$2"
+
+  # Bypass mode: skip the cache machinery entirely. No directory creation,
+  # no staleness check, no compile. The wrapper and router both gracefully
+  # degrade when the cache is absent under bypass.
+  local _cache_mode="${CLIFT_CACHE:-}"
+  if [[ "$_cache_mode" == "bypass" ]]; then
+    return 0
+  fi
+
   local cache_dir="$cli_dir/.clift"
   local checksum_file="$cache_dir/checksum"
   local sources_file="$cache_dir/sources"
@@ -55,14 +74,25 @@ clift_ensure_cache() {
     current="$(clift_max_mtime "$cli_dir/Taskfile.yaml")"
   fi
 
-  if [[ ! -f "$checksum_file" ]] || [[ "$(<"$checksum_file")" != "$current" ]]; then
+  local _needs_rebuild=0
+  if [[ "$_cache_mode" == "rebuild" ]]; then
+    _needs_rebuild=1
+  elif [[ ! -f "$checksum_file" ]] || [[ "$(<"$checksum_file")" != "$current" ]]; then
+    _needs_rebuild=1
+  fi
+
+  if (( _needs_rebuild == 1 )); then
     # Serialize concurrent rebuilds. mkdir is atomic on all POSIX systems,
     # so exactly one process wins the race. Others wait and use the winner's
     # output.
     local lockdir="$cache_dir/.lock.d"
     if mkdir "$lockdir" 2>/dev/null; then
       # Re-check after acquiring lock — another process may have finished
-      # the rebuild while we were checking staleness.
+      # the rebuild while we were checking staleness. Exception: when the
+      # user explicitly asked for rebuild (mode=rebuild), we honor the
+      # request unconditionally — the re-check shortcut would silently
+      # turn a `--no-cache` invocation into a no-op after a concurrent
+      # refresh, which is the opposite of what the user asked for.
       if [[ -f "$sources_file" ]]; then
         # shellcheck disable=SC2046
         current="$(clift_max_mtime $(< "$sources_file"))"
@@ -70,7 +100,13 @@ clift_ensure_cache() {
         current="$(clift_max_mtime "$cli_dir/Taskfile.yaml")"
       fi
       local _compile_rc=0
-      if [[ ! -f "$checksum_file" ]] || [[ "$(<"$checksum_file")" != "$current" ]]; then
+      local _do_compile=0
+      if [[ "$_cache_mode" == "rebuild" ]]; then
+        _do_compile=1
+      elif [[ ! -f "$checksum_file" ]] || [[ "$(<"$checksum_file")" != "$current" ]]; then
+        _do_compile=1
+      fi
+      if (( _do_compile == 1 )); then
         bash "$fw_dir/lib/flags/compile.sh" "$cli_dir" >&2 || _compile_rc=$?
       fi
       rm -rf "$lockdir"

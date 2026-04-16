@@ -3,5 +3,6 @@
   {"name": "verbose",  "short": "v", "type": "bool", "desc": "Verbose output"},
   {"name": "quiet",    "short": "q", "type": "bool", "desc": "Suppress info/success output"},
   {"name": "no-color",               "type": "bool", "desc": "Disable color output"},
+  {"name": "no-cache",               "type": "bool", "desc": "Force-rebuild the .clift cache before this command"},
   {"name": "version",  "short": "V", "type": "bool", "desc": "Show version"}
 ]

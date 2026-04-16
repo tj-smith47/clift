@@ -51,3 +51,71 @@ Both work:
 rm -rf ${CLI_DIR}/.clift
 # next invocation rebuilds automatically
 ```
+
+## Cache control
+
+Override the cache's automatic behavior via the `CLIFT_CACHE` env var or the
+`--no-cache` global flag.
+
+### `--no-cache`
+
+```bash
+mycli --no-cache deploy prod
+```
+
+Force the cache to rebuild before running the command. Equivalent to
+`CLIFT_CACHE=rebuild`. The flag is recognized by the wrapper and stripped
+from argv before dispatch — user commands never see it. The scan stops at
+`--` per bash convention, so `mycli greet -- --no-cache` passes the token
+through as a literal positional.
+
+Use this after editing a Taskfile by hand when you want to confirm the
+next invocation reads fresh state.
+
+### `CLIFT_CACHE=rebuild`
+
+Force a rebuild without the flag — useful for scripted workflows and CI
+steps that need to guarantee a fresh cache without parsing argv.
+
+```bash
+CLIFT_CACHE=rebuild mycli deploy prod
+```
+
+Explicit rebuild requests always compile, even under lock contention: if
+two concurrent processes both set `CLIFT_CACHE=rebuild`, the winner of the
+lock compiles and the loser waits, and when the loser acquires the lock it
+compiles again. This matches the user intent — every explicit rebuild
+request actually rebuilds.
+
+### `CLIFT_CACHE=bypass`
+
+Skip the cache machinery entirely. `clift_ensure_cache` becomes a no-op —
+no staleness check, no rebuild, no `.clift/` directory creation. If a
+cache already exists it is still read for dispatch; if it does not exist
+the wrapper falls through to go-task directly (which emits its own
+unknown-task error for unrecognized commands).
+
+```bash
+CLIFT_CACHE=bypass mycli somecmd
+```
+
+Use this when debugging the cache system itself, or when you're confident
+the stored cache is up-to-date and want to skip the stat-based staleness
+check on every invocation.
+
+### When to use which
+
+- **Regular development:** leave `CLIFT_CACHE` unset. The stat-based
+  staleness check rebuilds automatically when any tracked Taskfile changes.
+- **After hand-editing a Taskfile:** `--no-cache` on the next command
+  makes the rebuild explicit.
+- **In CI:** `CLIFT_CACHE=rebuild` on the first command in a fresh
+  workspace makes the build step deterministic without relying on mtimes.
+- **Debugging the cache itself:** `CLIFT_CACHE=bypass` to isolate
+  cache-related behavior from command-dispatch behavior.
+
+### Unknown values
+
+`CLIFT_CACHE` values other than `rebuild` or `bypass` (including empty and
+unset) fall through to the default stat-based staleness check. No error is
+emitted — the env var is additive, not a gate.
