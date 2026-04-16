@@ -128,9 +128,13 @@ die() { log_error "$1"; exit "${2:-1}"; }
 # clift_exit <code> [msg]
 # Domain-specific exit for user scripts — logs msg as error (if given) then
 # exits with the given code. When code is omitted, defaults to 1 (matching
-# die()'s fallback). Prefer clift_exit over die() in new code: the
-# code-first signature lets you express intent without remembering which
-# arg position carries the exit code.
+# die()'s fallback). The code-first signature lets you express intent
+# without remembering which arg position carries the exit code.
+#
+# Prefer clift_exit over die when the numeric code is part of the contract
+# — e.g., dispatch switches, script-to-script protocols, `mycli deploy`
+# exit codes that downstream tooling branches on. die stays the right
+# choice for unconditional fail-fast with a message.
 clift_exit() {
   local code="${1:-1}"
   local msg="${2:-}"

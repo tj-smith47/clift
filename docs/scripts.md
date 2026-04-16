@@ -39,7 +39,7 @@ the same process where `set -euo pipefail` is established. Two consequences:
   explicit `source "${FRAMEWORK_DIR}/lib/log/log.sh"` line is no longer
   required in new scripts. Existing scripts that still source it keep
   working — the source guard makes the second load a no-op.
-- **`die` vs `clift_exit`.** `die <msg> [<code>]` is the original pattern — message first, optional code second (default 1). `clift_exit <code> [<msg>]` flips the order to make the exit code explicit and primary; use it when the code carries meaning (e.g., `clift_exit 3 "no matching config"`). Both emit via `log_error` so theme + color handling is identical. `die` stays for backward compatibility; `clift_exit` is preferred for new code.
+- **`die` vs `clift_exit`.** `die <msg> [<code>]` is the original pattern — message first, optional code second (default 1). `clift_exit <code> [<msg>]` flips the order to make the exit code explicit and primary; use it when the code carries meaning (e.g., `clift_exit 3 "no matching config"`). Both emit via `log_error` so theme + color handling is identical. Pick `die` for unconditional fail-fast with a message; reach for `clift_exit` when downstream tooling will branch on the numeric code (dispatch switches, script-to-script protocols, exit codes documented as part of a command's contract).
 - **Use `${BASH_SOURCE[0]}` (not `$0`) to locate your script.** Because the
   boot wrapper `source`s the user script, `$0` resolves to the boot wrapper
   (or parent bash), not the script path. `${BASH_SOURCE[0]}` still resolves
