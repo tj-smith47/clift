@@ -13,17 +13,40 @@ _mtime() {
   stat -c '%Y' "$1" 2>/dev/null || stat -f '%m' "$1"
 }
 
+# Assert a file's mtime is strictly greater than `before`. Used after a
+# `sleep 1; <invocation>` to prove the cache was rebuilt.
+_assert_rebuilt() {
+  local path="$1" before="$2"
+  local after
+  after="$(_mtime "$path")"
+  if ! [ "$after" -gt "$before" ]; then
+    echo "assertion failed: expected $path to be rebuilt (mtime: $before -> $after)" >&2
+    return 1
+  fi
+}
+
+# Assert a file's mtime is unchanged vs `before`. Used after a
+# `sleep 1; <invocation>` to prove the cache was NOT rebuilt.
+_assert_not_rebuilt() {
+  local path="$1" before="$2"
+  local after
+  after="$(_mtime "$path")"
+  if [ "$after" != "$before" ]; then
+    echo "assertion failed: expected $path mtime unchanged (was: $before, now: $after)" >&2
+    return 1
+  fi
+}
+
 @test "CLIFT_CACHE=rebuild forces rebuild even when cache is fresh" {
   source "$FRAMEWORK_DIR/lib/cache.sh"
   create_test_cli "greet"
   clift_ensure_cache "$CLI_DIR" "$FRAMEWORK_DIR"
   [ -f "$CLI_DIR/.clift/checksum" ]
-  local before_mtime after_mtime
-  before_mtime="$(_mtime "$CLI_DIR/.clift/checksum")"
+  local before
+  before="$(_mtime "$CLI_DIR/.clift/checksum")"
   sleep 1
   CLIFT_CACHE=rebuild clift_ensure_cache "$CLI_DIR" "$FRAMEWORK_DIR"
-  after_mtime="$(_mtime "$CLI_DIR/.clift/checksum")"
-  [ "$after_mtime" -gt "$before_mtime" ]
+  _assert_rebuilt "$CLI_DIR/.clift/checksum" "$before"
 }
 
 @test "CLIFT_CACHE=bypass skips cache entirely (no .clift/ created)" {
@@ -38,12 +61,11 @@ _mtime() {
   source "$FRAMEWORK_DIR/lib/cache.sh"
   create_test_cli "greet"
   clift_ensure_cache "$CLI_DIR" "$FRAMEWORK_DIR"
-  local before_mtime after_mtime
-  before_mtime="$(_mtime "$CLI_DIR/.clift/checksum")"
+  local before
+  before="$(_mtime "$CLI_DIR/.clift/checksum")"
   sleep 1
   CLIFT_CACHE=bypass clift_ensure_cache "$CLI_DIR" "$FRAMEWORK_DIR"
-  after_mtime="$(_mtime "$CLI_DIR/.clift/checksum")"
-  [ "$after_mtime" = "$before_mtime" ]
+  _assert_not_rebuilt "$CLI_DIR/.clift/checksum" "$before"
 }
 
 @test "unknown CLIFT_CACHE value falls through to default behavior" {
@@ -77,12 +99,11 @@ _mtime() {
   create_test_cli "greet"
   bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$CLI_DIR" >/dev/null 2>&1 || true
   build_test_wrapper
-  local before_mtime after_mtime
-  before_mtime="$(_mtime "$CLI_DIR/.clift/checksum")"
+  local before
+  before="$(_mtime "$CLI_DIR/.clift/checksum")"
   sleep 1
   run "$CLI_DIR/bin/$CLI_NAME" --no-cache greet
-  after_mtime="$(_mtime "$CLI_DIR/.clift/checksum")"
-  [ "$after_mtime" -gt "$before_mtime" ]
+  _assert_rebuilt "$CLI_DIR/.clift/checksum" "$before"
 }
 
 @test "--no-cache is stripped from argv before parser sees it" {
@@ -185,14 +206,13 @@ SH
   chmod +x "$CLI_DIR/cmds/greet/greet.sh"
   bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$CLI_DIR" >/dev/null 2>&1 || true
   build_test_wrapper
-  local before_mtime after_mtime
-  before_mtime="$(_mtime "$CLI_DIR/.clift/checksum")"
+  local before
+  before="$(_mtime "$CLI_DIR/.clift/checksum")"
   sleep 1
   run "$CLI_DIR/bin/$CLI_NAME" greet -- --no-cache
   [ "$status" -eq 0 ]
   # Cache must NOT have been rebuilt (the --no-cache after -- is literal)
-  after_mtime="$(_mtime "$CLI_DIR/.clift/checksum")"
-  [ "$after_mtime" = "$before_mtime" ]
+  _assert_not_rebuilt "$CLI_DIR/.clift/checksum" "$before"
   # And the user script should see --no-cache as a positional
   [[ "$output" == *"--no-cache"* ]]
 }
@@ -205,15 +225,14 @@ SH
   create_test_cli "greet"
   bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$CLI_DIR" >/dev/null 2>&1 || true
   build_test_wrapper
-  local before_mtime after_mtime
-  before_mtime="$(_mtime "$CLI_DIR/.clift/checksum")"
+  local before
+  before="$(_mtime "$CLI_DIR/.clift/checksum")"
   sleep 1
   run "$CLI_DIR/bin/$CLI_NAME" greet --no-cache=foo
   [ "$status" -ne 0 ]
   [[ "$output" == *"does not take a value"* ]]
   # Cache must NOT have been rebuilt (the value-form isn't treated as the flag)
-  after_mtime="$(_mtime "$CLI_DIR/.clift/checksum")"
-  [ "$after_mtime" = "$before_mtime" ]
+  _assert_not_rebuilt "$CLI_DIR/.clift/checksum" "$before"
 }
 
 @test "--no-cache overrides CLIFT_CACHE=bypass (flag wins over env)" {
@@ -226,12 +245,11 @@ SH
   create_test_cli "greet"
   bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$CLI_DIR" >/dev/null 2>&1 || true
   build_test_wrapper
-  local before after
+  local before
   before="$(_mtime "$CLI_DIR/.clift/checksum")"
   sleep 1
   run env CLIFT_CACHE=bypass "$CLI_DIR/bin/$CLI_NAME" --no-cache greet
-  after="$(_mtime "$CLI_DIR/.clift/checksum")"
-  [ "$after" -gt "$before" ]
+  _assert_rebuilt "$CLI_DIR/.clift/checksum" "$before"
 }
 
 @test "concurrent CLIFT_CACHE=rebuild invocations both compile (winner+loser)" {
@@ -269,13 +287,12 @@ SH
   chmod +x "$CLI_DIR/cmds/greet/greet.sh"
   bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$CLI_DIR" >/dev/null 2>&1 || true
   build_test_wrapper
-  local before after
+  local before
   before="$(_mtime "$CLI_DIR/.clift/checksum")"
   sleep 1
   run "$CLI_DIR/bin/$CLI_NAME" greet --who bob --no-cache
   [ "$status" -eq 0 ]
-  after="$(_mtime "$CLI_DIR/.clift/checksum")"
-  [ "$after" -gt "$before" ]
+  _assert_rebuilt "$CLI_DIR/.clift/checksum" "$before"
   [[ "$output" == *"WHO=bob"* ]]
 }
 
@@ -285,14 +302,13 @@ SH
   create_test_cli "greet"
   bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$CLI_DIR" >/dev/null 2>&1 || true
   build_test_wrapper
-  local before after
+  local before
   before="$(_mtime "$CLI_DIR/.clift/checksum")"
   sleep 1
   run "$CLI_DIR/bin/$CLI_NAME" --no-cache greet --help
   [ "$status" -eq 0 ]
   # Cache rebuilt
-  after="$(_mtime "$CLI_DIR/.clift/checksum")"
-  [ "$after" -gt "$before" ]
+  _assert_rebuilt "$CLI_DIR/.clift/checksum" "$before"
   # Help rendered (global flag section visible)
   [[ "$output" == *"--help"* ]]
 }
