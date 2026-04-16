@@ -71,8 +71,8 @@ keeps user code decoupled from the framework's internal function names.
 | `help_detail` | `lib/help/detail.sh` | `clift_override_help_detail <default_fn> <task_name> <CLI_DIR>` | Per-command `mycli <cmd> --help` detail view. Per-command tier (`cmds/<cmd>/overrides/help_detail.sh`) takes precedence over CLI-global. |
 | `version_print` | `lib/wrapper/wrapper.sh.tmpl`, `lib/router/router.sh`, `lib/version/version.sh` | `clift_override_version_print <default_fn> <CLI_NAME> <CLI_VERSION> <CLI_DIR>` | Controls the line printed by `mycli --version`, `mycli -V`, and the framework's `mycli version` subcommand. The framework default is `clift_default_version_print`, which prints `"<CLI_NAME> version <CLI_VERSION>"`. Override only replaces that one line — the `version` subcommand's cfgd-status block still follows (see [cfgd-status interleaving](#cfgd-status-interleaving) below). |
 | `log` | `lib/log/log.sh` | **shadow-based** — see [Logging slot](#logging-slot-shadow-based-exception) below | Sourced by the prelude AFTER `lib/log/log.sh`. The user redefines any of `log_info`, `log_error`, `log_warn`, `log_success`, `log_debug` directly. **Does not use the `clift_override_<slot>` callback signature.** Per-command tier (`cmds/<cmd>/overrides/log.sh`) takes precedence. |
-
-Additional slots (`command_pre`/`command_post`, …) land with Tasks 3.5 – 3.6.
+| `command_pre` | `lib/router/router.sh` (pre-exec hook) | `clift_override_command_pre <default_fn> <task_name>` | Fires after parsing / intercepts, before the user script runs. Non-zero exit aborts the command with that code (the script and `command_post` do NOT run). Has access to `CLIFT_FLAG_*` env vars and `CLIFT_TASK`. Per-command tier applies. |
+| `command_post` | `lib/runtime/exec.sh` (EXIT trap) | `clift_override_command_post <default_fn> <task_name> <script_exit_code>` | Fires via EXIT trap in the script's process — runs on normal exit, `set -e` bailout, and SIGINT/SIGTERM. Has access to `CLIFT_FLAGS` (the assoc array), `CLIFT_FLAG_*` env vars, and any env the script set. Cannot change the script's exit code. Per-command tier applies. |
 
 #### cfgd-status interleaving
 
@@ -114,6 +114,34 @@ See also:
 HELP
 }
 ```
+
+### Example: time every command with `command_pre` / `command_post`
+
+`.clift/overrides/command_pre.sh`:
+
+```bash
+clift_override_command_pre() {
+  CLIFT_CMD_START_TS=$EPOCHREALTIME
+  export CLIFT_CMD_START_TS
+}
+```
+
+`.clift/overrides/command_post.sh`:
+
+```bash
+clift_override_command_post() {
+  local _default_fn="$1" task="$2" rc="$3"
+  local elapsed
+  elapsed=$(awk "BEGIN {printf \"%.3f\", $EPOCHREALTIME - $CLIFT_CMD_START_TS}")
+  printf '[%s] rc=%s elapsed=%ss\n' "$task" "$rc" "$elapsed" >&2
+}
+```
+
+The pre-hook sets a timestamp in the environment; the post-hook reads it
+back and prints elapsed time to stderr. Because the post-hook runs in the
+same process as the user script (via the EXIT trap in `exec.sh`), it sees
+both `CLIFT_CMD_START_TS` and the script's own env vars. The post-hook
+cannot change the exit code — the script's code wins regardless.
 
 ## Logging slot (shadow-based exception)
 
@@ -208,7 +236,7 @@ sourced and the CLI-global file is not.
 
 Because the log slot is shadow-based, log-helper redefinitions are visible
 everywhere in the same process. Callback-slot bodies (`help_list`,
-`help_detail`, `version_print`, future `command_pre` / `command_post`, …)
+`help_detail`, `version_print`, `command_pre`, `command_post`, …)
 that call `log_info` / `log_error` / `log_debug` pick up log-shadow
 overrides automatically — no extra plumbing required.
 

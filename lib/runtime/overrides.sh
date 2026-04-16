@@ -112,3 +112,16 @@ clift_call_override() {
 clift_default_version_print() {
   echo "$1 version $2"
 }
+
+# clift_default_command_pre — framework default for the command_pre slot.
+# Args: <task_name>
+# No-op; exists so the clift_call_override callback signature stays uniform
+# and so overrides can delegate with `"$1" "${@:2}"` when wrapping.
+clift_default_command_pre() { :; }
+
+# clift_default_command_post — framework default for the command_post slot.
+# Args: <task_name> <script_exit_code>
+# No-op; same rationale as clift_default_command_pre. The post-hook cannot
+# change the framework's exit code — the script's exit code wins regardless
+# of what happens inside the override.
+clift_default_command_post() { :; }

@@ -98,6 +98,13 @@ if [[ "$merged_table" == '"PASSTHROUGH"' ]] || [[ "$merged_table" == "PASSTHROUG
     log_error "Unknown command: ${local_namespace}"
     exit "$EXIT_NOT_FOUND"
   fi
+  # Pre-hook: fires before the user script on the passthrough path.
+  # shellcheck source=../runtime/overrides.sh
+  source "${FRAMEWORK_DIR}/lib/runtime/overrides.sh"
+  export CLIFT_TASK="$TASK_NAME"
+  if ! clift_call_override command_pre clift_default_command_pre --task "$TASK_NAME" "$TASK_NAME"; then
+    exit $?
+  fi
   exec bash "${FRAMEWORK_DIR}/lib/runtime/exec.sh" "$script_path" "${args[@]+"${args[@]}"}"
 fi
 
@@ -162,6 +169,13 @@ fi
 if [[ ! -f "$script_path" ]]; then
   log_error "script not found for task '${TASK_NAME}' (looked at ${cmd_dir}/${script_name}.sh, ${cmd_dir}/${first_seg}.sh)"
   exit 1
+fi
+
+# Pre-hook: fires before the user script on the parsed path.
+# shellcheck source=../runtime/overrides.sh
+source "${FRAMEWORK_DIR}/lib/runtime/overrides.sh"
+if ! clift_call_override command_pre clift_default_command_pre --task "$TASK_NAME" "$TASK_NAME"; then
+  exit $?
 fi
 
 exec bash "${FRAMEWORK_DIR}/lib/runtime/exec.sh" "$script_path"
