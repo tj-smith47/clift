@@ -36,3 +36,22 @@ teardown() { common_teardown; }
   [ "$status" -eq 5 ]
   [[ "$stderr" == *"error: bad config"* ]]
 }
+
+@test "clift_exit with explicit empty message emits no stderr (distinct from omitted-msg path)" {
+  # Contract parity with the omitted-arg case: the [[ -n "$msg" ]] guard must
+  # treat an explicit empty string identically — rc honored, stderr silent.
+  run --separate-stderr bash -c 'source "$FRAMEWORK_DIR/lib/log/log.sh"; clift_exit 5 ""'
+  [ "$status" -eq 5 ]
+  [ -z "$stderr" ]
+}
+
+@test "clift_exit with non-numeric code fails loud via bash diagnostic" {
+  # Contract: same loud-failure behavior as die with a non-numeric code.
+  # log_error still reaches stderr, bash emits its own "numeric argument required"
+  # diagnostic, and the final rc is bash's 2 (invalid-exit-arg), not the
+  # script's happy-path 0.
+  run --separate-stderr bash -c 'source "$FRAMEWORK_DIR/lib/log/log.sh"; clift_exit abc "bad"; exit 0'
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"bad"* ]]
+  [[ "$stderr" == *"numeric argument required"* ]]
+}
