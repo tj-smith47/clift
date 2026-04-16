@@ -113,13 +113,37 @@ SH
   [[ "$output" == *"WHO=bob"* ]]
 }
 
-@test "CLIFT_CACHE=bypass + no .clift/ + wrapper invocation does not hard-fail on cache check" {
+@test "CLIFT_CACHE=bypass + no .clift/ + valid task runs via go-task dispatch" {
+  # Graceful-degrade: the wrapper must hand off argv to go-task when the cache
+  # is absent under bypass mode. Asserting the task actually RUNS (not just
+  # that the wrapper exits cleanly) proves the short-circuit wires argv
+  # through to `task` correctly.
   create_test_cli "greet"
+  cat > "$CLI_DIR/cmds/greet/greet.sh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "GREET_RAN=yes"
+SH
+  chmod +x "$CLI_DIR/cmds/greet/greet.sh"
   build_test_wrapper
   rm -rf "$CLI_DIR/.clift"
   run env CLIFT_CACHE=bypass "$CLI_DIR/bin/$CLI_NAME" greet
-  # go-task may still error downstream (that's fine). The specific wrapper
-  # early-exit "task cache missing" must NOT fire.
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"GREET_RAN=yes"* ]]
+  [[ "$output" != *"task cache missing"* ]]
+}
+
+@test "CLIFT_CACHE=bypass + no .clift/ + unknown command yields go-task error (not wrapper error)" {
+  # Unknown-task errors must bubble up from go-task, not from the wrapper's
+  # own "unknown command" path — the wrapper has no cache to consult for
+  # did-you-mean suggestions under bypass+no-cache.
+  create_test_cli "greet"
+  build_test_wrapper
+  rm -rf "$CLI_DIR/.clift"
+  run env CLIFT_CACHE=bypass "$CLI_DIR/bin/$CLI_NAME" nonexistent-command
+  [ "$status" -ne 0 ]
+  # Wrapper's own unknown-command error must NOT fire under this path.
+  [[ "$output" != *"error: unknown command"* ]]
   [[ "$output" != *"task cache missing"* ]]
 }
 

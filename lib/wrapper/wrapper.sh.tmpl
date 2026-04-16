@@ -85,9 +85,20 @@ INDEX_JSON="$CLI_DIR/.clift/index.json"
 # user's cache is broken and they need a clean slate.
 if [[ ! -f "$TASKS_JSON" ]]; then
   if [[ "${CLIFT_CACHE:-}" == "bypass" ]]; then
-    known_tasks=""
-    root_cmds=""
-    persistent_tsv=""
+    # Bypass + no cache: hand off raw argv directly to go-task. The wrapper's
+    # dispatch walk needs the cache to resolve longest-prefix task paths, and
+    # without it any argv would dead-end at the "unknown command" error path.
+    # Short-circuiting here lets go-task emit its own resolution errors for
+    # unknown tasks — matching the docs' promise that bypass gracefully
+    # degrades to raw go-task dispatch.
+    export CLIFT_ARG_COUNT="$#"
+    _k=0
+    for _a in "$@"; do
+      _k=$((_k+1))
+      export "CLIFT_ARG_$_k=$_a"
+    done
+    unset _k _a
+    exec task --taskfile "$CLI_DIR/Taskfile.yaml" "$@"
   else
     echo "error: task cache missing: $TASKS_JSON" >&2
     echo "  try: rm -rf '$CLI_DIR/.clift' and re-run" >&2
