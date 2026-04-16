@@ -6,7 +6,7 @@ Flags are declared inside your command's `Taskfile.yaml` under `vars.FLAGS`.
 
 Three layers, merged at precompile time:
 
-1. **Framework globals** (`lib/flags/globals.json`) -- `--help`, `--verbose`, `--quiet`, `--no-color`, `--no-cache`, `--version`. Merged into every parsed command at compile time (from the root Taskfile's `vars.FLAGS`) and at runtime (from `globals.json`). `--no-cache` is a cache-control override owned by the wrapper — see [docs/cache.md](cache.md#cache-control).
+1. **Framework globals** (`lib/flags/globals.json`) -- `--help`, `--verbose`, `--quiet`, `--no-color`, `--no-cache`, `--version`. Merged into every parsed command at compile time (from the root Taskfile's `vars.FLAGS`) and at runtime (from `globals.json`). `--no-cache` is a cache-control override owned by the wrapper — it overrides the `CLIFT_CACHE` env var when both are set; see [docs/cache.md](cache.md#cache-control).
 2. **Command Taskfile** -- top-level `vars.FLAGS`. Applies to the command and all its subcommands.
 3. **Subcommand** -- `tasks.<sub>.vars.FLAGS`. Applies to that one subcommand.
 

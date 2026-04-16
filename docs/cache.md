@@ -57,6 +57,11 @@ rm -rf ${CLI_DIR}/.clift
 Override the cache's automatic behavior via the `CLIFT_CACHE` env var or the
 `--no-cache` global flag.
 
+**Precedence: when both are set, `--no-cache` wins.** The wrapper sets
+`CLIFT_CACHE=rebuild` on flag match, overwriting any inherited
+`CLIFT_CACHE=bypass` or other value. This matches the usual CLI
+convention — explicit argv beats ambient env.
+
 ### `--no-cache`
 
 ```bash
@@ -117,5 +122,7 @@ check on every invocation.
 ### Unknown values
 
 `CLIFT_CACHE` values other than `rebuild` or `bypass` (including empty and
-unset) fall through to the default stat-based staleness check. No error is
-emitted — the env var is additive, not a gate.
+unset) fall through to the default stat-based staleness check. A warning
+is emitted to stderr on non-empty unrecognized values so typos like
+`CLIFT_CACHE=rebiuld` don't silently behave like default — the env var is
+additive, not a gate, but the warning surfaces the likely mistake.
