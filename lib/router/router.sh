@@ -174,8 +174,9 @@ fi
 # Pre-hook: fires before the user script on the parsed path.
 # shellcheck source=../runtime/overrides.sh
 source "${FRAMEWORK_DIR}/lib/runtime/overrides.sh"
-if ! clift_call_override command_pre clift_default_command_pre --task "$TASK_NAME" "$TASK_NAME"; then
-  exit $?
-fi
+clift_call_override command_pre clift_default_command_pre --task "$TASK_NAME" "$TASK_NAME" || {
+  _clift_pre_rc=$?
+  exit "$_clift_pre_rc"
+}
 
 exec bash "${FRAMEWORK_DIR}/lib/runtime/exec.sh" "$script_path"

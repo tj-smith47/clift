@@ -102,6 +102,24 @@ SH
   [[ "$output" != *"POST-SENTINEL-SHOULD-NOT-APPEAR"* ]]
 }
 
+@test "command_pre non-zero return (no exit) aborts the command with that code" {
+  # Covers the `return N` abort path — distinct from `exit N` because a
+  # function return lets the caller's if/||/$? plumbing see the code.
+  setup_parsed_cli
+  mkdir -p "$CLI_DIR/.clift/overrides"
+  cat > "$CLI_DIR/.clift/overrides/command_pre.sh" <<'SH'
+clift_override_command_pre() {
+  echo "PRE-RETURN"
+  return 11
+}
+SH
+
+  CLIFT_ARG_COUNT=0 run bash "$FRAMEWORK_DIR/lib/router/router.sh" "greet"
+  [ "$status" -eq 11 ]
+  [[ "$output" == *"PRE-RETURN"* ]]
+  [[ "$output" != *"SCRIPT-RAN"* ]]
+}
+
 # ---------------------------------------------------------------------------
 # Post-hook
 # ---------------------------------------------------------------------------
