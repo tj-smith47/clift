@@ -50,6 +50,13 @@ declare -A _TASK_FLAG_WHITELIST=(
 _TASK_FLAG_NAMES_SORTED="concurrency dry force interval list list-all parallel silent status summary watch"
 
 _task_flags=()
+# _task_flags_original tracks the verbatim `--task:X` / `--task:X=val` /
+# `--task:X val` tokens consumed by this scan. The watch-alias rewrite
+# below re-execs the wrapper and must prepend these ORIGINAL tokens so the
+# second invocation's scan consumes them via the normal path; using the
+# stripped `--X` forms would leak past the scan and trip the longest-prefix
+# walk with "flag before command".
+_task_flags_original=()
 # Fast path: skip the scan entirely when no --task:* token is present. A
 # single substring check on "$*" is one fork-free `[[ ]]` test; the full
 # scan below allocates an array and iterates per-token, which is wasted
@@ -94,10 +101,12 @@ if [[ "$*" == *--task:* ]]; then
           exit 1
         fi
         _task_flags+=("--$_tf_name")
+        _task_flags_original+=("$_tf_tok")
         _tf_i=$((_tf_i+1))
       else
         if (( _tf_has_inline == 1 )); then
           _task_flags+=("--$_tf_name" "$_tf_inline")
+          _task_flags_original+=("$_tf_tok")
           _tf_i=$((_tf_i+1))
         else
           if (( _tf_i + 1 > $# )); then
@@ -106,6 +115,7 @@ if [[ "$*" == *--task:* ]]; then
           fi
           _tf_next=$((_tf_i+1))
           _task_flags+=("--$_tf_name" "${!_tf_next}")
+          _task_flags_original+=("$_tf_tok" "${!_tf_next}")
           _tf_i=$((_tf_i+2))
         fi
       fi
@@ -125,20 +135,21 @@ fi
 # only fires for the bare first token literally equal to "watch"; a nested
 # namespace like `watch:foo` contains a colon and is left alone.
 #
-# Placed AFTER the --task:* scan so `mycli watch --task:dry build` also
-# works (the --task:dry is consumed first, then watch rewrites, then the
-# recursive exec re-enters this scan with an empty --task:* set).
+# Placed AFTER the --task:* scan so `mycli --task:dry watch greet` and
+# `mycli watch --task:dry greet` both work. The scan has already consumed
+# any --task:* tokens (from either position), so the first surviving token
+# is `watch` in either case. The re-exec prepends both the consumed
+# originals (via _task_flags_original) and --task:watch; the second
+# invocation's scan consumes them through the normal path and dispatches
+# the remaining user argv. Recursion terminates because `watch` no longer
+# appears as the first token after prepending.
 if [[ "${1:-}" == "watch" ]]; then
   shift
   if (( $# == 0 )); then
     echo "error: watch requires a command (e.g., $CLI_NAME watch build)" >&2
     exit 1
   fi
-  # Re-exec through the wrapper with --task:watch prepended. The recursion
-  # terminates on the second invocation because the first token is now
-  # --task:watch, not `watch`. Any --task:* flags consumed in this pass
-  # ride along as well (they were already stripped from $@ above).
-  exec "$0" "${_task_flags[@]+"${_task_flags[@]}"}" --task:watch "$@"
+  exec "$0" "${_task_flags_original[@]+"${_task_flags_original[@]}"}" --task:watch "$@"
 fi
 
 # --no-cache scan: translate the flag to CLIFT_CACHE=rebuild and strip it

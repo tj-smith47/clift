@@ -84,6 +84,63 @@ SH
   [[ "$output" != *"unknown command"* ]]
 }
 
+@test "mycli --task:dry watch <cmd> preserves --task:* through re-exec" {
+  # Regression: before this fix, the --task:* scan ran before the `watch`
+  # rewrite, so `--task:dry` was stripped to `--dry` and stashed in the
+  # _task_flags accumulator. The watch rewrite then re-exec'd the wrapper,
+  # and on the second invocation the scan only matched --task:* tokens —
+  # the bare `--dry` fell through the longest-prefix walk and tripped the
+  # "flag before command" error.
+  #
+  # Fix: move the `watch` check BEFORE the --task:* scan, so the original
+  # --task:dry token rides through the re-exec verbatim and the second
+  # invocation's scan consumes it normally. `task --watch` stays blocking
+  # even with --dry, so we bound the run with `timeout`; the key assertion
+  # is that the wrapper did NOT emit the broken-re-exec error signatures.
+  create_test_cli "greet"
+  cat > "$CLI_DIR/cmds/greet/greet.sh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "GREET_RAN=yes"
+SH
+  chmod +x "$CLI_DIR/cmds/greet/greet.sh"
+  bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$CLI_DIR" >/dev/null 2>&1 || true
+  build_test_wrapper
+  run timeout --signal=KILL 2 "$CLI_DIR/bin/$CLI_NAME" --task:dry watch greet
+  # Watch loop ran (non-zero exit from timeout kill), proving --task:dry
+  # successfully rode through the re-exec without the wrapper error-exiting.
+  [ "$status" -ne 0 ]
+  # None of the broken-re-exec failure modes may appear.
+  [[ "$output" != *"flag before command"* ]]
+  [[ "$output" != *"flags must come after the command"* ]]
+  [[ "$output" != *"unknown flag"* ]]
+  [[ "$output" != *"unknown command"* ]]
+}
+
+@test "mycli watch --task:dry <cmd> (flag after watch) also works" {
+  # The interleaved case: user put --task:dry AFTER the watch keyword.
+  # After the watch rewrite shifts `watch` off, "$@" = "--task:dry greet",
+  # so the re-exec becomes "$0 --task:watch --task:dry greet" which the
+  # scan on the second invocation consumes cleanly. Locks in this ordering.
+  create_test_cli "greet"
+  cat > "$CLI_DIR/cmds/greet/greet.sh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "GREET_RAN=yes"
+SH
+  chmod +x "$CLI_DIR/cmds/greet/greet.sh"
+  bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$CLI_DIR" >/dev/null 2>&1 || true
+  build_test_wrapper
+  run timeout --signal=KILL 2 "$CLI_DIR/bin/$CLI_NAME" watch --task:dry greet
+  # Watch loop took hold — proves --task:dry was correctly appended through
+  # the re-exec and consumed by the second invocation's scan.
+  [ "$status" -ne 0 ]
+  [[ "$output" != *"flag before command"* ]]
+  [[ "$output" != *"flags must come after the command"* ]]
+  [[ "$output" != *"unknown flag"* ]]
+  [[ "$output" != *"unknown command"* ]]
+}
+
 @test "nested watch:foo command still works (reserved only applies to first token)" {
   # Create a CLI whose cmds/ includes a `watch:foo` subcommand namespace.
   # Invoking it via `mycli watch:foo` (single token containing a colon) does
