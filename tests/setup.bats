@@ -241,3 +241,109 @@ SH
   [ "$status" -eq 0 ]
   [[ "$output" == *"new:cmd"* ]]
 }
+
+# Task 5.3: completion install
+
+@test "setup.sh installs bash completion sourcing line in standard mode" {
+  export SHELL=/bin/bash
+  bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
+    "$TEST_DIR/comp1" "$FRAMEWORK_DIR" "comp1" "1.0.0" "minimal" "standard"
+  grep -q "# clift: comp1-completion" "$HOME/.bashrc"
+  grep -q 'source <(comp1 completion bash)' "$HOME/.bashrc"
+}
+
+@test "setup.sh installs zsh completion sourcing line" {
+  export SHELL=/bin/zsh
+  unset CLIFT_RC_FILE
+  bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
+    "$TEST_DIR/comp2" "$FRAMEWORK_DIR" "comp2" "1.0.0" "minimal" "standard"
+  grep -q "# clift: comp2-completion" "$HOME/.zshrc"
+  grep -q 'source <(comp2 completion zsh)' "$HOME/.zshrc"
+}
+
+@test "setup.sh uses colon form for task mode completion" {
+  export SHELL=/bin/bash
+  bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
+    "$TEST_DIR/comp3" "$FRAMEWORK_DIR" "comp3" "1.0.0" "minimal" "task"
+  grep -q 'source <(comp3 completion:bash)' "$HOME/.bashrc"
+}
+
+@test "setup.sh CLIFT_COMPLETIONS=false skips completion install" {
+  export SHELL=/bin/bash
+  CLIFT_COMPLETIONS=false bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
+    "$TEST_DIR/comp4" "$FRAMEWORK_DIR" "comp4" "1.0.0" "minimal" "standard"
+  ! grep -q "comp4-completion" "$HOME/.bashrc"
+  ! grep -q "source <(comp4 completion" "$HOME/.bashrc"
+}
+
+@test "setup.sh CLIFT_COMPLETIONS=auto skips unsupported shells silently" {
+  export SHELL=/usr/bin/fish
+  bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
+    "$TEST_DIR/comp5" "$FRAMEWORK_DIR" "comp5" "1.0.0" "minimal" "standard"
+  ! grep -q "comp5-completion" "$HOME/.bashrc"
+}
+
+@test "setup.sh CLIFT_COMPLETIONS=true warns on unsupported shell" {
+  export SHELL=/usr/bin/fish
+  run bash -c "CLIFT_COMPLETIONS=true bash '$FRAMEWORK_DIR/lib/setup/setup.sh' \
+    '$TEST_DIR/comp6' '$FRAMEWORK_DIR' comp6 1.0.0 minimal standard 2>&1"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"fish"* ]]
+  [[ "$output" == *"not supported"* ]]
+  ! grep -q "comp6-completion" "$HOME/.bashrc"
+}
+
+@test "setup.sh rejects unknown CLIFT_COMPLETIONS value with warning" {
+  export SHELL=/bin/bash
+  run bash -c "CLIFT_COMPLETIONS=maybe bash '$FRAMEWORK_DIR/lib/setup/setup.sh' \
+    '$TEST_DIR/comp7' '$FRAMEWORK_DIR' comp7 1.0.0 minimal standard 2>&1"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"maybe"* ]]
+  ! grep -q "comp7-completion" "$HOME/.bashrc"
+}
+
+@test "setup.sh reconfigure replaces completion line instead of duplicating" {
+  export SHELL=/bin/bash
+  bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
+    "$TEST_DIR/comp8" "$FRAMEWORK_DIR" "comp8" "1.0.0" "minimal" "standard"
+  # Exactly one completion sentinel
+  [ "$(grep -c '# clift: comp8-completion' "$HOME/.bashrc")" -eq 1 ]
+
+  export RECONFIGURE_YES=1
+  export _RECONFIG_NAME="comp8"
+  export _RECONFIG_VERSION="2.0.0"
+  export _RECONFIG_THEME="minimal"
+  bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
+    "$TEST_DIR/comp8" "$FRAMEWORK_DIR" "comp8" "2.0.0" "minimal" "standard"
+  # Still exactly one after reconfigure
+  [ "$(grep -c '# clift: comp8-completion' "$HOME/.bashrc")" -eq 1 ]
+}
+
+@test "setup.sh mode switch standard→task rewrites completion with colon form" {
+  export SHELL=/bin/bash
+  bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
+    "$TEST_DIR/comp9" "$FRAMEWORK_DIR" "comp9" "1.0.0" "minimal" "standard"
+  grep -q 'source <(comp9 completion bash)' "$HOME/.bashrc"
+
+  export RECONFIGURE_YES=1
+  bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
+    "$TEST_DIR/comp9" "$FRAMEWORK_DIR" "comp9" "1.0.0" "minimal" "task"
+  ! grep -q 'source <(comp9 completion bash)' "$HOME/.bashrc"
+  grep -q 'source <(comp9 completion:bash)' "$HOME/.bashrc"
+}
+
+@test "setup.sh success message announces completion install" {
+  export SHELL=/bin/bash
+  run bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
+    "$TEST_DIR/comp10" "$FRAMEWORK_DIR" "comp10" "1.0.0" "minimal" "standard"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Shell completion for bash installed"* ]]
+}
+
+@test "setup.sh success message omits completion line when disabled" {
+  export SHELL=/bin/bash
+  run bash -c "CLIFT_COMPLETIONS=false bash '$FRAMEWORK_DIR/lib/setup/setup.sh' \
+    '$TEST_DIR/comp11' '$FRAMEWORK_DIR' comp11 1.0.0 minimal standard"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"Shell completion for"* ]]
+}

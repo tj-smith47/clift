@@ -158,10 +158,10 @@ fi
 
 source "${FRAMEWORK_DIR}/lib/setup/rc.sh"
 
+SHELL_NAME="$(basename "${SHELL:-/bin/bash}")"
 if [[ -n "${CLIFT_RC_FILE:-}" ]]; then
   RC_FILE="$CLIFT_RC_FILE"
 else
-  SHELL_NAME="$(basename "${SHELL:-/bin/bash}")"
   case "$SHELL_NAME" in
     zsh) RC_FILE="$HOME/.zshrc" ;;
     bash) RC_FILE="$HOME/.bashrc" ;;
@@ -170,8 +170,9 @@ else
 fi
 touch "$RC_FILE"
 
-# Scrub any existing entry (covers mode switches)
+# Scrub any existing entries (covers mode switches and completion re-install)
 clift_rc_scrub "$RC_FILE" "$CLI_NAME"
+clift_rc_scrub "$RC_FILE" "${CLI_NAME}-completion"
 if [[ "$CLIFT_MODE" == "task" ]] && [[ -f "${TARGET}/bin/${CLI_NAME}" ]]; then
   rm -f "${TARGET}/bin/${CLI_NAME}"
 fi
@@ -200,6 +201,38 @@ else
   clift_rc_write "$RC_FILE" "$CLI_NAME" "$PATH_LINE"
 fi
 
+# Completion install — Task 5.3. Controlled by CLIFT_COMPLETIONS:
+#   auto (default) → install when shell is bash or zsh; skip otherwise
+#   true           → install (requires bash or zsh)
+#   false          → skip
+# Standard mode uses space-separated `completion bash`; task mode uses
+# colon-separated `completion:bash` because the alias dispatches through
+# go-task which resolves colon-joined task names.
+CLIFT_COMPLETIONS="${CLIFT_COMPLETIONS:-auto}"
+COMPLETION_INSTALLED=false
+case "$CLIFT_COMPLETIONS" in
+  auto|true)
+    case "$SHELL_NAME" in
+      bash|zsh)
+        if [[ "$CLIFT_MODE" == "task" ]]; then
+          COMP_LINE="source <(${CLI_NAME} completion:${SHELL_NAME})"
+        else
+          COMP_LINE="source <(${CLI_NAME} completion ${SHELL_NAME})"
+        fi
+        clift_rc_write "$RC_FILE" "${CLI_NAME}-completion" "$COMP_LINE"
+        COMPLETION_INSTALLED=true
+        ;;
+      *)
+        if [[ "$CLIFT_COMPLETIONS" == "true" ]]; then
+          log_warn "CLIFT_COMPLETIONS=true but shell '${SHELL_NAME}' is not supported (bash or zsh only)"
+        fi
+        ;;
+    esac
+    ;;
+  false) ;;
+  *) log_warn "Ignoring unrecognized CLIFT_COMPLETIONS='${CLIFT_COMPLETIONS}' (use auto|true|false)" ;;
+esac
+
 # Precompile cache (may fail for fresh CLIs with no user commands yet)
 bash "${FRAMEWORK_DIR}/lib/flags/compile.sh" "$TARGET" 2>/dev/null || true
 
@@ -217,6 +250,10 @@ else
   else
     echo "  ${CLI_NAME}"
     echo "  ${CLI_NAME} new:cmd"
+  fi
+  if [[ "$COMPLETION_INSTALLED" == "true" ]]; then
+    echo ""
+    echo "Shell completion for ${SHELL_NAME} installed — takes effect after 'source ${RC_FILE}'."
   fi
 fi
 
