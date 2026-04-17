@@ -231,6 +231,10 @@ _clift_help_list_default() {
 
   if [[ "${CLIFT_MODE:-task}" == "standard" ]]; then
     echo "Run '${CLI_NAME} <command> --help' for details on a command."
+    # Task 5.4: completion install hint. Always render — users tune out
+    # tips they've already acted on; gating it on rc-file content adds a
+    # filesystem read on the help hot path with no real DX gain.
+    echo "Tip: install shell completions with '${CLI_NAME} completion bash' (or zsh)."
   else
     echo "Run '${CLI_NAME} <command>:help' for details on a command."
   fi

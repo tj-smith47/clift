@@ -295,3 +295,18 @@ YAML
   }
 }
 
+@test "list.sh shows completion install hint in standard mode (Task 5.4)" {
+  _setup_cli_with_commands
+  CLIFT_MODE=standard run bash "$FRAMEWORK_DIR/lib/help/list.sh" "$TEST_DIR/Taskfile.yaml"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"completion bash"* ]]
+  [[ "$output" == *"or zsh"* ]]
+}
+
+@test "list.sh suppresses completion hint in task mode" {
+  _setup_cli_with_commands
+  CLIFT_MODE=task run bash "$FRAMEWORK_DIR/lib/help/list.sh" "$TEST_DIR/Taskfile.yaml"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"Tip: install shell completions"* ]]
+}
+
