@@ -85,13 +85,18 @@ task --taskfile ~/.clift/Taskfile.yaml setup:cli -- ~/mycli
 
 - Cobra-style help system with grouped commands
 - Themed logging (7 built-in themes + custom color schemes)
-- Typed flag parsing (bool, string, int, list) with defaults, required flags, and short aliases
+- Typed flag parsing (bool, string, int, list) with defaults, required flags, short aliases, long-name aliases, deprecated markers, hidden flags, mutex / required-together groups, and value validation via `choices:` / `pattern:`
+- Persistent (CLI-wide) flags that work before or after the command token
+- Command aliases (`aliases: [...]` on tasks) — dispatch, help, completion, and did-you-mean all honor them
+- Override system — per-command and CLI-global slots for help, version, log, and pre/post command hooks
+- Cache control — `--no-cache` flag and `CLIFT_CACHE=rebuild|bypass` environment variable
+- go-task runner flags as first-class UX — `mycli watch <cmd>`, `--task:dry`, `--task:interval`, `--task:parallel`, …
 - Did-you-mean error suggestions (Levenshtein)
 - Interactive prompts (gum with read fallback)
 - Config management (get/set/show/edit/theme)
 - Command scaffolding with `new cmd`
 - Global flags: `--verbose`, `--quiet`, `--no-color`, `--help`, `--version`
-- Shell completions with flag support (bash, zsh)
+- Shell completions (bash, zsh) with static + dynamic flag-value completers, `--help` install hint, and setup-time installer
 - Framework self-update
 - Optional versioning and distribution via [cfgd](https://github.com/tj-smith47/cfgd)
 - `NO_COLOR` standard support
