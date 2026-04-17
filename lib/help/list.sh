@@ -92,16 +92,10 @@ _clift_help_list_default() {
     hidden_map="$(jq -c '.tasks // {} | with_entries(.value = (.value.hidden // false))' "$index_cache" 2>/dev/null || echo '{}')"
   fi
 
-  # Load alias map keyed by display name (canonical with `:default` stripped
-  # and the namespace prefix dropped from each alias). Task 5.1: aliases of
-  # included commands are namespaced by go-task (e.g. `deploy:d`); the user
-  # invokes them as bare `d`, so the displayed list strips the same prefix.
-  # The filter drops three classes of aliases:
-  #   - empty after stripping (bare-namespace alias for a `:default` task)
-  #   - still contain `:` after stripping (nested-segment, unreachable via
-  #     the wrapper's first-token-only substitution)
-  #   - equal to the display name itself (self-referential bare-namespace
-  #     alias — would otherwise duplicate the canonical in the rendered row)
+  # Load alias map keyed by display name (canonical with `:default` stripped).
+  # Task 5.1: each task entry's `user_aliases` field is precomputed by
+  # compile.sh — already filtered (no empty / no nested / no self-referential)
+  # and stripped of the canonical's namespace prefix.
   local aliases_map='{}'
   if [[ -f "$index_cache" ]]; then
     aliases_map="$(jq -c '
@@ -109,15 +103,7 @@ _clift_help_list_default() {
       | to_entries
       | map(
           (.key | sub(":default$"; "")) as $disp
-          | (.key | capture("^(?<ns>.*):[^:]+$").ns // "") as $ns
-          | (((.value.aliases // [])
-              | map(
-                  if $ns == "" then .
-                  elif startswith($ns + ":") then ltrimstr($ns + ":")
-                  else . end
-                )
-              | map(select(. != "" and (contains(":") | not) and . != $disp))
-            )) as $cleaned
+          | (.value.user_aliases // []) as $cleaned
           | select(($cleaned | length) > 0)
           | {key: $disp, value: $cleaned}
         )

@@ -60,20 +60,13 @@ _${CLI_NAME}_completions() {
   # Complete subcommands: offer the next segment after cmd_path.
   # Hidden commands (vars.HIDDEN: true) are filtered out via index.json lookup.
   # Task 5.1: aliases declared on a command are included as additional
-  # top-level candidates. They are stored namespace-prefixed in index.json
-  # (e.g. \`deploy:d\` for canonical \`deploy:default\`); we strip the
-  # canonical's namespace so the user-facing alias name (\`d\`) appears.
+  # top-level candidates. compile.sh precomputes the user-facing form on
+  # each task entry as \`user_aliases\` so we don't re-derive it here.
   local all_tasks
   all_tasks="\$(jq -r --slurpfile idx "\$index_json" '
     ([\$idx[0].tasks // {} | to_entries[] | select(.value.hidden == true) | .key] // []) as \$hidden |
     ([\$idx[0].tasks // {} | to_entries[]
-      | (.key | sub(":default\$"; "")) as \$disp
-      | (.key | capture("^(?<ns>.*):[^:]+\$").ns // "") as \$ns
-      | (.value.aliases // [])[]
-      | (if \$ns == "" then .
-         elif startswith(\$ns + ":") then ltrimstr(\$ns + ":")
-         else . end)
-      | select(. != "" and (contains(":") | not) and . != \$disp)
+      | (.value.user_aliases // [])[]
     ]) as \$alias_names |
     ((
       [.. | .tasks? // empty | .[]] | .[]
@@ -141,13 +134,7 @@ _${CLI_NAME}() {
   subcmds=(\$(jq -r --slurpfile idx "\$index_json" '
     ([\$idx[0].tasks // {} | to_entries[] | select(.value.hidden == true) | .key] // []) as \$hidden |
     ([\$idx[0].tasks // {} | to_entries[]
-      | (.key | sub(":default\$"; "")) as \$disp
-      | (.key | capture("^(?<ns>.*):[^:]+\$").ns // "") as \$ns
-      | (.value.aliases // [])[]
-      | (if \$ns == "" then .
-         elif startswith(\$ns + ":") then ltrimstr(\$ns + ":")
-         else . end)
-      | select(. != "" and (contains(":") | not) and . != \$disp)
+      | (.value.user_aliases // [])[]
     ]) as \$alias_names |
     ((
       [.. | .tasks? // empty | .[]] | .[]

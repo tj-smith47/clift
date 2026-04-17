@@ -255,46 +255,21 @@ else
     IFS= read -r -d '' persistent_tsv || true
     IFS= read -r -d '' aliases_tsv || true
   } < <(jq -j --slurpfile idx_wrap <(
-      if [[ -f "$INDEX_JSON" ]]; then cat "$INDEX_JSON"; else echo '{"persistent_flags":[]}'; fi
+      if [[ -f "$INDEX_JSON" ]]; then cat "$INDEX_JSON"; else echo '{"persistent_flags":[],"tasks":{}}'; fi
     ) '
-    # Recursive walk: every task entry that go-task knows about. Tasks declared
-    # with `aliases:` carry a non-empty .aliases array on the SAME entry — the
-    # alias names are NOT emitted as separate task entries by go-task.
+    # Recursive walk: every task entry that go-task knows about.
     [.. | .tasks? // empty | .[]
       | select(.name | test("^_|:_") | not)
     ] as $all_tasks
     |
-    # Map alias -> canonical (top-level command-alias UX, Task 5.1).
-    #
-    # go-task namespaces aliases of an included task: a deploy/Taskfile.yaml
-    # declaring aliases [d] on its default task surfaces as alias
-    # deploy:d for canonical deploy:default. Users type "mycli d", not
-    # "mycli deploy:d", so we strip the namespace prefix of the canonical
-    # from the alias to recover the user-facing top-level name.
-    #
-    # Aliases dropped by the filter chain:
-    #   - empty after stripping (the bare-namespace alias `deploy` for
-    #     canonical `deploy:default` — already reachable via normal dispatch).
-    #   - still contain ":" after stripping (nested-segment aliases — out of
-    #     scope; would require multi-token rewrite during the walk).
-    #   - equal to the canonical itself (the bare-namespace case described
-    #     above takes a second form when the user re-declares the namespace
-    #     name as an alias on the default task — same shadowing problem).
-    #
-    # The canonical is emitted with ":default" stripped so the longest-prefix
-    # walk receives a name it recognises (e.g. deploy not deploy:default).
-    [ $all_tasks[]
-      | . as $task
-      | ($task.name | sub(":default$"; "")) as $canonical
-      | ($task.name | capture("^(?<ns>.*):[^:]+$").ns // "") as $ns
-      | ($task.aliases // [])[] as $a
-      | (if $ns == "" then $a
-         elif ($a | startswith($ns + ":")) then ($a | ltrimstr($ns + ":"))
-         else $a
-         end) as $user_alias
-      | select($user_alias != ""
-               and ($user_alias | contains(":") | not)
-               and $user_alias != $canonical)
+    # Map alias -> canonical (top-level command-alias UX, Task 5.1). The
+    # filtered, namespace-stripped, deduped alias list is precomputed at
+    # build time and stored on each task entry as `user_aliases`. The
+    # canonical is the index.json key with `:default` stripped — same form
+    # the longest-prefix walk recognises.
+    [ $idx_wrap[0].tasks // {} | to_entries[]
+      | (.key | sub(":default$"; "")) as $canonical
+      | (.value.user_aliases // [])[] as $user_alias
       | { alias: $user_alias, canonical: $canonical }
     ] as $alias_pairs
     |

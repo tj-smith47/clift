@@ -204,10 +204,24 @@ done <<< "$unique_taskfiles"
 
 # Step 5: build index.json entries via temp file, assemble once at the end.
 # Each TSV row is: task_name<TAB>json_value where json_value has shape:
-#   {flags: [...] | {passthrough:true}, aliases: [...], hidden: bool, summary: str}
+#   {
+#     flags: [...] | {passthrough:true},
+#     aliases: [...],          # raw alias names as declared in the Taskfile
+#                              # (still namespace-prefixed for included tasks)
+#     user_aliases: [...],     # bare top-level alias names AFTER stripping
+#                              # the canonical's namespace prefix and dropping
+#                              # entries that are empty / contain `:` /
+#                              # equal the canonical itself. This is the form
+#                              # the wrapper, help (list+detail), and shell
+#                              # completion all need — precomputed here so
+#                              # they don't each re-derive it via jq at
+#                              # runtime. Empty for alias entries.
+#     hidden: bool,
+#     summary: str
+#   }
 # Aliases of a task share the same per-task record (same flags/hidden/summary,
-# but their `aliases` field is the empty list — only the canonical name lists
-# its aliases).
+# but their `aliases` and `user_aliases` fields are empty arrays — only the
+# canonical name lists its aliases).
 entries_tmpfile="${CACHE_DIR}/entries.tmp"
 : > "$entries_tmpfile"
 
@@ -267,19 +281,38 @@ while IFS=$'\x01' read -r -d '' task_name source_tf aliases_json summary; do
     done < <(jq -j '.[] + "\u0000"' <<< "$aliases_json")
   fi
 
+  # Precompute user_aliases — the bare top-level form the wrapper, help, and
+  # completion all need. Strips the canonical's namespace prefix and drops
+  # the same three classes the wrapper's runtime filter used to drop:
+  # empty-after-stripping, still-contains-`:`, equal-to-canonical. Doing
+  # this once at compile time removes 5 duplicated jq blocks at runtime.
+  user_aliases_json="$(jq -c \
+    --arg task_name "$task_name" \
+    '
+    ($task_name | sub(":default$"; "")) as $canonical |
+    ($task_name | capture("^(?<ns>.*):[^:]+$").ns // "") as $ns |
+    [ .[]
+      | (if $ns == "" then .
+         elif startswith($ns + ":") then ltrimstr($ns + ":")
+         else . end)
+      | select(. != "" and (contains(":") | not) and . != $canonical)
+    ]
+    ' <<< "$aliases_json")"
+
   if [[ "$has_optin" != "true" ]]; then
     # Passthrough: no flag table, but hidden/summary still apply.
     canonical_entry="$(jq -c -n \
       --argjson aliases "$aliases_json" \
+      --argjson user_aliases "$user_aliases_json" \
       --argjson hidden "$hidden_bool" \
       --arg summary "$summary" \
-      '{flags: {passthrough: true}, aliases: $aliases, hidden: $hidden, summary: $summary}')"
+      '{flags: {passthrough: true}, aliases: $aliases, user_aliases: $user_aliases, hidden: $hidden, summary: $summary}')"
     printf '%s\t%s\n' "$task_name" "$canonical_entry" >> "$entries_tmpfile"
     for alias in "${aliases[@]+"${aliases[@]}"}"; do
       alias_entry="$(jq -c -n \
         --argjson hidden "$hidden_bool" \
         --arg summary "$summary" \
-        '{flags: {passthrough: true}, aliases: [], hidden: $hidden, summary: $summary}')"
+        '{flags: {passthrough: true}, aliases: [], user_aliases: [], hidden: $hidden, summary: $summary}')"
       printf '%s\t%s\n' "$alias" "$alias_entry" >> "$entries_tmpfile"
     done
     continue
@@ -371,16 +404,17 @@ while IFS=$'\x01' read -r -d '' task_name source_tf aliases_json summary; do
   canonical_entry="$(jq -c -n \
     --argjson flags "$merged" \
     --argjson aliases "$aliases_json" \
+    --argjson user_aliases "$user_aliases_json" \
     --argjson hidden "$hidden_bool" \
     --arg summary "$summary" \
-    '{flags: $flags, aliases: $aliases, hidden: $hidden, summary: $summary}')"
+    '{flags: $flags, aliases: $aliases, user_aliases: $user_aliases, hidden: $hidden, summary: $summary}')"
   printf '%s\t%s\n' "$task_name" "$canonical_entry" >> "$entries_tmpfile"
   for alias in "${aliases[@]+"${aliases[@]}"}"; do
     alias_entry="$(jq -c -n \
       --argjson flags "$merged" \
       --argjson hidden "$hidden_bool" \
       --arg summary "$summary" \
-      '{flags: $flags, aliases: [], hidden: $hidden, summary: $summary}')"
+      '{flags: $flags, aliases: [], user_aliases: [], hidden: $hidden, summary: $summary}')"
     printf '%s\t%s\n' "$alias" "$alias_entry" >> "$entries_tmpfile"
   done
 done < <(jq -j '
