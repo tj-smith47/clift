@@ -17,5 +17,6 @@ Deeper references for people building a CLI on top of clift. Future Phase 3/4 do
 
 - [go-task features](cli/task-features.md) — passthrough task fields (`deps`, `preconditions`, `sources`, etc.) available in command Taskfiles.
 - [Overrides](cli/overrides.md) — override-slot loader, per-command + CLI-global tiers, callback signature.
+- [Completion](cli/completion.md) — static completion from the cache, plus dynamic flag-value completers via `clift_complete_<task>_<flag>`.
 
 For the canonical go-task reference, see [taskfile.dev](https://taskfile.dev).

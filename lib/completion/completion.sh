@@ -57,6 +57,25 @@ _${CLI_NAME}_completions() {
     return
   fi
 
+  # Task 5.5: dynamic completer for flag values. When prev is a long flag
+  # and cur is a value slot (doesn't start with -), delegate to the hidden
+  # \`_complete\` subcommand. If the completer is undefined or returns no
+  # candidates, fall through to subcommand completion — ensures users with
+  # bool flags still get expected behavior at \`--verbose <TAB>\`.
+  if [[ -n "\$cmd_path" ]] && (( COMP_CWORD >= 1 )); then
+    local _prev="\${COMP_WORDS[\$((COMP_CWORD-1))]}"
+    if [[ "\$_prev" == --?* ]] && [[ "\$cur" != -* ]]; then
+      local _flag="\${_prev#--}"
+      _flag="\${_flag%%=*}"
+      local _dyn
+      _dyn="\$(${CLI_NAME} _complete "\$cmd_path" "\$_flag" "\$cur" 2>/dev/null)"
+      if [[ -n "\$_dyn" ]]; then
+        COMPREPLY=(\$(compgen -W "\$_dyn" -- "\$cur"))
+        return
+      fi
+    fi
+  fi
+
   # Complete subcommands: offer the next segment after cmd_path.
   # Hidden commands (vars.HIDDEN: true) are filtered out via index.json lookup.
   # Task 5.1: aliases declared on a command are included as additional
@@ -125,6 +144,22 @@ _${CLI_NAME}() {
     ' "\$index_json" 2>/dev/null))
     _describe 'flag' flags
     return
+  fi
+
+  # Task 5.5: dynamic completer for flag values (see bash branch for rationale).
+  if [[ -n "\$cmd_path" ]] && (( CURRENT >= 2 )); then
+    local _prev="\${words[\$((CURRENT-1))]}"
+    local _cur="\${words[\$CURRENT]}"
+    if [[ "\$_prev" == --?* ]] && [[ "\$_cur" != -* ]]; then
+      local _flag="\${_prev#--}"
+      _flag="\${_flag%%=*}"
+      local -a _dyn
+      _dyn=("\${(@f)\$(${CLI_NAME} _complete "\$cmd_path" "\$_flag" "\$_cur" 2>/dev/null)}")
+      if (( \${#_dyn[@]} > 0 )) && [[ -n "\${_dyn[1]}" ]]; then
+        _describe 'value' _dyn
+        return
+      fi
+    fi
   fi
 
   local prefix="\$cmd_path"
