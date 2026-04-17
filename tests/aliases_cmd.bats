@@ -111,9 +111,12 @@ YAML
   [ "$status" -eq 0 ]
   # Both alias names render on the same display line as the canonical
   [[ "$output" == *"deploy, d, dep"* ]]
-  # Aliases must NOT appear as separate top-level rows
+  # Aliases must NOT appear as separate top-level rows.
+  # Use POSIX [[:space:]] (portable across grep dialects) and anchor on
+  # word-boundary-equivalents so the assertion doesn't rely on column -t's
+  # space-vs-tab padding decision.
   local d_rows
-  d_rows=$(echo "$output" | grep -cE '^\s+d\s' || true)
+  d_rows=$(echo "$output" | grep -cE '^[[:space:]]+d([[:space:]]|$)' || true)
   [ "$d_rows" -eq 0 ]
   # Canonical name must appear EXACTLY ONCE in the Commands section, never
   # duplicated as a self-referential bare-namespace alias (regression guard

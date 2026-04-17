@@ -64,12 +64,12 @@ _${CLI_NAME}_completions() {
   # each task entry as \`user_aliases\` so we don't re-derive it here.
   local all_tasks
   all_tasks="\$(jq -r --slurpfile idx "\$index_json" '
-    ([\$idx[0].tasks // {} | to_entries[] | select(.value.hidden == true) | .key] // []) as \$hidden |
-    ([\$idx[0].tasks // {} | to_entries[]
+    [\$idx[0].tasks // {} | to_entries[] | select(.value.hidden == true) | .key] as \$hidden |
+    [\$idx[0].tasks // {} | to_entries[]
       | .key as \$k
       | select((\$hidden | index(\$k)) == null)
       | (.value.user_aliases // [])[]
-    ]) as \$alias_names |
+    ] as \$alias_names |
     ([
       [.. | .tasks? // empty | .[]] | .[]
       | select(.name != "default")
@@ -134,12 +134,12 @@ _${CLI_NAME}() {
   # Task 5.1: aliases included as top-level candidates (see bash branch).
   local -a subcmds
   subcmds=(\$(jq -r --slurpfile idx "\$index_json" '
-    ([\$idx[0].tasks // {} | to_entries[] | select(.value.hidden == true) | .key] // []) as \$hidden |
-    ([\$idx[0].tasks // {} | to_entries[]
+    [\$idx[0].tasks // {} | to_entries[] | select(.value.hidden == true) | .key] as \$hidden |
+    [\$idx[0].tasks // {} | to_entries[]
       | .key as \$k
       | select((\$hidden | index(\$k)) == null)
       | (.value.user_aliases // [])[]
-    ]) as \$alias_names |
+    ] as \$alias_names |
     ([
       [.. | .tasks? // empty | .[]] | .[]
       | select(.name != "default")
