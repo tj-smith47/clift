@@ -115,6 +115,13 @@ YAML
   local d_rows
   d_rows=$(echo "$output" | grep -cE '^\s+d\s' || true)
   [ "$d_rows" -eq 0 ]
+  # Canonical name must appear EXACTLY ONCE in the Commands section, never
+  # duplicated as a self-referential bare-namespace alias (regression guard
+  # for the C2 filter — `deploy, d, dep, deploy` would mean the filter
+  # stopped excluding aliases that equal the canonical).
+  local deploy_count
+  deploy_count=$(echo "$output" | grep -oE '\bdeploy\b' | wc -l)
+  [ "$deploy_count" -eq 1 ]
 }
 
 # --- Help detail -------------------------------------------------------------
@@ -123,6 +130,21 @@ YAML
   _setup_aliased_cli
   run bash "$FRAMEWORK_DIR/lib/help/detail.sh" deploy "$CLI_DIR/Taskfile.yaml"
   [ "$status" -eq 0 ]
+  [[ "$output" == *"Aliases: d, dep"* ]]
+}
+
+# Invoking `<alias> --help` must render the canonical's detail page.
+# The wrapper substitutes alias -> canonical at the FIRST token of the
+# longest-prefix walk, so by the time --help interception runs the matched
+# task is already the canonical name and detail.sh receives `deploy`,
+# not `d`. Regression guard against substitution moving downstream of
+# --help interception.
+@test "alias --help: shows canonical detail page" {
+  _setup_aliased_cli
+  run "$CLI_DIR/bin/$CLI_NAME" d --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"$CLI_NAME deploy"* ]]
+  [[ "$output" == *"Deploy the app"* ]]
   [[ "$output" == *"Aliases: d, dep"* ]]
 }
 
@@ -148,9 +170,79 @@ YAML
     printf '%s\n' \"\${COMPREPLY[@]}\"
   "
   [ "$status" -eq 0 ]
-  [[ "$output" == *"deploy"* ]]
-  [[ "$output" == *"d"* ]]
-  [[ "$output" == *"dep"* ]]
+  # Word-anchored matches: substring `*"d"*` would pass even on `dep` /
+  # `deploy`, so each name must be present as its own COMPREPLY line.
+  printf '%s\n' "$output" | grep -Fxq deploy
+  printf '%s\n' "$output" | grep -Fxq d
+  printf '%s\n' "$output" | grep -Fxq dep
+}
+
+# --- Multi-segment canonical -------------------------------------------------
+
+# An alias declared on a NESTED task (not the namespace's default) should
+# dispatch to the full canonical path when the user types the bare alias.
+# E.g. `version:upgrade` aliased to `up` — `mycli up` must run the nested
+# task. The wrapper splits the canonical on `:` so multi-segment paths
+# populate the path[] array correctly.
+@test "alias dispatch: bare alias maps to multi-segment canonical task" {
+  cat > "$CLI_DIR/Taskfile.yaml" <<'YAML'
+version: '3'
+silent: true
+output:
+  group:
+    begin: ''
+    end: ''
+set: [errexit, pipefail]
+dotenv: ['.env']
+vars:
+  FLAGS:
+    - {name: help, short: h, type: bool, desc: "Show help"}
+    - {name: verbose, short: v, type: bool, desc: "Verbose"}
+    - {name: quiet, short: q, type: bool, desc: "Quiet"}
+    - {name: no-color, type: bool, desc: "No color"}
+    - {name: no-cache, type: bool, desc: "Force-rebuild the .clift cache"}
+    - {name: version, type: bool, desc: "Version"}
+includes:
+  version:
+    taskfile: ./cmds/version
+tasks:
+  default:
+    cmd: echo root
+YAML
+  cat > "$CLI_DIR/.env" <<ENV
+CLI_NAME=$CLI_NAME
+CLI_VERSION=$CLI_VERSION
+CLI_DIR=$CLI_DIR
+FRAMEWORK_DIR=$FRAMEWORK_DIR
+CLIFT_MODE=standard
+LOG_THEME=minimal
+ENV
+
+  mkdir -p "$CLI_DIR/cmds/version"
+  cat > "$CLI_DIR/cmds/version/Taskfile.yaml" <<'YAML'
+version: '3'
+vars:
+  FLAGS: []
+tasks:
+  default:
+    desc: "Show version"
+    vars:
+      FLAGS: []
+    cmd: echo version-default
+  upgrade:
+    desc: "Upgrade to latest"
+    aliases: [up]
+    vars:
+      FLAGS: []
+    cmd: echo upgrade-ran
+YAML
+
+  bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$CLI_DIR"
+  build_test_wrapper
+
+  run "$CLI_DIR/bin/$CLI_NAME" up
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"upgrade-ran"* ]]
 }
 
 # --- Hidden-command aliases --------------------------------------------------
@@ -309,9 +401,9 @@ YAML
   run "$CLI_DIR/bin/$CLI_NAME" dx
   [ "$status" -ne 0 ]
   [[ "$output" == *"unknown command"* ]]
-  [[ "$output" == *"did you mean"* ]]
-  # The suggestion comes from the candidate set — alias OR canonical close.
+  # Anchor the suggestion line to the exact `did you mean 'd'?` form so a
+  # bare match on `'d'` elsewhere in the error block can't satisfy this.
   # 'dx' is distance 1 from 'd', distance 2 from 'dep', distance 5 from
   # 'deploy'; 'd' must win iff the alias is in the candidate set.
-  [[ "$output" == *"'d'"* ]]
+  [[ "$output" =~ did[[:space:]]+you[[:space:]]+mean[[:space:]]+\'d\' ]]
 }
