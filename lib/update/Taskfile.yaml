@@ -3,6 +3,7 @@ version: '3'
 tasks:
   default:
     desc: "Update clift framework"
+    aliases: [upgrade]
     summary: |
       Pull the latest clift framework into the directory pointed to by
       $FRAMEWORK_DIR. Your CLI's cmds/ and config are not touched.

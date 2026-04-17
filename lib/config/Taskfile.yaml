@@ -3,12 +3,14 @@ version: '3'
 tasks:
   show:
     desc: "Show current configuration"
+    aliases: [dump]
     summary: |
       Print the CLI's current configuration — log theme, version, and any
       values set via `config set`. Reads from .clift.yaml.
 
       Examples:
         {{.CLI_NAME}} config show
+        {{.CLI_NAME}} config dump
     cmd: "'{{.FRAMEWORK_DIR}}/lib/config/show.sh' '{{.CLI_DIR}}'"
 
   theme:

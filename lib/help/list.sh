@@ -93,9 +93,20 @@ _clift_help_list_default() {
   fi
 
   # Load alias map keyed by display name (canonical with `:default` stripped).
-  # Task 5.1: each task entry's `user_aliases` field is precomputed by
-  # compile.sh — already filtered (no empty / no nested / no self-referential)
-  # and stripped of the canonical's namespace prefix.
+  # Two sources, merged below:
+  #
+  #   1. index.json.user_aliases — precomputed at compile time for USER
+  #      tasks. Already filtered (no empty / no nested / no self-referential)
+  #      and stripped of the canonical's namespace prefix. (Task 5.1.)
+  #
+  #   2. tasks.json.aliases — authoritative for FRAMEWORK-lib tasks
+  #      (config:show, update:default, etc.) which compile.sh skips on
+  #      purpose. Apply the same namespace-strip / drop-empty /
+  #      drop-self-referential / drop-nested filters inline so the two
+  #      sources produce compatible bare-alias shapes. (Task 6.3 dogfood.)
+  #
+  # Merge semantics: index.json wins on conflict — user aliases are
+  # authoritative when compile.sh processed them.
   local aliases_map='{}'
   if [[ -f "$index_cache" ]]; then
     aliases_map="$(jq -c '
@@ -110,6 +121,35 @@ _clift_help_list_default() {
       | from_entries
     ' "$index_cache" 2>/dev/null || echo '{}')"
   fi
+  # Framework-lib aliases from tasks.json. Silent on malformed JSON.
+  local fw_aliases_map='{}'
+  fw_aliases_map="$(jq -c '
+    def strip_ns($canonical; $ns; $a):
+      if $ns != "" and ($a | startswith($ns + ":"))
+      then ($a | ltrimstr($ns + ":"))
+      else $a
+      end;
+    ([.. | .tasks? // empty | .[]
+      | select(.name | test("^_|:_") | not)
+      | (.name | sub(":default$"; "")) as $disp
+      | ($disp | capture("^(?<ns>.*):[^:]+$").ns // "") as $ns
+      | {
+          disp: $disp,
+          aliases: [ (.aliases // [])[]
+            | strip_ns($disp; $ns; .) as $a
+            | select(
+                $a != ""
+                and ($a | contains(":") | not)
+                and $a != $disp
+              )
+            | $a
+          ]
+        }
+      | select(.aliases | length > 0)
+      | {key: .disp, value: .aliases}
+    ]) | from_entries
+  ' "$tasks_cache" 2>/dev/null || echo '{}')"
+  aliases_map="$(jq -c -n --argjson fw "$fw_aliases_map" --argjson user "$aliases_map" '$fw * $user')"
 
   # Flatten into group<TAB>display_name<TAB>desc lines (one row per top-level
   # command). Root tasks emit directly. Namespaces collapse into a single row:

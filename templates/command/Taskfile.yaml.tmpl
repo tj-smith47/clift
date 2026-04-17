@@ -6,10 +6,21 @@ vars:
   # uncomment example(s) below (they become list items under FLAGS):
   #   - {name: force, short: f, type: bool, desc: "Skip confirmation"}
   #   - {name: tag, type: list, desc: "Repeatable — --tag a --tag b or --tag=a,b"}
+  #   - {name: region, type: string, choices: [us-east-1, us-west-2, eu-west-1], desc: "Region"}
+  #   - {name: semver, type: string, pattern: '^v?[0-9]+\.[0-9]+\.[0-9]+$', desc: "Version"}
+  #   - {name: format, type: string, group: output, desc: "Output format"}
+  #   - {name: json,   type: bool,   group: output, desc: "JSON output"}
+  #     # Members of the same `group:` become mutually exclusive. Append
+  #     # `group_required: output` to one of them to require exactly one.
+  #   - {name: debug, type: bool, hidden: true, desc: "Internal — avoid"}
+  #   - {name: old-flag, type: bool, deprecated: "use --new-flag instead"}
+  #   - {name: mode, aliases: [m, kind], type: string, desc: "Mode — also accepts --m, --kind"}
 
 tasks:
   default:
     desc: "%%CMD_DESC%%"
+    # aliases: [alt, %%CMD_NAME%%-short]           # Cobra-style command aliases
+    # vars: {HIDDEN: true}                         # Hide this task from help + completion
     summary: |
       %%CMD_DESC%%
 
@@ -17,10 +28,9 @@ tasks:
         %%CLI_NAME%% %%CMD_NAME%% [flags]
     vars:
       FLAGS: []
-      # To add flags: drop the trailing '[]' from the FLAGS line above, then
-      # uncomment example(s) below (they become list items under FLAGS):
-      #   - {name: force, short: f, type: bool, desc: "Skip confirmation"}
-      #   - {name: tag, type: list, desc: "Repeatable — --tag a --tag b or --tag=a,b"}
+      # Same schema as the top-level FLAGS above (top-level and per-task
+      # FLAGS are merged; per-task wins on name collision). Uncomment and
+      # customize the examples from the top-level block as needed.
     cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
     # Optional go-task task fields (all pass through untouched — see docs/cli/task-features.md):
     #   deps: [other:task]                        # run before this task
@@ -38,6 +48,14 @@ tasks:
     #   interactive: true                         # task needs a TTY
     #   prompt: "Deploy to prod?"                 # confirm before running
     #   summary: "Long multi-line description"    # shown in `task --summary`
+
+    # Dynamic completer convention (see docs/cli/completion.md) — drop this
+    # file to provide runtime candidates for any flag on this command:
+    #   cmds/%%CMD_NAME%%/overrides/completion.sh
+    # containing:
+    #   clift_complete_%%CMD_NAME%%_region() {
+    #     aws ec2 describe-regions --query 'Regions[].RegionName' --output text
+    #   }
 
   help:
     desc: "Show help for %%CMD_NAME%%"

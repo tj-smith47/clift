@@ -284,11 +284,18 @@ if [[ ! -f "$TASKS_JSON" ]]; then
   fi
 else
   # One jq call extracts everything the wrapper's dispatch walk needs:
-  #   1. known_tasks    — every task name (for prefix lookup)
-  #   2. root_cmds      — root command names + namespaces + aliases
-  #                       (for did-you-mean)
-  #   3. persistent_tsv — one row per persistent flag: name<\x01>short<\x01>type
-  #   4. aliases_tsv    — one row per command alias: alias<\x01>canonical
+  #   1. known_tasks           — every task name (for prefix lookup)
+  #   2. root_cmds             — root command names + namespaces + aliases
+  #                              (for did-you-mean)
+  #   3. persistent_tsv        — one row per persistent flag: name<\x01>short<\x01>type
+  #   4. aliases_tsv           — one row per TOP-LEVEL command alias
+  #                              (first-token substitution): alias<\x01>canonical
+  #   5. nested_aliases_tsv    — one row per nested alias (colon-qualified,
+  #                              resolved mid-walk): full_alias<\x01>canonical.
+  #                              Covers framework cmds too — compile.sh skips
+  #                              framework Taskfiles, so their user_aliases
+  #                              never reach index.json, but their aliases DO
+  #                              appear on task entries in tasks.json.
   # jq reads both tasks.json (positional input) and index.json (--slurpfile) in
   # a single invocation so there's no extra fork on the wrapper hot path.
   # index.json may be absent on a stale/partially-built cache — jq's null
@@ -298,6 +305,7 @@ else
     IFS= read -r -d '' root_cmds || true
     IFS= read -r -d '' persistent_tsv || true
     IFS= read -r -d '' aliases_tsv || true
+    IFS= read -r -d '' nested_aliases_tsv || true
   } < <(jq -j --slurpfile idx_wrap <(
       if [[ -f "$INDEX_JSON" ]]; then cat "$INDEX_JSON"; else echo '{"persistent_flags":[],"tasks":{}}'; fi
     ) '
@@ -317,6 +325,19 @@ else
       | { alias: $user_alias, canonical: $canonical }
     ] as $alias_pairs
     |
+    # Nested-alias map: every colon-qualified alias declared anywhere in
+    # tasks.json — including framework-lib Taskfiles (config:show,
+    # update:default, etc.) which compile.sh intentionally skips. These
+    # resolve mid-walk when a candidate path matches the alias name.
+    # Self-aliases (alias == canonical) are dropped (go-task auto-generates
+    # an `update` alias on `update:default` that would otherwise loop).
+    [ $all_tasks[]
+      | (.name | sub(":default$"; "")) as $canonical
+      | (.aliases // [])[] as $alias
+      | select($alias != $canonical and ($alias | contains(":")))
+      | { alias: $alias, canonical: $canonical }
+    ] as $nested_alias_pairs
+    |
     ($all_tasks | map(.name) | join("\n")) + "\u0000" +
     # root_cmds: candidate set for did-you-mean. Includes root-level task
     # names (those without `:`, derived directly from $all_tasks rather
@@ -332,6 +353,9 @@ else
       | map([.name, (.short // ""), .type] | join("\u0001"))
       | join("\n")) + "\u0000" +
     ($alias_pairs
+      | map([.alias, .canonical] | join("\u0001"))
+      | join("\n")) + "\u0000" +
+    ($nested_alias_pairs
       | map([.alias, .canonical] | join("\u0001"))
       | join("\n")) + "\u0000"
   ' "$TASKS_JSON")
@@ -406,18 +430,27 @@ while IFS= read -r _t; do
 done <<< "$known_tasks"
 
 # Command aliases (Task 5.1). go-task aliases are alternate names for a task,
-# not separate tasks — the wrapper substitutes alias -> canonical at the FIRST
-# token of the longest-prefix walk so downstream dispatch (router, --help
-# interception, did-you-mean) sees the canonical name. Nested-segment aliases
-# are out of scope: substitution happens only at position 0.
+# not separate tasks — the wrapper substitutes alias -> canonical during the
+# longest-prefix walk so downstream dispatch (router, --help interception,
+# did-you-mean) sees the canonical name.
+#
+# Two tables:
+#   _aliases_map        — first-token aliases (stripped of any namespace).
+#                         Fires only when path is empty; covers the cobra
+#                         shortcut form `mycli d` → deploy.
+#   _nested_aliases_map — colon-qualified aliases. Fires mid-walk when the
+#                         candidate_path matches the alias; covers the
+#                         `mycli config dump` and `mycli config:dump` forms
+#                         that framework cmds need (Task 6.3 dogfood). The
+#                         value is the canonical name with :default
+#                         stripped — same shape as first-token entries.
 #
 # Precedence: a real task name always wins over an alias of the same string
-# (we only consult _aliases_map AFTER _is_task_prefix has rejected the token).
+# (we consult the maps only AFTER _is_task_prefix has rejected the token).
 # An alias that collides with an existing top-level command is silently
-# shadowed by the real command. Cross-command alias collisions (two commands
-# claiming the same alias name) are rejected at compile time — see the
-# "Duplicate-alias check" block in lib/flags/compile.sh.
-declare -A _aliases_map=()
+# shadowed by the real command. Cross-command alias collisions are rejected
+# at compile time — see the "Duplicate-alias check" block in compile.sh.
+declare -A _aliases_map=() _nested_aliases_map=()
 # Iteration order is irrelevant: compile.sh rejects duplicate alias names
 # across commands at build time (see compile.sh "Duplicate-alias check"),
 # so each $_alias key here lands exactly once with a deterministic mapping.
@@ -425,6 +458,28 @@ while IFS=$'\x01' read -r _alias _canonical; do
   [[ -z "$_alias" ]] && continue
   _aliases_map["$_alias"]="$_canonical"
 done <<< "$aliases_tsv"
+# Nested (colon-qualified) aliases — sourced directly from tasks.json so we
+# pick up framework-lib aliases that compile.sh doesn't thread into
+# index.json. First-token shortcuts for framework-lib aliases are also
+# derived here: for each nested alias `<ns>:<tail>`, if `<tail>` isn't
+# shadowed by a real top-level command we register `<tail>` in
+# _aliases_map too, matching user-command shortcut semantics.
+while IFS=$'\x01' read -r _alias _canonical; do
+  [[ -z "$_alias" ]] && continue
+  _nested_aliases_map["$_alias"]="$_canonical"
+  _tail="${_alias##*:}"
+  # Only add as a top-level shortcut when it wouldn't shadow an existing
+  # command/namespace and isn't already claimed by another alias (first
+  # writer wins; cross-command collisions are already rejected at compile
+  # time for user-declared aliases — framework aliases are small and
+  # curated, so a runtime last-write-wins is acceptable).
+  if [[ -n "$_tail" ]] \
+     && [[ -z "${_known_exact[$_tail]+x}" ]] \
+     && [[ -z "${_known_prefix[$_tail]+x}" ]] \
+     && [[ -z "${_aliases_map[$_tail]+x}" ]]; then
+    _aliases_map["$_tail"]="$_canonical"
+  fi
+done <<< "$nested_aliases_tsv"
 
 # root_cmds is space-separated and used by did-you-mean error suggestion
 # function. The jq pipeline above derives it from $all_tasks (selecting
@@ -586,6 +641,17 @@ while (( i <= $# )); do
   if _is_task_prefix "$joined"; then
     path=("${candidate_path[@]}")
     i=$((i+1))
+  elif [[ -n "${_nested_aliases_map[$joined]+x}" ]]; then
+    # Nested (colon-qualified) alias: candidate_path matches an alias like
+    # `config:dump` whose canonical is `config:show`. Substitute path with
+    # the canonical's segments and continue the walk from i+1. Works at
+    # any depth so `mycli config dump`, `mycli config:dump`, and (via
+    # joined='config:dump' mid-walk) future N-level aliases all resolve
+    # through the same branch.
+    _can="${_nested_aliases_map[$joined]}"
+    IFS=':' read -ra _cseg <<< "$_can"
+    path=("${_cseg[@]}")
+    i=$((i+1))
   elif (( ${#path[@]} == 0 )) && [[ -n "${_aliases_map[$tok]+x}" ]]; then
     # First-token alias substitution. The alias map's value is the canonical
     # task name WITH ":default" stripped. Two shapes need handling:
@@ -597,7 +663,7 @@ while (( i <= $# )); do
     #     Splitting on ':' yields ["version","upgrade"] so path[] is
     #     populated correctly and the walk continues from segment[2].
     # Substitution happens ONLY when path is empty, i.e. at position 0 —
-    # mid-walk alias rewrite is out of scope.
+    # mid-walk rewrites go through _nested_aliases_map above.
     _can="${_aliases_map[$tok]}"
     IFS=':' read -ra _cseg <<< "$_can"
     path=("${_cseg[@]}")

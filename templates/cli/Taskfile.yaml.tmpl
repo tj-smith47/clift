@@ -17,7 +17,12 @@ vars:
     - {name: no-cache,           type: bool, desc: "Force-rebuild the .clift cache before this command"}
     - {name: version,            type: bool, desc: "Show version"}
 
-  # PERSISTENT_FLAGS: declare CLI-wide flags here — see docs/flags.md
+  # PERSISTENT_FLAGS: CLI-wide flags available on every command (see
+  # docs/flags.md). Declaring them here makes `mycli --profile=staging
+  # deploy` work without each command redeclaring `--profile`.
+  # PERSISTENT_FLAGS:
+  #   - {name: profile, type: string, default: dev, desc: "Environment profile"}
+  #   - {name: config,  type: string, desc: "Path to config file"}
 
 includes:
   # Framework libs (underscore prefix = hidden from help)

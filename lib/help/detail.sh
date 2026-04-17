@@ -75,11 +75,19 @@ _clift_help_detail_default() {
   echo "${CLI_NAME} ${display_name} - ${desc}"
 
   # Task 5.1: surface command aliases directly under the title. compile.sh
-  # precomputes each task entry's user-facing alias list as `user_aliases`
-  # (already filtered and stripped) so we just need to find the right
-  # index.json key — `<cmd>:default` for namespaced commands with a default
-  # task, falling back to the bare name for root-level tasks.
+  # precomputes each USER task entry's user-facing alias list as
+  # `user_aliases` (already filtered and stripped) so we just need to find
+  # the right index.json key — `<cmd>:default` for namespaced commands with
+  # a default task, falling back to the bare name for root-level tasks.
+  #
+  # Task 6.3: framework-lib tasks (config:*, update, etc.) are intentionally
+  # skipped by compile.sh, so their aliases never reach index.json. Fall
+  # back to tasks.json (authoritative for framework cmds) and apply the
+  # same namespace-strip + drop-empty / drop-nested / drop-self-referential
+  # filters compile.sh uses. This keeps the detail page's Aliases: line
+  # accurate for every command the wrapper can dispatch.
   local index_json_path="${taskfile_dir}/.clift/index.json"
+  local tasks_json_path="${taskfile_dir}/.clift/tasks.json"
   local aliases_csv=""
   if [[ -f "$index_json_path" ]]; then
     aliases_csv="$(jq -r \
@@ -88,6 +96,30 @@ _clift_help_detail_default() {
       (.tasks[$cmd].user_aliases // .tasks[$cmd2].user_aliases // [])
       | join(", ")
     ' "$index_json_path" 2>/dev/null)"
+  fi
+  if [[ -z "$aliases_csv" ]] && [[ -f "$tasks_json_path" ]]; then
+    aliases_csv="$(jq -r \
+      --arg cmd "${command}:default" \
+      --arg cmd2 "$command" '
+      def strip_ns($ns; $a):
+        if $ns != "" and ($a | startswith($ns + ":"))
+        then ($a | ltrimstr($ns + ":"))
+        else $a
+        end;
+      [.. | .tasks? // empty | .[]
+        | select(.name == $cmd or .name == $cmd2)
+        | (.name | sub(":default$"; "")) as $disp
+        | (.name | capture("^(?<ns>.*):[^:]+$").ns // "") as $ns
+        | (.aliases // [])[]
+        | strip_ns($ns; .) as $a
+        | select(
+            $a != ""
+            and ($a | contains(":") | not)
+            and $a != $disp
+          )
+        | $a
+      ] | unique | join(", ")
+    ' "$tasks_json_path" 2>/dev/null)"
   fi
   if [[ -n "$aliases_csv" ]]; then
     echo "Aliases: $aliases_csv"
