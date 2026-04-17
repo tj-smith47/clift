@@ -406,6 +406,30 @@ _join_colon() {
   _JOINED="${*}"
 }
 
+# `help <cmd>` rewrite (Task 6.0): `mycli help foo` is sugar for
+# `mycli foo --help`. Cobra-parity ergonomic. Bare `mycli help` falls
+# through to the global help renderer (same as `mycli --help`).
+#
+# Only intercepts when `help` is NOT a real top-level command — a user who
+# defines `cmds/help/Taskfile.yaml` keeps full control of their own task.
+# Compatible with aliases: if the next token resolves through `_aliases_map`,
+# substitute to the canonical before re-execing so the help-detail page
+# renders for the real command.
+if [[ "${1:-}" == "help" ]] && ! _is_task_prefix "help"; then
+  shift
+  if (( $# == 0 )); then
+    exec task --taskfile "$CLI_DIR/Taskfile.yaml" _help:list
+  fi
+  # Substitute alias -> canonical at the help target so `mycli help <alias>`
+  # routes to the canonical's detail page. Only valid for first-token
+  # aliases; nested help (`mycli help foo bar`) re-execs verbatim and
+  # the standard --help interception handles deeper paths.
+  if [[ -n "${_aliases_map[$1]+x}" ]]; then
+    set -- "${_aliases_map[$1]}" "${@:2}"
+  fi
+  exec "$0" "$@" --help
+fi
+
 # Longest-prefix walk: consume non-flag tokens while each extended path is
 # still a prefix of some known task. Stop at the first flag or at the first
 # token that would make the path non-matching.
