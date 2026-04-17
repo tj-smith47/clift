@@ -229,6 +229,20 @@ entries_tmpfile="${CACHE_DIR}/entries.tmp"
 # Cache has_optin results per Taskfile to avoid redundant jq calls.
 declare -A _tf_optin_cache
 
+# Set of first-segment canonical command names (e.g. `deploy` from `deploy:prod`,
+# `version` from `version:upgrade`). Used below to drop any alias that would
+# silently shadow an existing top-level command — `mycli d` always runs the
+# real command `d`, so an alias `d` declared on `deploy` is unreachable. We
+# strip such aliases from `user_aliases` so they don't surface in `--help`
+# or completion either; the runtime behavior and the advertised surface stay
+# in sync.
+canonical_first_segs="$(jq -c '
+  [ .[] | .name
+    | select(test("^_|:_") | not)
+    | split(":")[0]
+  ] | unique
+' <<< "$all_tasks_json")"
+
 while IFS=$'\x01' read -r -d '' task_name source_tf aliases_json summary; do
   [[ -z "$task_name" ]] && continue
 
@@ -284,19 +298,31 @@ while IFS=$'\x01' read -r -d '' task_name source_tf aliases_json summary; do
 
   # Precompute user_aliases — the bare top-level form the wrapper, help, and
   # completion all need. Strips the canonical's namespace prefix and drops
-  # the same three classes the wrapper's runtime filter used to drop:
-  # empty-after-stripping, still-contains-`:`, equal-to-canonical. Doing
-  # this once at compile time removes 5 duplicated jq blocks at runtime.
+  # four classes:
+  #   - empty after stripping
+  #   - still contains `:` (would not be a top-level shortcut)
+  #   - equal to the canonical name (self-referential bare-namespace alias)
+  #   - shadowed by an existing top-level command (`mycli <alias>` would run
+  #     the real command, never the canonical — keeping the shadow in
+  #     `user_aliases` lies in `--help` / completion)
+  # Doing this once at compile time removes 5 duplicated jq blocks at runtime.
   user_aliases_json="$(jq -c \
     --arg task_name "$task_name" \
+    --argjson cmd_segs "$canonical_first_segs" \
     '
     ($task_name | sub(":default$"; "")) as $canonical |
     ($task_name | capture("^(?<ns>.*):[^:]+$").ns // "") as $ns |
     [ .[]
       | (if ($ns != "" and startswith($ns + ":"))
          then ltrimstr($ns + ":")
-         else . end)
-      | select(. != "" and (contains(":") | not) and . != $canonical)
+         else . end) as $a
+      | select(
+          $a != ""
+          and ($a | contains(":") | not)
+          and $a != $canonical
+          and ($cmd_segs | index($a)) == null
+        )
+      | $a
     ]
     ' <<< "$aliases_json")"
 

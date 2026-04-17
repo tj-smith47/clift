@@ -410,3 +410,127 @@ YAML
   # 'deploy'; 'd' must win iff the alias is in the candidate set.
   [[ "$output" =~ did[[:space:]]+you[[:space:]]+mean[[:space:]]+\'d\' ]]
 }
+
+# --- Alias-vs-command shadow (N1) --------------------------------------------
+
+# When a user declares `aliases: [d]` on `deploy` AND ALSO has a real
+# top-level command `d`, `mycli d` always runs the real `d` (the wrapper's
+# longest-prefix walk short-circuits before the alias map is consulted).
+# If the shadowed alias stayed in `user_aliases`, `--help` would advertise
+# "Aliases: d" on `deploy` and completion would emit `d` as a `deploy`-class
+# candidate — both wrong, because `d` is not reachable as a `deploy` alias.
+# Compile-time filter drops the alias so the advertised surface matches the
+# runtime surface.
+_setup_alias_shadow_cli() {
+  cat > "$CLI_DIR/Taskfile.yaml" <<'YAML'
+version: '3'
+silent: true
+vars:
+  FLAGS:
+    - {name: help, short: h, type: bool, desc: "Show help"}
+    - {name: no-cache, type: bool, desc: "Force-rebuild the .clift cache"}
+includes:
+  deploy:
+    taskfile: ./cmds/deploy
+  d:
+    taskfile: ./cmds/d
+tasks:
+  default:
+    cmd: echo root
+YAML
+
+  cat > "$CLI_DIR/.env" <<ENV
+CLI_NAME=$CLI_NAME
+CLI_VERSION=$CLI_VERSION
+CLI_DIR=$CLI_DIR
+FRAMEWORK_DIR=$FRAMEWORK_DIR
+CLIFT_MODE=standard
+LOG_THEME=minimal
+ENV
+
+  mkdir -p "$CLI_DIR/cmds/deploy"
+  cat > "$CLI_DIR/cmds/deploy/Taskfile.yaml" <<'YAML'
+version: '3'
+vars:
+  FLAGS: []
+tasks:
+  default:
+    desc: "Deploy the app"
+    aliases: [d, dep]
+    vars:
+      FLAGS: []
+    cmd: echo deploy-ran
+YAML
+
+  mkdir -p "$CLI_DIR/cmds/d"
+  cat > "$CLI_DIR/cmds/d/Taskfile.yaml" <<'YAML'
+version: '3'
+vars:
+  FLAGS: []
+tasks:
+  default:
+    desc: "The real d command"
+    vars:
+      FLAGS: []
+    cmd: echo real-d-ran
+YAML
+
+  bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$CLI_DIR"
+  build_test_wrapper
+}
+
+@test "alias shadow: 'mycli d' runs the real command, not the shadowed alias" {
+  _setup_alias_shadow_cli
+  run "$CLI_DIR/bin/$CLI_NAME" d
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"real-d-ran"* ]]
+  [[ "$output" != *"deploy-ran"* ]]
+}
+
+@test "alias shadow: shadowed 'd' dropped from deploy --help Aliases line" {
+  _setup_alias_shadow_cli
+  run "$CLI_DIR/bin/$CLI_NAME" deploy --help
+  [ "$status" -eq 0 ]
+  # The non-shadowed alias `dep` must still show.
+  [[ "$output" == *"Aliases: dep"* ]]
+  # The shadowed alias `d` must NOT appear as one of deploy's aliases.
+  # Anchor on the `Aliases:` line to avoid matching `d` inside `deploy` /
+  # `dep` elsewhere in the output.
+  ! grep -E '^Aliases:.*\bd\b' <<< "$output" | grep -v 'dep' | grep -q '\bd\b' || false
+}
+
+@test "alias shadow: help list row for deploy omits the shadowed 'd'" {
+  _setup_alias_shadow_cli
+  run bash "$FRAMEWORK_DIR/lib/help/list.sh" "$CLI_DIR/Taskfile.yaml"
+  [ "$status" -eq 0 ]
+  # `deploy, dep` — the unshadowed alias only; `d` must be absent from
+  # deploy's alias suffix.
+  [[ "$output" == *"deploy, dep"* ]]
+  [[ "$output" != *"deploy, d,"* ]]
+  [[ "$output" != *"deploy, d "* ]]
+}
+
+@test "alias shadow: completion candidates include real 'd' once, never from deploy" {
+  _setup_alias_shadow_cli
+  CLIFT_MODE=standard run bash "$FRAMEWORK_DIR/lib/completion/completion.sh" bash
+  [ "$status" -eq 0 ]
+  local script_file="$BATS_TEST_TMPDIR/comp_shadow.sh"
+  printf '%s\n' "$output" > "$script_file"
+
+  run bash -c "
+    export PATH='$CLI_DIR/bin:'\$PATH
+    source '$script_file'
+    COMP_WORDS=('$CLI_NAME' '')
+    COMP_CWORD=1
+    _${CLI_NAME}_completions
+    printf '%s\n' \"\${COMPREPLY[@]}\"
+  "
+  [ "$status" -eq 0 ]
+  # Real command `d` appears EXACTLY ONCE; no duplication from deploy's
+  # shadowed alias. `dep` (unshadowed alias) still appears.
+  local d_count
+  d_count=$(printf '%s\n' "$output" | grep -Fxc d || true)
+  [ "$d_count" -eq 1 ]
+  printf '%s\n' "$output" | grep -Fxq deploy
+  printf '%s\n' "$output" | grep -Fxq dep
+}
