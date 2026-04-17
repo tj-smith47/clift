@@ -153,6 +153,62 @@ YAML
   [[ "$output" == *"dep"* ]]
 }
 
+# --- Compile-time validation ------------------------------------------------
+
+# Two commands declaring the same alias name (e.g. `deploy → d` and
+# `destroy → d`) must be rejected by compile.sh. Otherwise the wrapper's
+# alias map silently last-write-wins and one of the routes vanishes.
+@test "compile rejects duplicate alias across commands" {
+  cat > "$CLI_DIR/Taskfile.yaml" <<'YAML'
+version: '3'
+silent: true
+includes:
+  deploy:
+    taskfile: ./cmds/deploy
+  destroy:
+    taskfile: ./cmds/destroy
+tasks:
+  default:
+    cmd: echo root
+YAML
+  cat > "$CLI_DIR/.env" <<ENV
+CLI_NAME=$CLI_NAME
+CLI_VERSION=$CLI_VERSION
+CLI_DIR=$CLI_DIR
+FRAMEWORK_DIR=$FRAMEWORK_DIR
+CLIFT_MODE=standard
+LOG_THEME=minimal
+ENV
+
+  mkdir -p "$CLI_DIR/cmds/deploy" "$CLI_DIR/cmds/destroy"
+  cat > "$CLI_DIR/cmds/deploy/Taskfile.yaml" <<'YAML'
+version: '3'
+vars:
+  FLAGS: []
+tasks:
+  default:
+    aliases: [d]
+    vars:
+      FLAGS: []
+    cmd: echo deploy
+YAML
+  cat > "$CLI_DIR/cmds/destroy/Taskfile.yaml" <<'YAML'
+version: '3'
+vars:
+  FLAGS: []
+tasks:
+  default:
+    aliases: [d]
+    vars:
+      FLAGS: []
+    cmd: echo destroy
+YAML
+
+  run bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$CLI_DIR"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"alias 'd' declared by both 'deploy' and 'destroy'"* ]]
+}
+
 # --- Did-you-mean ------------------------------------------------------------
 
 @test "did-you-mean: a typo near an alias suggests the alias" {

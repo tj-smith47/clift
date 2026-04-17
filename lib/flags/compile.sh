@@ -55,6 +55,44 @@ mv "${CACHE_DIR}/tasks.json.tmp" "${CACHE_DIR}/tasks.json"
 # string-parsing task names.
 all_tasks_json="$(jq '[.. | .tasks? // empty | .[]]' "${CACHE_DIR}/tasks.json")"
 
+# Duplicate-alias check (Task 5.1, finding C1). Two top-level commands declaring
+# the same alias name (e.g. `deploy → d` and `destroy → d`) would silently
+# last-write-wins in the wrapper's _aliases_map, masking one route. Reject at
+# compile time with a hard error analogous to the persistent-vs-per-command
+# clash check above. Aliases that strip down to either empty or still contain
+# `:` are skipped — those don't reach the wrapper's first-token substitution
+# table so they can't collide there either.
+_alias_clash_msg="$(jq -r '
+  [ .[]
+    | select(.name | test("^_|:_") | not)
+    | . as $task
+    | ($task.name | sub(":default$"; "")) as $canonical
+    | ($task.name | capture("^(?<ns>.*):[^:]+$").ns // "") as $ns
+    | ($task.aliases // [])[] as $a
+    | (if $ns == "" then $a
+       elif ($a | startswith($ns + ":")) then ($a | ltrimstr($ns + ":"))
+       else $a
+       end) as $user_alias
+    | select($user_alias != ""
+             and ($user_alias | contains(":") | not)
+             and $user_alias != $canonical)
+    | { alias: $user_alias, canonical: $canonical }
+  ]
+  | group_by(.alias)
+  | map(select((map(.canonical) | unique | length) > 1))
+  | .[0]
+  | if . == null then ""
+    else
+      (.[0].alias) as $a
+      | (map(.canonical) | unique | sort | join("'\'' and '\''"))
+      | "error: alias '\''\($a)'\'' declared by both '\''\(.)'\''"
+    end
+' <<< "$all_tasks_json")"
+if [[ -n "$_alias_clash_msg" ]]; then
+  echo "$_alias_clash_msg" >&2
+  exit 1
+fi
+
 # Skip framework-internal taskfiles — their location.taskfile lives under
 # FRAMEWORK_DIR. The `:-__nomatch__` fallback keeps us safe under `set -u`
 # when FRAMEWORK_DIR isn't exported (e.g. when running outside a wrapper).
