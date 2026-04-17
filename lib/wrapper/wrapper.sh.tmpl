@@ -274,10 +274,14 @@ else
     ] as $alias_pairs
     |
     ($all_tasks | map(.name) | join("\n")) + "\u0000" +
-    # root_cmds: candidate set for did-you-mean. Includes root task names,
-    # namespace keys, AND every alias — so `mycli dx` can suggest `d`.
-    (([.tasks[]?.name // empty, (.namespaces // {} | keys)[]]
-      | map(select(startswith("_") | not)))
+    # root_cmds: candidate set for did-you-mean. Includes root-level task
+    # names (those without `:`, derived directly from $all_tasks rather
+    # than re-walking .tasks[]), namespace keys, AND every alias — so
+    # `mycli dx` can suggest `d`. $all_tasks already filtered out
+    # underscore-prefixed entries up top, so root tasks here come back
+    # clean. Namespace keys still need their own underscore filter.
+    (($all_tasks | map(.name) | map(select(contains(":") | not)))
+      + ((.namespaces // {}) | keys | map(select(startswith("_") | not)))
       + ($alias_pairs | map(.alias))
       | unique | join(" ")) + "\u0000" +
     (($idx_wrap[0].persistent_flags // [])
@@ -379,11 +383,10 @@ while IFS=$'\x01' read -r _alias _canonical; do
 done <<< "$aliases_tsv"
 
 # root_cmds is space-separated and used by did-you-mean error suggestion
-# function. It contains root task names (.tasks[].name) plus namespace keys
-# (top-level includes). Using `to_entries[] | .key` against BOTH task objects
-# and the namespaces map — the plan's original query — would leak field names
-# like "name"/"task"/"desc" from the task objects into the candidate list, so
-# we select by shape instead.
+# function. The jq pipeline above derives it from $all_tasks (selecting
+# names without `:` for the root task case) plus namespace keys plus alias
+# names. Using $all_tasks directly avoids a second walk over .tasks[] in
+# the same jq invocation.
 
 # Is $1 exactly a known task, or a strict prefix (colon-extended) of one?
 # Used to decide whether the longest-prefix walk can consume one more token.
@@ -516,12 +519,20 @@ while (( i <= $# )); do
     path=("${candidate_path[@]}")
     i=$((i+1))
   elif (( ${#path[@]} == 0 )) && [[ -n "${_aliases_map[$tok]+x}" ]]; then
-    # First-token alias substitution. Splits the canonical on ':' so a
-    # multi-segment canonical (e.g. an alias mapping to `version:upgrade`)
-    # populates `path` correctly and the walk can resume from there.
-    _canonical_full="${_aliases_map[$tok]}"
-    IFS=':' read -ra _canonical_segs <<< "$_canonical_full"
-    path=("${_canonical_segs[@]}")
+    # First-token alias substitution. The alias map's value is the canonical
+    # task name WITH ":default" stripped. Two shapes need handling:
+    #   - Single-segment: an alias on a namespace's default task (e.g.
+    #     `deploy:d` -> `deploy:default`, stored as alias=`d`, canonical=
+    #     `deploy`). Splitting `deploy` on ':' yields a one-element array.
+    #   - Multi-segment: an alias on a nested task (e.g. `version:upgrade`
+    #     aliased to `up`, stored as alias=`up`, canonical=`version:upgrade`).
+    #     Splitting on ':' yields ["version","upgrade"] so path[] is
+    #     populated correctly and the walk continues from segment[2].
+    # Substitution happens ONLY when path is empty, i.e. at position 0 —
+    # mid-walk alias rewrite is out of scope.
+    _can="${_aliases_map[$tok]}"
+    IFS=':' read -ra _cseg <<< "$_can"
+    path=("${_cseg[@]}")
     i=$((i+1))
   else
     break
