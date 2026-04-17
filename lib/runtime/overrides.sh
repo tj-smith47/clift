@@ -55,15 +55,37 @@ _clift_load_override() {
     return 2
   }
   # Empty task is treated the same as unset (both skip the per-cmd tier).
+  # Per-cmd tier: cache the per-segment overrides-dir-exists probe so a CLI
+  # with no per-cmd overrides skips one stat-per-slot for every subsequent
+  # slot lookup against the same command.
   if [[ -n "$task" ]]; then
     local cmd_seg="${task%%:*}"
-    local per_cmd="${CLI_DIR}/cmds/${cmd_seg}/overrides/${slot}.sh"
-    if [[ -f "$per_cmd" ]]; then
-      # shellcheck source=/dev/null
-      source "$per_cmd"
-      return 0
+    local cmd_dir_var="_CLIFT_CMD_OV_${cmd_seg//[^a-zA-Z0-9_]/_}"
+    if [[ -z "${!cmd_dir_var+x}" ]]; then
+      if [[ -d "${CLI_DIR}/cmds/${cmd_seg}/overrides" ]]; then
+        printf -v "$cmd_dir_var" '%s' '1'
+      else
+        printf -v "$cmd_dir_var" '%s' '0'
+      fi
+    fi
+    if [[ "${!cmd_dir_var}" == 1 ]]; then
+      local per_cmd="${CLI_DIR}/cmds/${cmd_seg}/overrides/${slot}.sh"
+      if [[ -f "$per_cmd" ]]; then
+        # shellcheck source=/dev/null
+        source "$per_cmd"
+        return 0
+      fi
     fi
   fi
+  # CLI-global tier: same cache, single key (no segment).
+  if [[ -z "${_CLIFT_CLI_OV+x}" ]]; then
+    if [[ -d "${CLI_DIR}/.clift/overrides" ]]; then
+      _CLIFT_CLI_OV=1
+    else
+      _CLIFT_CLI_OV=0
+    fi
+  fi
+  (( _CLIFT_CLI_OV == 0 )) && return 0
   local global="${CLI_DIR}/.clift/overrides/${slot}.sh"
   if [[ -f "$global" ]]; then
     # shellcheck source=/dev/null
