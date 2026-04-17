@@ -153,6 +153,98 @@ YAML
   [[ "$output" == *"dep"* ]]
 }
 
+# --- Hidden-command aliases --------------------------------------------------
+
+# A command marked vars.HIDDEN: true must keep ALL of its names (canonical +
+# every alias) out of the completion candidate set. Earlier the canonical
+# was filtered correctly via $hidden, but the alias_names collector did
+# not consult $hidden so aliases of a hidden command leaked through.
+@test "completion: hidden command's aliases are filtered" {
+  cat > "$CLI_DIR/Taskfile.yaml" <<'YAML'
+version: '3'
+silent: true
+output:
+  group:
+    begin: ''
+    end: ''
+set: [errexit, pipefail]
+dotenv: ['.env']
+vars:
+  FLAGS:
+    - {name: help, short: h, type: bool, desc: "Show help"}
+    - {name: verbose, short: v, type: bool, desc: "Verbose"}
+    - {name: quiet, short: q, type: bool, desc: "Quiet"}
+    - {name: no-color, type: bool, desc: "No color"}
+    - {name: no-cache, type: bool, desc: "Force-rebuild the .clift cache"}
+    - {name: version, type: bool, desc: "Version"}
+includes:
+  secret:
+    taskfile: ./cmds/secret
+  visible:
+    taskfile: ./cmds/visible
+tasks:
+  default:
+    cmd: echo root
+YAML
+  cat > "$CLI_DIR/.env" <<ENV
+CLI_NAME=$CLI_NAME
+CLI_VERSION=$CLI_VERSION
+CLI_DIR=$CLI_DIR
+FRAMEWORK_DIR=$FRAMEWORK_DIR
+CLIFT_MODE=standard
+LOG_THEME=minimal
+ENV
+
+  mkdir -p "$CLI_DIR/cmds/secret"
+  cat > "$CLI_DIR/cmds/secret/Taskfile.yaml" <<'YAML'
+version: '3'
+vars:
+  FLAGS: []
+  HIDDEN: true
+tasks:
+  default:
+    aliases: [s, sec]
+    vars:
+      FLAGS: []
+    cmd: echo secret
+YAML
+  mkdir -p "$CLI_DIR/cmds/visible"
+  cat > "$CLI_DIR/cmds/visible/Taskfile.yaml" <<'YAML'
+version: '3'
+vars:
+  FLAGS: []
+tasks:
+  default:
+    vars:
+      FLAGS: []
+    cmd: echo visible
+YAML
+
+  bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$CLI_DIR"
+  build_test_wrapper
+
+  CLIFT_MODE=standard run bash "$FRAMEWORK_DIR/lib/completion/completion.sh" bash
+  [ "$status" -eq 0 ]
+  local script_file="$BATS_TEST_TMPDIR/comp.sh"
+  printf '%s\n' "$output" > "$script_file"
+
+  run bash -c "
+    export PATH='$CLI_DIR/bin:'\$PATH
+    source '$script_file'
+    COMP_WORDS=('$CLI_NAME' '')
+    COMP_CWORD=1
+    _${CLI_NAME}_completions
+    printf '%s\n' \"\${COMPREPLY[@]}\"
+  "
+  [ "$status" -eq 0 ]
+  # visible command is present
+  printf '%s\n' "$output" | grep -Fxq visible
+  # secret command and BOTH of its aliases are absent
+  ! printf '%s\n' "$output" | grep -Fxq secret
+  ! printf '%s\n' "$output" | grep -Fxq s
+  ! printf '%s\n' "$output" | grep -Fxq sec
+}
+
 # --- Compile-time validation ------------------------------------------------
 
 # Two commands declaring the same alias name (e.g. `deploy → d` and

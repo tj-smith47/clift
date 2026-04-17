@@ -66,6 +66,8 @@ _${CLI_NAME}_completions() {
   all_tasks="\$(jq -r --slurpfile idx "\$index_json" '
     ([\$idx[0].tasks // {} | to_entries[] | select(.value.hidden == true) | .key] // []) as \$hidden |
     ([\$idx[0].tasks // {} | to_entries[]
+      | .key as \$k
+      | select((\$hidden | index(\$k)) == null)
       | (.value.user_aliases // [])[]
     ]) as \$alias_names |
     ((
@@ -134,6 +136,8 @@ _${CLI_NAME}() {
   subcmds=(\$(jq -r --slurpfile idx "\$index_json" '
     ([\$idx[0].tasks // {} | to_entries[] | select(.value.hidden == true) | .key] // []) as \$hidden |
     ([\$idx[0].tasks // {} | to_entries[]
+      | .key as \$k
+      | select((\$hidden | index(\$k)) == null)
       | (.value.user_aliases // [])[]
     ]) as \$alias_names |
     ((
