@@ -272,11 +272,14 @@ else
     # "mycli deploy:d", so we strip the namespace prefix of the canonical
     # from the alias to recover the user-facing top-level name.
     #
-    # Aliases that collapse to empty after stripping (e.g. the bare namespace
-    # alias deploy for deploy:default) are skipped — that route already
-    # works via namespace-prefix dispatch. Aliases that still contain ":"
-    # after stripping are skipped too: nested-segment alias substitution is
-    # out of scope (would require multi-token rewrite during the walk).
+    # Aliases dropped by the filter chain:
+    #   - empty after stripping (the bare-namespace alias `deploy` for
+    #     canonical `deploy:default` — already reachable via normal dispatch).
+    #   - still contain ":" after stripping (nested-segment aliases — out of
+    #     scope; would require multi-token rewrite during the walk).
+    #   - equal to the canonical itself (the bare-namespace case described
+    #     above takes a second form when the user re-declares the namespace
+    #     name as an alias on the default task — same shadowing problem).
     #
     # The canonical is emitted with ":default" stripped so the longest-prefix
     # walk receives a name it recognises (e.g. deploy not deploy:default).
@@ -289,7 +292,9 @@ else
          elif ($a | startswith($ns + ":")) then ($a | ltrimstr($ns + ":"))
          else $a
          end) as $user_alias
-      | select($user_alias != "" and ($user_alias | contains(":") | not))
+      | select($user_alias != ""
+               and ($user_alias | contains(":") | not)
+               and $user_alias != $canonical)
       | { alias: $user_alias, canonical: $canonical }
     ] as $alias_pairs
     |
@@ -385,10 +390,14 @@ done <<< "$known_tasks"
 #
 # Precedence: a real task name always wins over an alias of the same string
 # (we only consult _aliases_map AFTER _is_task_prefix has rejected the token).
-# This means an alias that collides with an existing top-level command is
-# silently shadowed by the real command — go-task itself accepts that ambiguity
-# at compile time, so we mirror its behaviour here.
+# An alias that collides with an existing top-level command is silently
+# shadowed by the real command. Cross-command alias collisions (two commands
+# claiming the same alias name) are rejected at compile time — see the
+# "Duplicate-alias check" block in lib/flags/compile.sh.
 declare -A _aliases_map=()
+# Iteration order is irrelevant: compile.sh rejects duplicate alias names
+# across commands at build time (see compile.sh "Duplicate-alias check"),
+# so each $_alias key here lands exactly once with a deterministic mapping.
 while IFS=$'\x01' read -r _alias _canonical; do
   [[ -z "$_alias" ]] && continue
   _aliases_map["$_alias"]="$_canonical"

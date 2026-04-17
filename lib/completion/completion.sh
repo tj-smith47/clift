@@ -73,7 +73,7 @@ _${CLI_NAME}_completions() {
       | (if \$ns == "" then .
          elif startswith(\$ns + ":") then ltrimstr(\$ns + ":")
          else . end)
-      | select(. != "" and (contains(":") | not))
+      | select(. != "" and (contains(":") | not) and . != \$disp)
     ]) as \$alias_names |
     ((
       [.. | .tasks? // empty | .[]] | .[]
@@ -147,7 +147,7 @@ _${CLI_NAME}() {
       | (if \$ns == "" then .
          elif startswith(\$ns + ":") then ltrimstr(\$ns + ":")
          else . end)
-      | select(. != "" and (contains(":") | not))
+      | select(. != "" and (contains(":") | not) and . != \$disp)
     ]) as \$alias_names |
     ((
       [.. | .tasks? // empty | .[]] | .[]

@@ -96,10 +96,12 @@ _clift_help_list_default() {
   # and the namespace prefix dropped from each alias). Task 5.1: aliases of
   # included commands are namespaced by go-task (e.g. `deploy:d`); the user
   # invokes them as bare `d`, so the displayed list strips the same prefix.
-  # Bare-namespace aliases (e.g. `deploy` for `deploy:default`) and aliases
-  # that still contain `:` after stripping are dropped — the former is the
-  # canonical name itself, the latter is unreachable via the wrapper's
-  # first-token-only substitution.
+  # The filter drops three classes of aliases:
+  #   - empty after stripping (bare-namespace alias for a `:default` task)
+  #   - still contain `:` after stripping (nested-segment, unreachable via
+  #     the wrapper's first-token-only substitution)
+  #   - equal to the display name itself (self-referential bare-namespace
+  #     alias — would otherwise duplicate the canonical in the rendered row)
   local aliases_map='{}'
   if [[ -f "$index_cache" ]]; then
     aliases_map="$(jq -c '

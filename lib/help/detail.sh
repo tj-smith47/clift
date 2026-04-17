@@ -78,9 +78,14 @@ _clift_help_detail_default() {
   # stored in index.json under both the bare name and the "<name>:default"
   # key (depending on whether the command is a namespace with a default task
   # or a root-level task). Strip the canonical's namespace prefix from each
-  # alias to match the user-facing form the wrapper dispatches on, and drop
-  # aliases that collapse to empty or still contain `:` after stripping —
-  # those can't be invoked as top-level commands via the wrapper.
+  # alias to match the user-facing form the wrapper dispatches on. The
+  # filter drops three classes of aliases that can't be invoked as
+  # top-level commands via the wrapper:
+  #   - empty after stripping (bare-namespace alias for a `:default` task)
+  #   - still contain `:` after stripping (nested-segment, out of scope)
+  #   - equal to the canonical itself (self-referential — the canonical
+  #     name is already the title above this line, so showing it as an
+  #     alias would be misleading)
   local index_json_path="${taskfile_dir}/.clift/index.json"
   local aliases_csv=""
   if [[ -f "$index_json_path" ]]; then
