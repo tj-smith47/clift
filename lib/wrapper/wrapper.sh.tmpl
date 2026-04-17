@@ -158,23 +158,27 @@ fi
 # Only the exact bare form `--no-cache` is consumed; `--no-cache=foo` is
 # bool-invalid and falls through to the parser's error path. Stops at `--`
 # per bash convention: tokens after the terminator are literal.
-_nc_new_args=()
-_nc_saw_terminator=0
-for _nc_a in "$@"; do
-  if (( _nc_saw_terminator == 0 )); then
-    if [[ "$_nc_a" == "--" ]]; then
-      _nc_saw_terminator=1
-    elif [[ "$_nc_a" == "--no-cache" ]]; then
-      export CLIFT_CACHE=rebuild
-      continue
+#
+# Fast-path: skip the scan entirely when the token isn't present in argv.
+# Keeps the locals out of script scope in the common case (one string match,
+# no fork) and limits the full loop to invocations that actually need it.
+if [[ "$*" == *--no-cache* ]]; then
+  _nc_new_args=()
+  _nc_saw_terminator=0
+  for _nc_a in "$@"; do
+    if (( _nc_saw_terminator == 0 )); then
+      if [[ "$_nc_a" == "--" ]]; then
+        _nc_saw_terminator=1
+      elif [[ "$_nc_a" == "--no-cache" ]]; then
+        export CLIFT_CACHE=rebuild
+        continue
+      fi
     fi
-  fi
-  _nc_new_args+=("$_nc_a")
-done
-if (( ${#_nc_new_args[@]} != $# )); then
+    _nc_new_args+=("$_nc_a")
+  done
   set -- "${_nc_new_args[@]+"${_nc_new_args[@]}"}"
+  unset _nc_new_args _nc_a _nc_saw_terminator
 fi
-unset _nc_new_args _nc_a _nc_saw_terminator
 
 # shellcheck source=/dev/null
 source "$FRAMEWORK_DIR/lib/cache.sh"
