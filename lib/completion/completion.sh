@@ -70,7 +70,7 @@ _${CLI_NAME}_completions() {
       | select((\$hidden | index(\$k)) == null)
       | (.value.user_aliases // [])[]
     ]) as \$alias_names |
-    ((
+    ([
       [.. | .tasks? // empty | .[]] | .[]
       | select(.name != "default")
       | select(.name | startswith("_") | not)
@@ -78,7 +78,7 @@ _${CLI_NAME}_completions() {
       | (\$n | gsub(":default\$"; "")) as \$disp
       | select((\$hidden | index(\$n)) == null and (\$hidden | index(\$disp)) == null)
       | \$disp
-    ), \$alias_names[])
+    ] + \$alias_names) | .[]
   ' "\$tasks_json" 2>/dev/null)"
   local prefix="\$cmd_path"
   [[ -n "\$prefix" ]] && prefix="\${prefix}:"
@@ -140,7 +140,7 @@ _${CLI_NAME}() {
       | select((\$hidden | index(\$k)) == null)
       | (.value.user_aliases // [])[]
     ]) as \$alias_names |
-    ((
+    ([
       [.. | .tasks? // empty | .[]] | .[]
       | select(.name != "default")
       | select(.name | startswith("_") | not)
@@ -148,7 +148,7 @@ _${CLI_NAME}() {
       | (\$n | gsub(":default\$"; "")) as \$disp
       | select((\$hidden | index(\$n)) == null and (\$hidden | index(\$disp)) == null)
       | \$disp
-    ), \$alias_names[])
+    ] + \$alias_names) | .[]
   ' "\$tasks_json" 2>/dev/null | grep "^\${prefix}" | sed "s|^\${prefix}||" | cut -d: -f1 | sort -u))
   _describe 'command' subcmds
 }

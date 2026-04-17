@@ -59,9 +59,10 @@ all_tasks_json="$(jq '[.. | .tasks? // empty | .[]]' "${CACHE_DIR}/tasks.json")"
 # the same alias name (e.g. `deploy → d` and `destroy → d`) would silently
 # last-write-wins in the wrapper's _aliases_map, masking one route. Reject at
 # compile time with a hard error analogous to the persistent-vs-per-command
-# clash check above. Aliases that strip down to either empty or still contain
-# `:` are skipped — those don't reach the wrapper's first-token substitution
-# table so they can't collide there either.
+# clash check above. Mirrors the same three drops as user_aliases below: empty
+# after stripping, still contains `:`, equal to the canonical itself — none
+# reach the wrapper's first-token substitution table so they can't collide
+# there either.
 _alias_clash_msg="$(jq -r '
   [ .[]
     | select(.name | test("^_|:_") | not)
@@ -69,8 +70,8 @@ _alias_clash_msg="$(jq -r '
     | ($task.name | sub(":default$"; "")) as $canonical
     | ($task.name | capture("^(?<ns>.*):[^:]+$").ns // "") as $ns
     | ($task.aliases // [])[] as $a
-    | (if $ns == "" then $a
-       elif ($a | startswith($ns + ":")) then ($a | ltrimstr($ns + ":"))
+    | (if ($ns != "" and ($a | startswith($ns + ":")))
+       then ($a | ltrimstr($ns + ":"))
        else $a
        end) as $user_alias
     | select($user_alias != ""
@@ -292,8 +293,8 @@ while IFS=$'\x01' read -r -d '' task_name source_tf aliases_json summary; do
     ($task_name | sub(":default$"; "")) as $canonical |
     ($task_name | capture("^(?<ns>.*):[^:]+$").ns // "") as $ns |
     [ .[]
-      | (if $ns == "" then .
-         elif startswith($ns + ":") then ltrimstr($ns + ":")
+      | (if ($ns != "" and startswith($ns + ":"))
+         then ltrimstr($ns + ":")
          else . end)
       | select(. != "" and (contains(":") | not) and . != $canonical)
     ]
