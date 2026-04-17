@@ -2,7 +2,8 @@
 # clift Cache Utilities — portable mtime + staleness check.
 # Sourced by compile.sh, router.sh, wrapper.sh.
 
-if [[ -n "${_CLIFT_CACHE_LOADED:-}" ]]; then return 0; fi
+# shellcheck disable=SC2317  # `exit 0` fallback fires only if file is run directly
+if [[ -n "${_CLIFT_CACHE_LOADED:-}" ]]; then return 0 2>/dev/null || exit 0; fi
 _CLIFT_CACHE_LOADED=1
 
 # Portable max-mtime across a list of files.

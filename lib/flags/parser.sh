@@ -7,7 +7,8 @@
 # On success: exports CLIFT_FLAG_<NAME> and CLIFT_POS_<N> env vars; returns 0.
 # On error: prints error to stderr and returns 1.
 
-if [[ -n "${_CLIFT_PARSER_LOADED:-}" ]]; then return 0; fi
+# shellcheck disable=SC2317  # `exit 0` fallback fires only if file is run directly
+if [[ -n "${_CLIFT_PARSER_LOADED:-}" ]]; then return 0 2>/dev/null || exit 0; fi
 _CLIFT_PARSER_LOADED=1
 
 _CLIFT_PARSER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

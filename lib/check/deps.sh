@@ -4,7 +4,8 @@
 #   clift_check_deps_fast — command presence only (per-invocation)
 #   clift_check_deps_full — also validates versions and metadata (compile-time)
 
-if [[ -n "${_CLIFT_DEPS_LOADED:-}" ]]; then return 0 2>/dev/null || true; fi
+# shellcheck disable=SC2317  # `exit 0` fallback fires only if file is run directly
+if [[ -n "${_CLIFT_DEPS_LOADED:-}" ]]; then return 0 2>/dev/null || exit 0; fi
 _CLIFT_DEPS_LOADED=1
 
 # Fast check — called by router on every invocation

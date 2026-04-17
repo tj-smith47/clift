@@ -9,11 +9,13 @@
 # `$(bash -c …)` on the hot path. Instead, we run once here and rely on
 # `export -f` in log.sh so subshells inherit the functions for free.
 
+# shellcheck disable=SC2317  # `exit 0` fallback fires only if file is run directly
 if [[ -n "${_CLIFT_PRELUDE_LOADED:-}" ]]; then return 0 2>/dev/null || exit 0; fi
 _CLIFT_PRELUDE_LOADED=1
 
 if [[ -z "${FRAMEWORK_DIR:-}" ]]; then
   echo "prelude.sh: FRAMEWORK_DIR unset" >&2
+  # shellcheck disable=SC2317  # `exit 1` fallback fires only if file is run directly
   return 1 2>/dev/null || exit 1
 fi
 

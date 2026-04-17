@@ -3,8 +3,9 @@
 # Sourced by parser.sh, wrapper.sh, and validate.sh.
 # Provides did-you-mean suggestions and consistent error formatting.
 
-# Guard against double-source
-if [[ -n "${_CLIFT_ERRORS_LOADED:-}" ]]; then return 0; fi
+# Guard against double-source.
+# shellcheck disable=SC2317  # `exit 0` fallback fires only if file is run directly
+if [[ -n "${_CLIFT_ERRORS_LOADED:-}" ]]; then return 0 2>/dev/null || exit 0; fi
 _CLIFT_ERRORS_LOADED=1
 
 # Levenshtein distance — inline for zero-fork did-you-mean.

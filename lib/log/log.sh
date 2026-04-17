@@ -4,7 +4,8 @@
 # Reads LOG_THEME, LOG_COLOR, NO_COLOR, VERBOSE, QUIET from environment.
 # Themes: icons, icons-color, brackets, brackets-color, minimal, minimal-color, custom
 
-if [[ -n "${_CLIFT_LOG_LOADED:-}" ]]; then return 0 2>/dev/null || true; fi
+# shellcheck disable=SC2317  # `exit 0` fallback fires only if file is run directly
+if [[ -n "${_CLIFT_LOG_LOADED:-}" ]]; then return 0 2>/dev/null || exit 0; fi
 _CLIFT_LOG_LOADED=1
 
 # Exit code constants

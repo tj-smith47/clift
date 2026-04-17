@@ -3,7 +3,8 @@
 # Sentinel format: a comment line `# clift: <name>` immediately followed by
 # exactly one entry line. Scrubbing removes both; writing replaces both.
 
-if [[ -n "${_CLIFT_RC_LOADED:-}" ]]; then return 0; fi
+# shellcheck disable=SC2317  # `exit 0` fallback fires only if file is run directly
+if [[ -n "${_CLIFT_RC_LOADED:-}" ]]; then return 0 2>/dev/null || exit 0; fi
 _CLIFT_RC_LOADED=1
 
 _clift_rc_sentinel() {

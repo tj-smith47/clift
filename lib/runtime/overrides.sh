@@ -27,6 +27,7 @@
 # Dynamic flag completers use a different, user-keyed prefix
 # (clift_complete_<task>_<flag>) and are documented separately.
 
+# shellcheck disable=SC2317  # `exit 0` fallback fires only if file is run directly
 if [[ -n "${_CLIFT_OVERRIDES_LOADED:-}" ]]; then return 0 2>/dev/null || exit 0; fi
 _CLIFT_OVERRIDES_LOADED=1
 

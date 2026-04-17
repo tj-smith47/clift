@@ -8,7 +8,8 @@
 
 set -euo pipefail
 
-if [[ -n "${_CLIFT_VALIDATE_LOADED:-}" ]]; then return 0 2>/dev/null || true; fi
+# shellcheck disable=SC2317  # `exit 0` fallback fires only if file is run directly
+if [[ -n "${_CLIFT_VALIDATE_LOADED:-}" ]]; then return 0 2>/dev/null || exit 0; fi
 _CLIFT_VALIDATE_LOADED=1
 
 # Reserved flag names — derived from the canonical globals.json

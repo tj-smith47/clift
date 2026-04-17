@@ -3,7 +3,8 @@
 # Sourced by list.sh and detail.sh.
 # Usage: source render_flags.sh; clift_render_flags <flags_json>
 
-if [[ -n "${_CLIFT_RENDER_FLAGS_LOADED:-}" ]]; then return 0; fi
+# shellcheck disable=SC2317  # `exit 0` fallback fires only if file is run directly
+if [[ -n "${_CLIFT_RENDER_FLAGS_LOADED:-}" ]]; then return 0 2>/dev/null || exit 0; fi
 _CLIFT_RENDER_FLAGS_LOADED=1
 
 # Resolve the path to globals.json once at source time.
