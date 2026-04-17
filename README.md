@@ -84,7 +84,7 @@ task --taskfile ~/.clift/Taskfile.yaml setup:cli -- ~/mycli
 ## Features
 
 - Cobra-style help system with grouped commands
-- Themed logging (7 built-in themes + custom color schemes)
+- Themed logging (7 built-in themes + custom color schemes, honors `NO_COLOR`)
 - Typed flag parsing (bool, string, int, list) with defaults, required flags, short aliases, long-name aliases, deprecated markers, hidden flags, mutex / required-together groups, and value validation via `choices:` / `pattern:`
 - Persistent (CLI-wide) flags that work before or after the command token
 - Command aliases (`aliases: [...]` on tasks) — dispatch, help, completion, and did-you-mean all honor them
@@ -99,7 +99,6 @@ task --taskfile ~/.clift/Taskfile.yaml setup:cli -- ~/mycli
 - Shell completions (bash, zsh) with static + dynamic flag-value completers, `--help` install hint, and setup-time installer
 - Framework self-update
 - Optional versioning and distribution via [cfgd](https://github.com/tj-smith47/cfgd)
-- `NO_COLOR` standard support
 
 ## Requirements
 
