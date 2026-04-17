@@ -59,16 +59,31 @@ _${CLI_NAME}_completions() {
 
   # Complete subcommands: offer the next segment after cmd_path.
   # Hidden commands (vars.HIDDEN: true) are filtered out via index.json lookup.
+  # Task 5.1: aliases declared on a command are included as additional
+  # top-level candidates. They are stored namespace-prefixed in index.json
+  # (e.g. \`deploy:d\` for canonical \`deploy:default\`); we strip the
+  # canonical's namespace so the user-facing alias name (\`d\`) appears.
   local all_tasks
   all_tasks="\$(jq -r --slurpfile idx "\$index_json" '
     ([\$idx[0].tasks // {} | to_entries[] | select(.value.hidden == true) | .key] // []) as \$hidden |
-    [.. | .tasks? // empty | .[]] | .[]
-    | select(.name != "default")
-    | select(.name | startswith("_") | not)
-    | .name as \$n
-    | (\$n | gsub(":default\$"; "")) as \$disp
-    | select((\$hidden | index(\$n)) == null and (\$hidden | index(\$disp)) == null)
-    | \$disp
+    ([\$idx[0].tasks // {} | to_entries[]
+      | (.key | sub(":default\$"; "")) as \$disp
+      | (.key | capture("^(?<ns>.*):[^:]+\$").ns // "") as \$ns
+      | (.value.aliases // [])[]
+      | (if \$ns == "" then .
+         elif startswith(\$ns + ":") then ltrimstr(\$ns + ":")
+         else . end)
+      | select(. != "" and (contains(":") | not))
+    ]) as \$alias_names |
+    ((
+      [.. | .tasks? // empty | .[]] | .[]
+      | select(.name != "default")
+      | select(.name | startswith("_") | not)
+      | .name as \$n
+      | (\$n | gsub(":default\$"; "")) as \$disp
+      | select((\$hidden | index(\$n)) == null and (\$hidden | index(\$disp)) == null)
+      | \$disp
+    ), \$alias_names[])
   ' "\$tasks_json" 2>/dev/null)"
   local prefix="\$cmd_path"
   [[ -n "\$prefix" ]] && prefix="\${prefix}:"
@@ -121,16 +136,28 @@ _${CLI_NAME}() {
   [[ -n "\$prefix" ]] && prefix="\${prefix}:"
 
   # Subcommands: filter out hidden commands via index.json
+  # Task 5.1: aliases included as top-level candidates (see bash branch).
   local -a subcmds
   subcmds=(\$(jq -r --slurpfile idx "\$index_json" '
     ([\$idx[0].tasks // {} | to_entries[] | select(.value.hidden == true) | .key] // []) as \$hidden |
-    [.. | .tasks? // empty | .[]] | .[]
-    | select(.name != "default")
-    | select(.name | startswith("_") | not)
-    | .name as \$n
-    | (\$n | gsub(":default\$"; "")) as \$disp
-    | select((\$hidden | index(\$n)) == null and (\$hidden | index(\$disp)) == null)
-    | \$disp
+    ([\$idx[0].tasks // {} | to_entries[]
+      | (.key | sub(":default\$"; "")) as \$disp
+      | (.key | capture("^(?<ns>.*):[^:]+\$").ns // "") as \$ns
+      | (.value.aliases // [])[]
+      | (if \$ns == "" then .
+         elif startswith(\$ns + ":") then ltrimstr(\$ns + ":")
+         else . end)
+      | select(. != "" and (contains(":") | not))
+    ]) as \$alias_names |
+    ((
+      [.. | .tasks? // empty | .[]] | .[]
+      | select(.name != "default")
+      | select(.name | startswith("_") | not)
+      | .name as \$n
+      | (\$n | gsub(":default\$"; "")) as \$disp
+      | select((\$hidden | index(\$n)) == null and (\$hidden | index(\$disp)) == null)
+      | \$disp
+    ), \$alias_names[])
   ' "\$tasks_json" 2>/dev/null | grep "^\${prefix}" | sed "s|^\${prefix}||" | cut -d: -f1 | sort -u))
   _describe 'command' subcmds
 }

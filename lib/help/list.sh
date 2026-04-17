@@ -92,18 +92,58 @@ _clift_help_list_default() {
     hidden_map="$(jq -c '.tasks // {} | with_entries(.value = (.value.hidden // false))' "$index_cache" 2>/dev/null || echo '{}')"
   fi
 
+  # Load alias map keyed by display name (canonical with `:default` stripped
+  # and the namespace prefix dropped from each alias). Task 5.1: aliases of
+  # included commands are namespaced by go-task (e.g. `deploy:d`); the user
+  # invokes them as bare `d`, so the displayed list strips the same prefix.
+  # Bare-namespace aliases (e.g. `deploy` for `deploy:default`) and aliases
+  # that still contain `:` after stripping are dropped — the former is the
+  # canonical name itself, the latter is unreachable via the wrapper's
+  # first-token-only substitution.
+  local aliases_map='{}'
+  if [[ -f "$index_cache" ]]; then
+    aliases_map="$(jq -c '
+      .tasks // {}
+      | to_entries
+      | map(
+          (.key | sub(":default$"; "")) as $disp
+          | (.key | capture("^(?<ns>.*):[^:]+$").ns // "") as $ns
+          | (((.value.aliases // [])
+              | map(
+                  if $ns == "" then .
+                  elif startswith($ns + ":") then ltrimstr($ns + ":")
+                  else . end
+                )
+              | map(select(. != "" and (contains(":") | not) and . != $disp))
+            )) as $cleaned
+          | select(($cleaned | length) > 0)
+          | {key: $disp, value: $cleaned}
+        )
+      | from_entries
+    ' "$index_cache" 2>/dev/null || echo '{}')"
+  fi
+
   # Flatten into group<TAB>display_name<TAB>desc lines (one row per top-level
   # command). Root tasks emit directly. Namespaces collapse into a single row:
   # desc comes from the namespace's `default` task, else the first task, else
   # "(group)" as a last resort. A root task's `vars.group` can override which
   # section it appears under; namespaces always fall under "Commands".
   local all_entries
-  all_entries=$(echo "$json" | jq -r --argjson hidden "$hidden_map" '
+  all_entries=$(echo "$json" | jq -r \
+      --argjson hidden "$hidden_map" \
+      --argjson aliases "$aliases_map" '
     # A command is hidden if EITHER its bare name OR its "<name>:default" key is
     # marked hidden:true in index.json. Root-level single tasks use the bare key;
     # namespaced groups with a default subtask use "<ns>:default".
     def is_hidden($disp):
       ($hidden[$disp] // false) or ($hidden[$disp + ":default"] // false);
+
+    # Append `, alias1, alias2` to the display name when the command has any
+    # aliases. Mirrors cobra/Click conventions and matches what `--help` for
+    # individual commands shows. Aliases come from index.json via $aliases.
+    def with_aliases($disp):
+      ($aliases[$disp] // []) as $a
+      | if ($a | length) > 0 then ($disp + ", " + ($a | join(", "))) else $disp end;
 
     (
       (.tasks // [])[]
@@ -126,7 +166,7 @@ _clift_help_list_default() {
           else "Commands"
           end
         )
-      | "\(.group)\t\(.display_name)\t\(.desc)"
+      | "\(.group)\t\(with_aliases(.display_name))\t\(.desc)"
     ),
     (
       (.namespaces // {}) | to_entries[]
@@ -143,7 +183,7 @@ _clift_help_list_default() {
           | if $pick == null then empty
             else
               (($pick.desc // "") | if . == "" then "(group)" else . end) as $desc
-              | "Commands\t\($ns)\t\($desc)"
+              | "Commands\t\(with_aliases($ns))\t\($desc)"
             end
         )
     )

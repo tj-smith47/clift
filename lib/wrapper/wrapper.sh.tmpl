@@ -240,9 +240,11 @@ if [[ ! -f "$TASKS_JSON" ]]; then
   fi
 else
   # One jq call extracts everything the wrapper's dispatch walk needs:
-  #   1. known_tasks   — every task name (for prefix lookup)
-  #   2. root_cmds     — root command names + namespaces (for did-you-mean)
+  #   1. known_tasks    — every task name (for prefix lookup)
+  #   2. root_cmds      — root command names + namespaces + aliases
+  #                       (for did-you-mean)
   #   3. persistent_tsv — one row per persistent flag: name<\x01>short<\x01>type
+  #   4. aliases_tsv    — one row per command alias: alias<\x01>canonical
   # jq reads both tasks.json (positional input) and index.json (--slurpfile) in
   # a single invocation so there's no extra fork on the wrapper hot path.
   # index.json may be absent on a stale/partially-built cache — jq's null
@@ -251,16 +253,58 @@ else
     IFS= read -r -d '' known_tasks || true
     IFS= read -r -d '' root_cmds || true
     IFS= read -r -d '' persistent_tsv || true
+    IFS= read -r -d '' aliases_tsv || true
   } < <(jq -j --slurpfile idx_wrap <(
       if [[ -f "$INDEX_JSON" ]]; then cat "$INDEX_JSON"; else echo '{"persistent_flags":[]}'; fi
     ) '
-    ([.. | .tasks? // empty | .[] | .name | select(test("^_|:_") | not)]
-      | join("\n")) + "\u0000" +
-    ([.tasks[]?.name // empty, (.namespaces // {} | keys)[]]
-      | map(select(startswith("_") | not))
+    # Recursive walk: every task entry that go-task knows about. Tasks declared
+    # with `aliases:` carry a non-empty .aliases array on the SAME entry — the
+    # alias names are NOT emitted as separate task entries by go-task.
+    [.. | .tasks? // empty | .[]
+      | select(.name | test("^_|:_") | not)
+    ] as $all_tasks
+    |
+    # Map alias -> canonical (top-level command-alias UX, Task 5.1).
+    #
+    # go-task namespaces aliases of an included task: a deploy/Taskfile.yaml
+    # declaring aliases [d] on its default task surfaces as alias
+    # deploy:d for canonical deploy:default. Users type "mycli d", not
+    # "mycli deploy:d", so we strip the namespace prefix of the canonical
+    # from the alias to recover the user-facing top-level name.
+    #
+    # Aliases that collapse to empty after stripping (e.g. the bare namespace
+    # alias deploy for deploy:default) are skipped — that route already
+    # works via namespace-prefix dispatch. Aliases that still contain ":"
+    # after stripping are skipped too: nested-segment alias substitution is
+    # out of scope (would require multi-token rewrite during the walk).
+    #
+    # The canonical is emitted with ":default" stripped so the longest-prefix
+    # walk receives a name it recognises (e.g. deploy not deploy:default).
+    [ $all_tasks[]
+      | . as $task
+      | ($task.name | sub(":default$"; "")) as $canonical
+      | ($task.name | capture("^(?<ns>.*):[^:]+$").ns // "") as $ns
+      | ($task.aliases // [])[] as $a
+      | (if $ns == "" then $a
+         elif ($a | startswith($ns + ":")) then ($a | ltrimstr($ns + ":"))
+         else $a
+         end) as $user_alias
+      | select($user_alias != "" and ($user_alias | contains(":") | not))
+      | { alias: $user_alias, canonical: $canonical }
+    ] as $alias_pairs
+    |
+    ($all_tasks | map(.name) | join("\n")) + "\u0000" +
+    # root_cmds: candidate set for did-you-mean. Includes root task names,
+    # namespace keys, AND every alias — so `mycli dx` can suggest `d`.
+    (([.tasks[]?.name // empty, (.namespaces // {} | keys)[]]
+      | map(select(startswith("_") | not)))
+      + ($alias_pairs | map(.alias))
       | unique | join(" ")) + "\u0000" +
     (($idx_wrap[0].persistent_flags // [])
       | map([.name, (.short // ""), .type] | join("\u0001"))
+      | join("\n")) + "\u0000" +
+    ($alias_pairs
+      | map([.alias, .canonical] | join("\u0001"))
       | join("\n")) + "\u0000"
   ' "$TASKS_JSON")
 fi
@@ -332,6 +376,23 @@ while IFS= read -r _t; do
     _known_prefix["$_pfx"]=1
   done
 done <<< "$known_tasks"
+
+# Command aliases (Task 5.1). go-task aliases are alternate names for a task,
+# not separate tasks — the wrapper substitutes alias -> canonical at the FIRST
+# token of the longest-prefix walk so downstream dispatch (router, --help
+# interception, did-you-mean) sees the canonical name. Nested-segment aliases
+# are out of scope: substitution happens only at position 0.
+#
+# Precedence: a real task name always wins over an alias of the same string
+# (we only consult _aliases_map AFTER _is_task_prefix has rejected the token).
+# This means an alias that collides with an existing top-level command is
+# silently shadowed by the real command — go-task itself accepts that ambiguity
+# at compile time, so we mirror its behaviour here.
+declare -A _aliases_map=()
+while IFS=$'\x01' read -r _alias _canonical; do
+  [[ -z "$_alias" ]] && continue
+  _aliases_map["$_alias"]="$_canonical"
+done <<< "$aliases_tsv"
 
 # root_cmds is space-separated and used by did-you-mean error suggestion
 # function. It contains root task names (.tasks[].name) plus namespace keys
@@ -469,6 +530,14 @@ while (( i <= $# )); do
   joined="$_JOINED"
   if _is_task_prefix "$joined"; then
     path=("${candidate_path[@]}")
+    i=$((i+1))
+  elif (( ${#path[@]} == 0 )) && [[ -n "${_aliases_map[$tok]+x}" ]]; then
+    # First-token alias substitution. Splits the canonical on ':' so a
+    # multi-segment canonical (e.g. an alias mapping to `version:upgrade`)
+    # populates `path` correctly and the walk can resume from there.
+    _canonical_full="${_aliases_map[$tok]}"
+    IFS=':' read -ra _canonical_segs <<< "$_canonical_full"
+    path=("${_canonical_segs[@]}")
     i=$((i+1))
   else
     break

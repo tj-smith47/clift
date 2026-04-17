@@ -73,6 +73,45 @@ _clift_help_detail_default() {
   fi
 
   echo "${CLI_NAME} ${display_name} - ${desc}"
+
+  # Task 5.1: surface command aliases directly under the title. Aliases are
+  # stored in index.json under both the bare name and the "<name>:default"
+  # key (depending on whether the command is a namespace with a default task
+  # or a root-level task). Strip the canonical's namespace prefix from each
+  # alias to match the user-facing form the wrapper dispatches on, and drop
+  # aliases that collapse to empty or still contain `:` after stripping —
+  # those can't be invoked as top-level commands via the wrapper.
+  local index_json_path="${taskfile_dir}/.clift/index.json"
+  local aliases_csv=""
+  if [[ -f "$index_json_path" ]]; then
+    aliases_csv="$(jq -r \
+      --arg cmd "${command}:default" \
+      --arg cmd2 "$command" '
+      # Pick the index.json key the entry actually lives under so we can
+      # derive the canonical namespace from it. Prefer "<cmd>:default" since
+      # that key carries the alias list for namespaced commands; fall back
+      # to the bare name for root-level tasks.
+      (if (.tasks | has($cmd)) then $cmd
+       elif (.tasks | has($cmd2)) then $cmd2
+       else null end) as $key
+      | if $key == null then empty
+        else
+          (.tasks[$key].aliases // []) as $raw
+          | ($key | capture("^(?<ns>.*):[^:]+$").ns // "") as $ns
+          | ($raw
+             | map(
+                 if $ns == "" then .
+                 elif startswith($ns + ":") then ltrimstr($ns + ":")
+                 else . end)
+             | map(select(. != "" and (contains(":") | not) and . != $cmd2))
+             | join(", "))
+        end
+    ' "$index_json_path" 2>/dev/null)"
+  fi
+  if [[ -n "$aliases_csv" ]]; then
+    echo "Aliases: $aliases_csv"
+  fi
+
   echo ""
 
   if [[ -n "$summary" && "$summary" != "null" ]]; then
