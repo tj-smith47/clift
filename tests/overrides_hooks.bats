@@ -548,3 +548,46 @@ SH
   [[ "$output" == *"DEPLOY-PROD-RAN"* ]]
   [[ "$output" != *"NESTED-SHOULD-NOT-FIRE"* ]]
 }
+
+# ---------------------------------------------------------------------------
+# command_post non-zero suppression (branch-review S1)
+# ---------------------------------------------------------------------------
+#
+# A command_post override that exits non-zero must not change the script's
+# final rc (contract: script wins), but the suppressed code should surface
+# at log_debug level so a broken post-hook is still debuggable.
+
+@test "command_post non-zero exit is suppressed but logged at debug" {
+  setup_parsed_cli
+  # User script exits cleanly — the override is the only source of failure.
+  cat > "$CLI_DIR/cmds/greet/greet.sh" <<'SH'
+#!/usr/bin/env bash
+echo "SCRIPT-RAN"
+exit 0
+SH
+  chmod +x "$CLI_DIR/cmds/greet/greet.sh"
+
+  mkdir -p "$CLI_DIR/.clift/overrides"
+  cat > "$CLI_DIR/.clift/overrides/command_post.sh" <<'SH'
+clift_override_command_post() {
+  # An override under `set -e` where a command fails mid-hook would exit
+  # with that command's rc. Simulate directly with `false`.
+  false
+}
+SH
+
+  # With VERBOSE unset: rc=0, no debug message on stderr.
+  run "$CLI_DIR/bin/$CLI_NAME" greet
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"SCRIPT-RAN"* ]]
+  [[ "$output" != *"command_post override exited"* ]]
+
+  # With VERBOSE=true (via -v, post-command position — the wrapper rewrites
+  # `-v` after the command into the exported VERBOSE=true env var): rc still
+  # 0, debug message surfaces on stderr.
+  run "$CLI_DIR/bin/$CLI_NAME" greet -v
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"SCRIPT-RAN"* ]]
+  [[ "$output" == *"command_post override exited"* ]]
+  [[ "$output" == *"script rc=0 preserved"* ]]
+}

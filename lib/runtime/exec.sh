@@ -66,8 +66,17 @@ _clift_run_command_post() {
   # by clift_call_override's function-return semantics; the subshell closes
   # the only remaining escape. Fork cost is on the terminate path (once per
   # command), not a hot loop — acceptable.
+  #
+  # Capture the subshell's rc and surface non-zero via log_debug. The
+  # original script's rc always wins the process exit code (contract), but
+  # a silently-failing post-hook is hard to debug — users running with
+  # VERBOSE=true (e.g. via `-v` / `--verbose`) now see the suppressed code.
+  local _post_rc=0
   ( clift_call_override command_post clift_default_command_post \
-      --task "${CLIFT_TASK:-}" "${CLIFT_TASK:-}" "$rc" ) || true
+      --task "${CLIFT_TASK:-}" "${CLIFT_TASK:-}" "$rc" ) || _post_rc=$?
+  if (( _post_rc != 0 )); then
+    log_debug "command_post override exited ${_post_rc} (suppressed; script rc=${rc} preserved)"
+  fi
   exit "$rc"
 }
 trap _clift_on_sigint INT
