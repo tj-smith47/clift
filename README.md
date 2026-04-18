@@ -306,7 +306,7 @@ eval "$(mycli completion bash)"
 eval "$(mycli completion zsh)"
 ```
 
-`mycli --help` prints a one-line install hint when the completion script is not sourced in the current shell, so new users can't miss it.
+`mycli --help` always prints a one-line install hint so new users can't miss it.
 
 For flag **values** that are only known at runtime (regions, kube contexts, branches), drop a `clift_complete_<task>_<flag>` function into `$CLI_DIR/.clift/overrides/completion.sh` (or per-command under `cmds/<cmd>/overrides/completion.sh`) and clift wires it automatically — no schema change.
 
