@@ -224,13 +224,16 @@ _validate_entry_fields() {
     # Syntactically validate the regex by running it through bash's own `[[ =~ ]]`
     # in a subshell (runtime uses the same operator, so compile-time rejection
     # here exactly matches runtime acceptance). A malformed regex makes `[[ =~ ]]`
-    # exit non-zero with "syntax error" on stderr — we suppress that and surface
-    # our own framed error.
+    # exit 2 and print "syntax error" on stderr; the subshell is load-bearing
+    # under set -e (caller inherits pipefail+errexit from compile.sh), so we
+    # keep the parens and silence the SC2234 style warning explicitly.
+    # shellcheck disable=SC2234
     if ! ( [[ "" =~ $pattern ]] ) 2>/dev/null; then
       # Re-test outside the `!` to tell a "no match on empty string" (which is
       # fine) apart from a real regex syntax error. Bash exits 2 for syntax
       # errors inside `[[ =~ ]]`; 1 for plain no-match.
       local _rc
+      # shellcheck disable=SC2234
       ( [[ "" =~ $pattern ]] ) 2>/dev/null; _rc=$?
       if (( _rc == 2 )); then
         echo "error: ${context}: flag '$name' has invalid regex pattern '$pattern'" >&2
