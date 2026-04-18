@@ -143,13 +143,34 @@ fi
 # invocation's scan consumes them through the normal path and dispatches
 # the remaining user argv. Recursion terminates because `watch` no longer
 # appears as the first token after prepending.
+#
+# Belt-and-suspenders defense (branch-review M5): compile.sh rejects any
+# user CLI that declares `watch` as a top-level command or alias, so this
+# branch normally fires only on legitimate watch-mode invocations. If the
+# user hand-edited `.clift/index.json` to inject a `watch` task (bypassing
+# compile validation), the symmetric runtime guard `! _is_task_prefix
+# "watch"` that `help` uses can't be applied here — the cache hasn't
+# loaded yet. Instead do a one-shot jq probe of the index when the first
+# token is literally `watch`: if the cache claims `watch` or `watch:default`
+# as a known task, defer to the longest-prefix walk rather than rewriting.
+# Only fires on `mycli watch ...` invocations, so the extra fork is bounded
+# to a tiny fraction of total CLI usage.
 if [[ "${1:-}" == "watch" ]]; then
-  shift
-  if (( $# == 0 )); then
-    echo "error: watch requires a command (e.g., $CLI_NAME watch build)" >&2
-    exit 1
+  _watch_user_defined=0
+  if [[ -f "$CLI_DIR/.clift/index.json" ]]; then
+    if jq -e '.tasks | has("watch") or has("watch:default")' \
+         "$CLI_DIR/.clift/index.json" >/dev/null 2>&1; then
+      _watch_user_defined=1
+    fi
   fi
-  exec "$0" "${_task_flags_original[@]+"${_task_flags_original[@]}"}" --task:watch "$@"
+  if (( _watch_user_defined == 0 )); then
+    shift
+    if (( $# == 0 )); then
+      echo "error: watch requires a command (e.g., $CLI_NAME watch build)" >&2
+      exit 1
+    fi
+    exec "$0" "${_task_flags_original[@]+"${_task_flags_original[@]}"}" --task:watch "$@"
+  fi
 fi
 
 # --no-cache scan: translate the flag to CLIFT_CACHE=rebuild and strip it

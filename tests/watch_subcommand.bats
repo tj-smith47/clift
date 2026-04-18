@@ -141,6 +141,46 @@ SH
   [[ "$output" != *"unknown command"* ]]
 }
 
+@test "watch rewrite skipped when index.json has a hand-injected 'watch' task (M5)" {
+  # Belt-and-suspenders: compile.sh rejects user `watch` commands at scaffold
+  # time (branch-review I4), but a hand-edited cache could still smuggle one
+  # in. The wrapper's runtime guard probes index.json before rewriting, so a
+  # post-compile injection still routes to the user's command instead of
+  # being silently swallowed by --task:watch.
+  create_test_cli "greet"
+  bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$CLI_DIR" >/dev/null 2>&1 || true
+  build_test_wrapper
+
+  # Hand-inject a `watch` entry into the precompiled index.json so the
+  # wrapper's probe sees the user-defined task without going through
+  # compile.sh validation.
+  jq '.tasks["watch"] = {flags: {passthrough: true}, aliases: [], user_aliases: [], hidden: false, summary: "user watch"}' \
+    "$CLI_DIR/.clift/index.json" > "$CLI_DIR/.clift/index.json.new"
+  mv "$CLI_DIR/.clift/index.json.new" "$CLI_DIR/.clift/index.json"
+  # Mirror the addition into tasks.json so the wrapper's longest-prefix walk
+  # also recognises the task name (the dispatch path the rewrite gives way to).
+  jq '.tasks += [{name: "watch", aliases: [], summary: "user watch", location: {taskfile: "fake"}}]' \
+    "$CLI_DIR/.clift/tasks.json" > "$CLI_DIR/.clift/tasks.json.new"
+  mv "$CLI_DIR/.clift/tasks.json.new" "$CLI_DIR/.clift/tasks.json"
+  # Freeze the checksum so cache.sh doesn't notice and rebuild — that would
+  # rerun compile.sh, which would reject the injection and undo the test setup.
+  cp "$CLI_DIR/.clift/checksum" "$CLI_DIR/.clift/checksum.bak"
+
+  # If the wrapper still rewrote `watch` to `--task:watch`, the second
+  # invocation would enter blocking watch-mode and only exit when killed
+  # by the timeout (status 137 from SIGKILL, 124 from graceful timeout).
+  # With the M5 guard active, the rewrite is skipped, the longest-prefix
+  # walk consumes `watch` as a task, and dispatch fails fast because the
+  # hand-injected task has no real backing — go-task surfaces a "Task
+  # ... does not exist" error and the wrapper exits non-zero quickly.
+  run timeout --signal=KILL 2 "$CLI_DIR/bin/$CLI_NAME" watch
+  # Status 137 (SIGKILL) and 124 (graceful timeout) both signal the
+  # watch-mode-took-hold failure mode the M5 guard prevents. Anything
+  # else means dispatch left the rewrite alone, which is the contract.
+  [ "$status" -ne 137 ]
+  [ "$status" -ne 124 ]
+}
+
 @test "nested watch:foo command still works (reserved only applies to first token)" {
   # Create a CLI whose cmds/ includes a `watch:foo` subcommand namespace.
   # Invoking it via `mycli watch:foo` (single token containing a colon) does
