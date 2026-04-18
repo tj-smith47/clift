@@ -35,9 +35,14 @@ shift
 # Signal rc capture: bash's default EXIT trap sees `$?=0` when a signal
 # interrupts `source user_script` mid-run — the nominal 130/143 exit code
 # is NOT reflected in $? for the EXIT trap. We install explicit INT/TERM
-# handlers that stash the canonical signal rc in _clift_user_rc, then
+# handlers that stash the canonical signal rc in __CLIFT_USER_RC, then
 # call `exit` to transfer control to the EXIT trap. The EXIT handler
-# reads _clift_user_rc (falling back to $? for the non-signal paths).
+# reads __CLIFT_USER_RC (falling back to $? for the non-signal paths).
+#
+# Naming: double-underscore + ALL_CAPS marks this as framework-private and
+# defends against name collisions with user-script variables — a single
+# leading underscore is convention-only in bash and a user `_clift_user_rc`
+# in command_pre or the user script would silently shadow the signal rc.
 #
 # The post-hook receives the original exit code but CANNOT change it.
 # Whatever the user script exited with is what the process exits with.
@@ -46,10 +51,10 @@ shift
 # clift_call_override is available. The explicit source inside the handler
 # is belt-and-suspenders against future refactors that might remove the
 # prelude→overrides dependency.
-_clift_on_sigint() { _clift_user_rc=130; exit 130; }
-_clift_on_sigterm() { _clift_user_rc=143; exit 143; }
+_clift_on_sigint() { __CLIFT_USER_RC=130; exit 130; }
+_clift_on_sigterm() { __CLIFT_USER_RC=143; exit 143; }
 _clift_run_command_post() {
-  local rc="${_clift_user_rc:-$?}"
+  local rc="${__CLIFT_USER_RC:-$?}"
   # Disable set -e inside the trap handler so the override running does
   # not accidentally abort the trap before we can re-assert the exit code.
   set +e

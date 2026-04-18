@@ -281,7 +281,7 @@ SH
   run timeout --signal=INT 0.5 "$CLI_DIR/bin/$CLI_NAME" greet
   # SIGINT must propagate as 130 into the post-hook's $3. The wrapper's
   # outer exit code may differ (task-runner may remap), but the post-hook
-  # output is load-bearing: it proves our INT handler stashed _clift_user_rc.
+  # output is load-bearing: it proves our INT handler stashed __CLIFT_USER_RC.
   [[ "$output" == *"SLEEP-START"* ]]
   [[ "$output" == *"POST-SIGINT:130"* ]]
   [[ "$output" != *"SLEEP-END-SHOULD-NOT-APPEAR"* ]]
