@@ -129,8 +129,9 @@ clift_parse_args() {
          (if ((.choices // null) | type) == "array"
           then (.choices | map(tostring) | join(","))
           else "" end),
-         (.pattern // "")]
-      | join("\u0001")]
+         (.pattern // "")]]
+      | sort_by(.[0])
+      | map(join("\u0001"))
       | join("\n")) + "\u0000"
   ' <<< "$table_json")
 
@@ -174,8 +175,17 @@ clift_parse_args() {
   # pattern (empty means no constraint). Either or both may be set. Arrays
   # themselves are declared at the top of the function next to the other
   # _ft_* maps for scan-ability.
+  #
+  # _valid_names is a parallel indexed array holding the validation-relevant
+  # flag names in the order the jq batch emitted them (sort_by(.name) above).
+  # The later validation loop iterates this array instead of re-sorting the
+  # associative-array keys with a `printf | sort` fork per parse; the jq
+  # sort happens inside the batch we were already running, so we've traded a
+  # runtime fork for zero additional cost and the same deterministic order.
+  local _valid_names=()
   while IFS=$'\x01' read -r _vname _vchoices _vpattern; do
     [[ -z "$_vname" ]] && continue
+    _valid_names+=("$_vname")
     [[ -n "$_vchoices" ]] && _ft_choices["$_vname"]="$_vchoices"
     [[ -n "$_vpattern" ]] && _ft_pattern["$_vname"]="$_vpattern"
   done <<< "$_valid_lines"
@@ -530,15 +540,12 @@ clift_parse_args() {
   # named is the one the user can actually fix. For list flags, each element
   # is validated individually; the first failing element reports the error.
   #
-  # Iterate in lexicographic order of flag name so that when multiple flags
-  # have invalid values the reported error is deterministic across machines —
-  # bash associative-array key order is otherwise undefined.
+  # Iteration order is the sort-by-name order the init-time jq batch emitted
+  # (_valid_names was built from that output). This keeps the reported error
+  # deterministic across machines — bash associative-array iteration order is
+  # otherwise undefined — without a `printf | sort` fork per parse.
   local _vn _vtype _vvar _vcount _vi _vitem
-  for _vn in $(printf '%s\n' "${!_ft_type[@]}" | sort); do
-    # Skip flags with no constraint declared
-    if [[ -z "${_ft_choices[$_vn]:-}" && -z "${_ft_pattern[$_vn]:-}" ]]; then
-      continue
-    fi
+  for _vn in "${_valid_names[@]+"${_valid_names[@]}"}"; do
     _vtype="${_ft_type[$_vn]}"
     # Bool flags reject choices/pattern at compile; defensively skip here too.
     [[ "$_vtype" == "bool" ]] && continue
