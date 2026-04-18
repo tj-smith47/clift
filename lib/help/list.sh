@@ -286,4 +286,11 @@ source "${_LIB_DIR}/log/log.sh"
 # shellcheck source=../runtime/overrides.sh
 source "${_LIB_DIR}/runtime/overrides.sh"
 
+# Apply the log-slot shadow so a wrapping help_list override that calls
+# log_info / log_error / log_debug picks up the user's redefinitions.
+# list.sh runs as a fresh process, so the prelude's own log-slot load
+# never fires here. Only the CLI-global tier applies (no "current
+# command" at the top-level help listing).
+_clift_load_override log ""
+
 clift_call_override help_list _clift_help_list_default "$CLI_DIR"

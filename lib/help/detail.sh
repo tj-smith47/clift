@@ -222,4 +222,12 @@ source "${_LIB_DIR}/log/log.sh"
 # shellcheck source=../runtime/overrides.sh
 source "${_LIB_DIR}/runtime/overrides.sh"
 
+# Apply the log-slot shadow so a wrapping help_detail override that calls
+# log_info / log_error / log_debug picks up the user's redefinitions.
+# detail.sh runs as a fresh `exec bash` process (from the router's --help
+# short-circuit), so the prelude's own log-slot load never runs here —
+# without this call the docs' "callback-slot bodies compose with the log
+# shadow" promise is silently false for the help_detail slot.
+_clift_load_override log "$COMMAND"
+
 clift_call_override help_detail _clift_help_detail_default --task "$COMMAND" "$COMMAND" "$CLI_DIR"
