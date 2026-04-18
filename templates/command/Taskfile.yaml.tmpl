@@ -8,10 +8,12 @@ vars:
   #   - {name: tag, type: list, desc: "Repeatable — --tag a --tag b or --tag=a,b"}
   #   - {name: region, type: string, choices: [us-east-1, us-west-2, eu-west-1], desc: "Region"}
   #   - {name: semver, type: string, pattern: '^v?[0-9]+\.[0-9]+\.[0-9]+$', desc: "Version"}
-  #   - {name: format, type: string, group: output, desc: "Output format"}
-  #   - {name: json,   type: bool,   group: output, desc: "JSON output"}
-  #     # Members of the same `group:` become mutually exclusive. Append
-  #     # `group_required: output` to one of them to require exactly one.
+  #   - {name: json, type: bool, group: output, exclusive: true, desc: "JSON output"}
+  #   - {name: yaml, type: bool, group: output, exclusive: true, desc: "YAML output"}
+  #     # Members of a group declaring `exclusive: true` are mutually exclusive
+  #     # (at most one may be set). Use `requires: "all"` on every member to
+  #     # declare the group required-together (zero or all). Bare `group:` with
+  #     # no modifier is cosmetic — partitions `--help` only. See docs/flags.md#groups.
   #   - {name: debug, type: bool, hidden: true, desc: "Internal — avoid"}
   #   - {name: old-flag, type: bool, deprecated: "use --new-flag instead"}
   #   - {name: mode, aliases: [m, kind], type: string, desc: "Mode — also accepts --m, --kind"}

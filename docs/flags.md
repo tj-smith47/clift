@@ -29,6 +29,9 @@ Each flag is a map:
 | `hidden` | no | bool | If `true`, the flag is omitted from `--help` and shell completion but still parses normally when invoked. Useful for internal/experimental flags. |
 | `choices` | no | list of string | Enumerated allowed values. Value must be one of the listed strings (case-sensitive). Invalid at runtime with `error: flag '--<name>' requires one of: a, b, c, got '<val>'`. For `type: list`, each element is validated. Cannot combine with `type: bool`. For `type: int`, each choice must itself parse as an integer (compile error otherwise). A `default` that is not in `choices` is a compile error. Rendered in `--help` as `(one of: a, b, c)`. |
 | `pattern` | no | string | Bash-compatible regex (`[[ =~ ]]`). Value must match. Anchor with `^…$` yourself — not auto-wrapped. Invalid at runtime with `error: flag '--<name>' requires value matching pattern '<regex>', got '<val>'`. For `type: list`, each element is validated. Cannot combine with `type: bool`. Pattern is syntax-checked at compile time. Rendered in `--help` as `(matches: <pattern>)`. May be combined with `choices` (both checks run; choices first). |
+| `group` | no | string | Name of the group this flag belongs to. Regex `^[A-Za-z][A-Za-z0-9_-]*$`. Members of a named group may agree on a single modifier (`exclusive: true` or `requires: "all"`) or declare none at all (cosmetic / help-partition only). Persistent flags cannot declare `group`. See [Groups](#groups). |
+| `exclusive` | no | bool | Requires `group`. Declares the group mutually exclusive: at most one member may be set at invocation time. All members of the group must share this modifier — mixing with `requires` or with bare members is a compile error. Group must have ≥2 members. See [Groups](#groups). |
+| `requires` | no | string | Requires `group`. Only accepted value is the literal `"all"` — declares the group required-together: if any member is set, all must be set. All members must share this modifier. Group must have ≥2 members. See [Groups](#groups). |
 
 ## Reserved names
 
@@ -179,6 +182,82 @@ Rules:
 ### Internal protocol: `CLIFT_PERSIST_BOUND`
 
 `CLIFT_PERSIST_BOUND` is an internal wrapper-to-parser protocol. The wrapper exports the space-separated list of persistent flag names it early-bound (pre-command occurrences) so the parser can skip default application for those names — a wrapper-bound value is a user value and must outrank a default. Users should not set this manually; it is not part of the public contract and may change between releases.
+
+## Groups
+
+Use a flag group when several flags on the same command share a relationship the parser should enforce — "pick at most one of these" or "if you use one, use all of them" — or when you just want `--help` to display them together. Reach for groups instead of writing runtime guards inside your command script; the framework checks the invariant before your script runs and produces a consistent error message.
+
+Three forms, distinguished by the modifier declared on each member:
+
+1. **Mutually exclusive** — every member declares `exclusive: true`. At most one may be set.
+2. **Required together** — every member declares `requires: "all"`. Either zero members are set, or every member is set.
+3. **Cosmetic** — every member declares `group:` alone, with no modifier. No runtime constraint; the group name only partitions the `--help` output.
+
+All members of a named group must agree on exactly one of these three forms. Mixing modifiers — including leaving some members bare while others declare a modifier — is a compile error.
+
+### Mutually exclusive
+
+```yaml
+- {name: json, type: bool, group: format, exclusive: true, desc: "JSON output"}
+- {name: yaml, type: bool, group: format, exclusive: true, desc: "YAML output"}
+- {name: csv,  type: bool, group: format, exclusive: true, desc: "CSV output"}
+```
+
+Zero or one of `--json`, `--yaml`, `--csv` is accepted. Setting two or more fails at runtime:
+
+```
+error: flags '--json', '--yaml' in group 'format' are mutually exclusive
+```
+
+With three or more set, every set member is named in the error (e.g. `'--json', '--yaml', '--csv'`).
+
+In `--help`, the group renders as its own subsection headed `format (mutually exclusive):`.
+
+### Required together
+
+```yaml
+- {name: user, type: string, group: creds, requires: "all", desc: "Username"}
+- {name: pass, type: string, group: creds, requires: "all", desc: "Password"}
+```
+
+`--user=alice --pass=hunter2` is accepted. So is invoking the command with neither flag. Setting only one fails at runtime:
+
+```
+error: in group 'creds', flag(s) '--pass' required when '--user' is provided
+```
+
+If more than one member is set but others are still missing, every missing member is named after `flag(s)` and every set member is named after `when`.
+
+In `--help`, the group renders as its own subsection headed `creds (required together):`.
+
+### Cosmetic (help-partition only)
+
+```yaml
+- {name: host, type: string, group: connection, desc: "Server host"}
+- {name: port, type: int,    group: connection, desc: "Server port"}
+```
+
+No runtime constraint — both flags may be set or unset independently. The group exists purely to group the two flags under a `connection:` subsection in `--help` output. Use this when several flags belong together conceptually but have no invariant the parser should enforce.
+
+### Rules
+
+- `group` name must match `^[A-Za-z][A-Za-z0-9_-]*$` (non-empty identifier, letters/digits/underscore/dash, must start with a letter).
+- `exclusive: true` without a `group` is a compile error: `flag '<name>' has exclusive: true without a group`.
+- `requires` without a `group` is a compile error: `flag '<name>' has requires without a group`.
+- `requires` accepts only the literal string `"all"`. Any other value is a compile error: `flag '<name>' requires must be "all" (got '<value>')`. No other modes are defined today.
+- `exclusive` accepts only `true` / `false`. Non-boolean values are a compile error: `flag '<name>' exclusive must be boolean, got '<value>'`.
+- All members of one named group must share the same modifier (all `exclusive: true`, all `requires: "all"`, or all bare). Mixing — including the "silent no-op" case where the first member is bare and a later member declares a modifier — is a compile error that names both offending flags: `flag '<X>' in group '<G>' declares '...' but flag '<Y>' in the same group declares '...' (group modifier must be consistent across all members)`.
+- A group declared with `exclusive` or `requires: "all"` must have at least two members. A lone modified member is almost always a typo (misspelled group name on the would-be second member) and fails at compile: `group '<G>' with '<mode>' must have >=2 members (got 1)`. Cosmetic (bare) groups may have any number of members.
+- Persistent flags (`vars.PERSISTENT_FLAGS` on the root Taskfile) cannot declare `group`, `exclusive`, or `requires`. Group semantics are per-command only — see [Persistent flags](#persistent-flags).
+- In `--help`, every named group renders as a subsection: `<name> (mutually exclusive):` for exclusive groups, `<name> (required together):` for requires-all groups, or plain `<name>:` for cosmetic groups. Ungrouped flags render first, above any group subsections.
+
+### Composition with other flag attributes
+
+Group membership is orthogonal to per-flag attributes. `required`, `default`, `aliases`, `short`, `choices`, `pattern`, `deprecated`, and `hidden` all continue to work on a group member exactly as they would on an ungrouped flag. In particular:
+
+- `required: true` on a member of an `exclusive` group means "this specific flag must be set, and no other group member may be set" — the strictest form. Group checks run before the bare required-flag check, so providing a different member yields the mutex error, not a missing-required error.
+- `required: true` on a member of a `requires: "all"` group is redundant (requires-all already forces all members to be set once any is) but legal.
+- `hidden: true` removes the member from `--help` and completion but does not remove it from the group — the parser still enforces the invariant. Mixing visible and hidden members in one group is fine; the subsection header appears whenever at least one visible member remains.
 
 ## Accessing parsed flags from your script
 
