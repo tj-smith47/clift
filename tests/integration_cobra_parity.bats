@@ -321,3 +321,115 @@ SH
   [[ "$(<"$probe_file")" == "$sentinel" ]] \
     || { echo "parser overwrote CLIFT_FLAGS_FILE on --help; got:"; cat "$probe_file"; false; }
 }
+
+# --- 12. persistent default visible when flag omitted on passthrough (S3) --
+
+# Complement to Test 9: Test 9 pins the "flag passed → value propagates"
+# path. Here the user omits --profile entirely; the persistent flag's
+# default ("dev") must still materialize in CLIFT_FLAGS[profile] on the
+# passthrough path. A regression where the wrapper only binds when the
+# user TYPES the flag (e.g. forgetting to apply defaults on absent
+# persistents) would pass Test 9 and fail this one.
+@test "persistent default materializes in CLIFT_FLAGS on passthrough (S3)" {
+  setup_parity_cli
+  cat > "$CLI_DIR/cmds/internal/internal.sh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "CLIFT_FLAGS[profile]=${CLIFT_FLAGS[profile]:-UNSET}"
+echo "CLIFT_FLAG_PROFILE=${CLIFT_FLAG_PROFILE:-UNSET}"
+SH
+  chmod +x "$CLI_DIR/cmds/internal/internal.sh"
+
+  # Invoke without --profile. Persistent flag's `default: "dev"` in the
+  # fixture must still reach both surfaces.
+  run "$CLI_DIR/bin/$CLI_NAME" internal
+  [ "$status" -eq 0 ] \
+    || { echo "exit=$status output=$output"; false; }
+  [[ "$output" == *"CLIFT_FLAGS[profile]=dev"* ]] \
+    || { echo "expected CLIFT_FLAGS[profile]=dev (persistent default); got: $output"; false; }
+  [[ "$output" == *"CLIFT_FLAG_PROFILE=dev"* ]] \
+    || { echo "expected CLIFT_FLAG_PROFILE=dev (persistent default); got: $output"; false; }
+}
+
+# --- 13. multi-persistent × passthrough: both flags propagate (S3) ---------
+
+# Test 9 exercises one persistent flag. The I1 fix iterates CLIFT_PERSIST_BOUND
+# in a loop — a regression that bound only the first entry (e.g. a mistaken
+# `break` inside the for-loop) would pass Test 9 and fail here. Inject a
+# second persistent flag via the fixture knob, pass both on the command
+# line, and assert both surface in CLIFT_FLAGS on the passthrough path.
+@test "multi-persistent flags on passthrough both surface in CLIFT_FLAGS (S3)" {
+  # Append a second persistent flag to the PERSISTENT_FLAGS block. The
+  # fragment is indented to match the existing block shape (four leading
+  # spaces: two for under `vars:`, two for the list item).
+  CLIFT_PARITY_EXTRA_PERSISTENT='    - {name: cluster, type: string, default: "local", desc: "Cluster"}' \
+    setup_parity_cli
+
+  cat > "$CLI_DIR/cmds/internal/internal.sh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "CLIFT_FLAGS[profile]=${CLIFT_FLAGS[profile]:-UNSET}"
+echo "CLIFT_FLAGS[cluster]=${CLIFT_FLAGS[cluster]:-UNSET}"
+echo "CLIFT_FLAG_PROFILE=${CLIFT_FLAG_PROFILE:-UNSET}"
+echo "CLIFT_FLAG_CLUSTER=${CLIFT_FLAG_CLUSTER:-UNSET}"
+SH
+  chmod +x "$CLI_DIR/cmds/internal/internal.sh"
+
+  run "$CLI_DIR/bin/$CLI_NAME" --profile=staging --cluster=prod internal
+  [ "$status" -eq 0 ] \
+    || { echo "exit=$status output=$output"; false; }
+  [[ "$output" == *"CLIFT_FLAGS[profile]=staging"* ]] \
+    || { echo "expected CLIFT_FLAGS[profile]=staging; got: $output"; false; }
+  [[ "$output" == *"CLIFT_FLAGS[cluster]=prod"* ]] \
+    || { echo "expected CLIFT_FLAGS[cluster]=prod; got: $output"; false; }
+  [[ "$output" == *"CLIFT_FLAG_PROFILE=staging"* ]] \
+    || { echo "expected CLIFT_FLAG_PROFILE=staging; got: $output"; false; }
+  [[ "$output" == *"CLIFT_FLAG_CLUSTER=prod"* ]] \
+    || { echo "expected CLIFT_FLAG_CLUSTER=prod; got: $output"; false; }
+}
+
+# --- 14. log shadow × wrapping help_detail override compose (S3) -----------
+
+# docs/cli/overrides.md promises that callback-slot bodies (help_list,
+# help_detail, …) automatically pick up log-shadow overrides. Prior to
+# the fix that lands alongside this test, that promise was silently
+# false for help_detail: detail.sh is exec'd as a fresh process and
+# never loaded the log slot, so a wrapping help_detail override that
+# called log_info observed the framework's default definition.
+#
+# This test composes:
+#   * a log-shadow override defining log_info with a [USER-INFO] marker
+#   * a wrapping help_detail override that calls log_info "rendering…"
+#     before delegating to the default
+# and asserts:
+#   1. the [USER-INFO] marker appears (the user's log_info fired, not
+#      the framework default — verifies log-slot load under detail.sh)
+#   2. the default help_detail body still renders (the wrap's delegate
+#      to "$default_fn" actually invokes the default, proving this is a
+#      wrap and not a replacement)
+@test "log shadow + wrapping help_detail override: user log_info fires and default body renders (S3)" {
+  CLIFT_PARITY_EXTRA_OVERRIDE_LOG='log_info() { printf "[USER-INFO] %s\n" "$*"; }' \
+  CLIFT_PARITY_EXTRA_OVERRIDE_HELP_DETAIL='clift_override_help_detail() {
+  local default_fn="$1" task="$2" cli_dir="$3"
+  log_info "rendering help for $task"
+  "$default_fn" "$task" "$cli_dir"
+}' \
+    setup_parity_cli
+
+  run "$CLI_DIR/bin/$CLI_NAME" deploy --help
+  [ "$status" -eq 0 ] \
+    || { echo "exit=$status output=$output"; false; }
+  # 1. User's shadowed log_info fired with its [USER-INFO] marker. If
+  # the log slot wasn't loaded in detail.sh, this would show the
+  # framework's default `→` prefix instead.
+  [[ "$output" == *"[USER-INFO] rendering help for deploy"* ]] \
+    || { echo "expected [USER-INFO] marker from shadowed log_info; got: $output"; false; }
+  # 2. Default help_detail body still rendered — the wrap delegated.
+  # The default emits the command header line and the flag rows.
+  [[ $'\n'"$output" == *$'\n'"$CLI_NAME deploy"* ]] \
+    || { echo "expected default help_detail header '$CLI_NAME deploy'; got: $output"; false; }
+  [[ "$output" == *"--json"* ]] \
+    || { echo "expected --json row in default help_detail body; got: $output"; false; }
+  [[ "$output" == *"--region"* ]] \
+    || { echo "expected --region row in default help_detail body; got: $output"; false; }
+}

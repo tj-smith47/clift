@@ -156,6 +156,19 @@ YAML
 #
 # Caller contract: CLI_DIR, CLI_NAME, CLI_VERSION, FRAMEWORK_DIR must be
 # set (common_setup establishes these).
+#
+# Optional env var knobs:
+#   CLIFT_PARITY_EXTRA_PERSISTENT — YAML list fragment (just the `- {…}`
+#     lines) appended to the PERSISTENT_FLAGS block so tests can exercise
+#     multi-persistent seams without re-inlining the fixture. Indent each
+#     line with FOUR spaces to match the block's two-space-under-vars
+#     indentation plus two-space list-item indent.
+#   CLIFT_PARITY_EXTRA_OVERRIDE_LOG — bash script body written to
+#     `.clift/overrides/log.sh` when set (composition seam for log-shadow
+#     × other overrides).
+#   CLIFT_PARITY_EXTRA_OVERRIDE_HELP_DETAIL — bash script body written to
+#     `.clift/overrides/help_detail.sh` when set (composition seam when
+#     log_info is shadowed AND help_detail wraps).
 setup_parity_cli() {
   # Root Taskfile — includes the framework's `_help` namespace so
   # `mycli --help` can dispatch to `_help:list` (wrapper line 200 / 516).
@@ -178,6 +191,7 @@ vars:
     - {name: version, type: bool, desc: "Version"}
   PERSISTENT_FLAGS:
     - {name: profile, type: string, default: "dev", desc: "Profile"}
+${CLIFT_PARITY_EXTRA_PERSISTENT:-}
 includes:
   _help:
     taskfile: '${FRAMEWORK_DIR}/lib/help'
@@ -295,6 +309,18 @@ clift_complete_deploy_region() {
   printf '%s\n' us-east-1 us-west-2 eu-central-1
 }
 SH
+
+  # Optional overrides written only when the caller sets the knob env vars.
+  # Body is passed verbatim so callers can include whatever override
+  # functions they need (log shadow, help_detail wrap, etc.).
+  if [[ -n "${CLIFT_PARITY_EXTRA_OVERRIDE_LOG:-}" ]]; then
+    printf '%s\n' "$CLIFT_PARITY_EXTRA_OVERRIDE_LOG" \
+      > "$CLI_DIR/.clift/overrides/log.sh"
+  fi
+  if [[ -n "${CLIFT_PARITY_EXTRA_OVERRIDE_HELP_DETAIL:-}" ]]; then
+    printf '%s\n' "$CLIFT_PARITY_EXTRA_OVERRIDE_HELP_DETAIL" \
+      > "$CLI_DIR/.clift/overrides/help_detail.sh"
+  fi
 
   bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$CLI_DIR"
   build_test_wrapper
