@@ -31,14 +31,17 @@
 - [Modes](#modes)
 - [Creating Commands](#creating-commands)
 - [Argument Parsing](#argument-parsing)
-- [Global Flags](#global-flags)
 - [Configuration](#configuration)
+- [Global Flags](#global-flags)
 - [Logging](#logging)
 - [Shell Completions](#shell-completions)
 - [Team Setup](#team-setup)
 - [Updating](#updating)
 - [Versioning](#versioning)
 - [cfgd Integration](#cfgd-integration)
+- [Example](#example)
+- [Error UX](#error-ux)
+- [Development](#development)
 - [License](#license)
 
 ## Quick Start
@@ -180,7 +183,7 @@ if [[ "${CLIFT_FLAG_FORCE:-}" == "true" ]]; then ...
 file="${CLIFT_POS_1:?missing file}" # positional args
 ```
 
-See [docs/flags.md](docs/flags.md) for the full schema and [docs/scripts.md](docs/scripts.md) for the env var contract.
+See [docs/flags.md](docs/flags.md) for the full schema, [docs/scripts.md](docs/scripts.md) for the env var contract, and [docs/cache.md](docs/cache.md) for how `--no-cache` / `CLIFT_CACHE=rebuild|bypass` control the compiled `.clift/` cache.
 
 ## Configuration
 
@@ -293,13 +296,21 @@ LOG_CLR_DIM=\033[38;2;108;112;134m
 
 ## Shell Completions
 
+Bash and zsh completion is wired automatically at `setup:cli` time and again when the framework is updated. The generated script is cache-derived, so subcommand and flag candidates stay in sync with your Taskfiles without a rebuild step.
+
 ```bash
-# Bash (add to ~/.bashrc)
+# Bash (add to ~/.bashrc — setup:cli does this for you)
 eval "$(mycli completion bash)"
 
-# Zsh (add to ~/.zshrc)
+# Zsh (add to ~/.zshrc — setup:cli does this for you)
 eval "$(mycli completion zsh)"
 ```
+
+`mycli --help` prints a one-line install hint when the completion script is not sourced in the current shell, so new users can't miss it.
+
+For flag **values** that are only known at runtime (regions, kube contexts, branches), drop a `clift_complete_<task>_<flag>` function into `$CLI_DIR/.clift/overrides/completion.sh` (or per-command under `cmds/<cmd>/overrides/completion.sh`) and clift wires it automatically — no schema change.
+
+See [docs/cli/completion.md](docs/cli/completion.md) for the setup-time installer, static-candidate rules, and dynamic flag-value completers.
 
 ## Team Setup
 
