@@ -22,7 +22,19 @@
 #
 # Public API: clift_call_override is the sole public entry point. The loader
 # (_clift_load_override) is internal — direct callers rarely need the raw
-# loader, and exposing it invites "wrong function called" footguns.
+# loader, and exposing it invites "wrong function called" footguns. The
+# log-slot prelude at `lib/runtime/prelude.sh` is the one sanctioned internal
+# caller of `_clift_load_override`: the shadow-based log slot cannot route
+# through `clift_call_override` (which is a callback dispatcher) and so the
+# prelude loads the override file directly.
+#
+# Process-lifetime assumption: the probe-cache vars `_CLIFT_CMD_OV_<seg>` and
+# `_CLIFT_CLI_OV` (below) are populated lazily and never cleared. That is
+# safe because the router `exec`s a fresh `bash` per dispatch — every
+# invocation starts with an empty cache. If a future refactor lets one shell
+# handle multiple dispatches back-to-back, these caches must be reset
+# between dispatches (they would otherwise carry a stale view of the
+# overrides directory layout across dispatches to different commands).
 #
 # Dynamic flag completers use a different, user-keyed prefix
 # (clift_complete_<task>_<flag>) and are documented separately.

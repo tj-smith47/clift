@@ -162,7 +162,11 @@ fi
 # Fast-path: skip the scan entirely when the token isn't present in argv.
 # Keeps the locals out of script scope in the common case (one string match,
 # no fork) and limits the full loop to invocations that actually need it.
-if [[ "$*" == *--no-cache* ]]; then
+# Boundary-anchored match — bare `*--no-cache*` would false-positive on an
+# unrelated user flag like `--no-cache-clear`, forcing the full scan for
+# nothing. Surround $* with spaces so the match windows are word-bounded
+# on both sides.
+if [[ " $* " == *" --no-cache "* || " $* " == *" --no-cache="* ]]; then
   _nc_new_args=()
   _nc_saw_terminator=0
   for _nc_a in "$@"; do
@@ -363,6 +367,12 @@ fi
 
 # Build persistent-flag lookup tables. Empty list is the common case and costs
 # essentially nothing (one empty read).
+#
+# The `[[ -z "$_pname" ]] && continue` guard handles the trailing empty line
+# produced by the `<<<` herestring (bash appends a newline to $persistent_tsv
+# so even when jq emits no records the read fires once with empty fields).
+# It also silently tolerates any future blank-line record from the jq
+# producer — don't remove it.
 declare -A _persist_type _persist_name_by_short
 _persist_any=0
 while IFS=$'\x01' read -r _pname _pshort _ptype; do

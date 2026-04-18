@@ -169,6 +169,9 @@ other function.
 `.clift/overrides/log.sh`:
 
 ```bash
+# Redefine helpers only — no top-level code (see "Definitions only" below).
+# Subshells spawned by your command scripts inherit these automatically; see
+# "Subshell inheritance — the export caveat" below for the caveat.
 log_info() { printf '[INFO ] %s\n' "$*"; }
 log_warn() { printf '[WARN ] %s\n' "$*" >&2; }
 ```

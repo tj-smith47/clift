@@ -153,5 +153,5 @@ clift_exit() {
 # subshell output matches parent styling instead of falling through to the
 # default case. Internal names are CLIFT_-prefixed to avoid colliding with
 # variables defined inside user scripts.
-export -f log_info log_error log_warn log_success log_debug log_suggest die clift_exit _clift_log_format 2>/dev/null || true
+export -f log_info log_error log_warn log_success log_debug log_suggest die clift_exit _clift_log_format
 export CLIFT_LOG_THEME CLIFT_CLR_RESET CLIFT_CLR_GREEN CLIFT_CLR_YELLOW CLIFT_CLR_RED CLIFT_CLR_BLUE CLIFT_CLR_CYAN CLIFT_CLR_DIM
