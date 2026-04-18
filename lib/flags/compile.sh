@@ -30,6 +30,13 @@ fi
 source "$SCRIPT_DIR/../check/deps.sh"
 clift_check_deps_full
 
+# Shared alias-filter jq defs (strip_ns, is_user_surfaceable_alias).
+# Used by both the duplicate-alias clash check and the user_aliases
+# precomputation below. Kept in lib/flags/ because aliases are a
+# compile-pipeline concept; lib/help/detail.sh sources the same file.
+# shellcheck source=./alias_filter.sh
+source "$SCRIPT_DIR/alias_filter.sh"
+
 mkdir -p "$CACHE_DIR"
 
 trap 'rm -f "${CACHE_DIR}/tasks.json.tmp" "${CACHE_DIR}/flags.json.tmp" "${CACHE_DIR}/index.json.tmp" "${CACHE_DIR}/checksum.tmp" "${CACHE_DIR}/entries.tmp" "${CACHE_DIR}/sources.tmp"' EXIT
@@ -63,20 +70,15 @@ all_tasks_json="$(jq '[.. | .tasks? // empty | .[]]' "${CACHE_DIR}/tasks.json")"
 # after stripping, still contains `:`, equal to the canonical itself — none
 # reach the wrapper's first-token substitution table so they can't collide
 # there either.
-_alias_clash_msg="$(jq -r '
+_alias_clash_msg="$(jq -r "$CLIFT_ALIAS_FILTER_JQ_DEFS"'
   [ .[]
     | select(.name | test("^_|:_") | not)
     | . as $task
     | ($task.name | sub(":default$"; "")) as $canonical
     | ($task.name | capture("^(?<ns>.*):[^:]+$").ns // "") as $ns
     | ($task.aliases // [])[] as $a
-    | (if ($ns != "" and ($a | startswith($ns + ":")))
-       then ($a | ltrimstr($ns + ":"))
-       else $a
-       end) as $user_alias
-    | select($user_alias != ""
-             and ($user_alias | contains(":") | not)
-             and $user_alias != $canonical)
+    | strip_ns($ns; $a) as $user_alias
+    | select(is_user_surfaceable_alias($user_alias; $canonical))
     | { alias: $user_alias, canonical: $canonical }
   ]
   | group_by(.alias)
@@ -118,7 +120,7 @@ fi
 # `watch:foo` (canonical is `watch:foo`, never `watch`) is fine because
 # the wrapper's rewrite matches `[[ "$1" == "watch" ]]` and a single token
 # containing a colon doesn't match.
-_reserved_msg="$(jq -r '
+_reserved_msg="$(jq -r "$CLIFT_ALIAS_FILTER_JQ_DEFS"'
   ["watch", "_complete"] as $reserved |
   [ .[]
     | select(.name | test("^_|:_") | not)
@@ -133,11 +135,12 @@ _reserved_msg="$(jq -r '
          then "error: command \u0027\($canonical)\u0027 is a reserved top-level token (rewritten to --task:\($canonical) by the wrapper; rename to avoid silent shadowing)"
          else empty end),
         # User-alias violation: any alias that, after namespace stripping,
-        # becomes a reserved bare top-level token.
+        # becomes a reserved bare top-level token. Re-uses strip_ns from the
+        # shared alias-filter prelude; the predicate diverges from
+        # is_user_surfaceable_alias because reserved-ness replaces the
+        # "not equal to canonical" rule.
         ( ($task.aliases // [])[]
-          | (if ($ns != "" and startswith($ns + ":"))
-             then ltrimstr($ns + ":")
-             else . end) as $user_alias
+          | strip_ns($ns; .) as $user_alias
           | select($user_alias != ""
                    and ($user_alias | contains(":") | not)
                    and ($reserved | index($user_alias)))
@@ -363,21 +366,20 @@ while IFS=$'\x01' read -r -d '' task_name source_tf aliases_json summary; do
   #   - shadowed by an existing top-level command (`mycli <alias>` would run
   #     the real command, never the canonical — keeping the shadow in
   #     `user_aliases` lies in `--help` / completion)
+  # The first three are the shared is_user_surfaceable_alias predicate from
+  # lib/flags/alias_filter.sh; the fourth (shadow check) composes on top
+  # at this call site because it needs the cross-task command-segment list.
   # Doing this once at compile time removes 5 duplicated jq blocks at runtime.
   user_aliases_json="$(jq -c \
     --arg task_name "$task_name" \
     --argjson cmd_segs "$canonical_first_segs" \
-    '
+    "$CLIFT_ALIAS_FILTER_JQ_DEFS"'
     ($task_name | sub(":default$"; "")) as $canonical |
     ($task_name | capture("^(?<ns>.*):[^:]+$").ns // "") as $ns |
     [ .[]
-      | (if ($ns != "" and startswith($ns + ":"))
-         then ltrimstr($ns + ":")
-         else . end) as $a
+      | strip_ns($ns; .) as $a
       | select(
-          $a != ""
-          and ($a | contains(":") | not)
-          and $a != $canonical
+          is_user_surfaceable_alias($a; $canonical)
           and ($cmd_segs | index($a)) == null
         )
       | $a

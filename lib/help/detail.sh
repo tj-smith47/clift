@@ -11,6 +11,13 @@ set -euo pipefail
 # shellcheck source=render_flags.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/render_flags.sh"
 
+# Shared alias-filter jq defs — consumed by the tasks.json fallback below.
+# Canonical home is lib/flags/ because compile.sh owns alias preparation;
+# detail.sh re-uses the same predicate when rendering aliases for
+# framework-lib commands whose entries don't live in index.json.
+# shellcheck source=../flags/alias_filter.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/flags/alias_filter.sh"
+
 COMMAND="${1:-}"
 TASKFILE_PATH="${2:-}"
 
@@ -98,25 +105,23 @@ _clift_help_detail_default() {
     ' "$index_json_path" 2>/dev/null)"
   fi
   if [[ -z "$aliases_csv" ]] && [[ -f "$tasks_json_path" ]]; then
+    # Uses strip_ns + is_user_surfaceable_alias from alias_filter.sh. The
+    # shadow-by-top-level-command drop that compile.sh's user_aliases pass
+    # applies on top is intentionally NOT mirrored here: framework-lib
+    # commands (the only consumers of this fallback) are curated so
+    # shadow collisions don't arise in practice, and we don't have
+    # `$cmd_segs` handy at this layer.
     aliases_csv="$(jq -r \
       --arg cmd "${command}:default" \
-      --arg cmd2 "$command" '
-      def strip_ns($ns; $a):
-        if $ns != "" and ($a | startswith($ns + ":"))
-        then ($a | ltrimstr($ns + ":"))
-        else $a
-        end;
+      --arg cmd2 "$command" \
+      "$CLIFT_ALIAS_FILTER_JQ_DEFS"'
       [.. | .tasks? // empty | .[]
         | select(.name == $cmd or .name == $cmd2)
         | (.name | sub(":default$"; "")) as $disp
         | (.name | capture("^(?<ns>.*):[^:]+$").ns // "") as $ns
         | (.aliases // [])[]
         | strip_ns($ns; .) as $a
-        | select(
-            $a != ""
-            and ($a | contains(":") | not)
-            and $a != $disp
-          )
+        | select(is_user_surfaceable_alias($a; $disp))
         | $a
       ] | unique | join(", ")
     ' "$tasks_json_path" 2>/dev/null)"
