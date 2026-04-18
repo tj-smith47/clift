@@ -13,9 +13,13 @@
 # the "minimize forks on the hot path" convention. See
 # .claude/plans/2026-04-14-cobra-parity-and-overrides.md Task 6.4.
 #
-# Note: requires GNU date (`date +%s%N` nanosecond resolution). macOS users
-# need coreutils (`brew install coreutils`) or this will fall back to
-# garbage timings. Most developers here are on Linux.
+# Note: requires GNU date (`date +%s%N` nanosecond resolution). On macOS
+# the stock BSD `date` returns `%N` literally (e.g. `1731023456N`), which
+# corrupts every measurement and would silently invalidate the bench. The
+# DATE_BIN detection below picks GNU `date` if it's on PATH, falls back to
+# `gdate` (Homebrew coreutils), and bails loud if neither is available —
+# downgrading to millisecond resolution would lose discriminating power
+# against the 58ms ceiling, so fail-fast is the right call.
 #
 # Usage: scripts/benchmark.sh [iterations]
 set -euo pipefail
@@ -23,6 +27,25 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 FRAMEWORK_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 ITERATIONS="${1:-20}"
+
+# --- nanosecond-precision date detection -------------------------------------
+# Pick a `date` binary whose `+%s%N` output is digits-only (GNU date).
+# BSD date (stock macOS) returns e.g. `1731023456N` — rejected. On macOS,
+# `gdate` from `brew install coreutils` is the standard remedy.
+_bench_probe_date() {
+  local bin="$1" out
+  command -v "$bin" >/dev/null 2>&1 || return 1
+  out="$("$bin" +%s%N 2>/dev/null)" || return 1
+  [[ "$out" =~ ^[0-9]+$ ]]
+}
+if _bench_probe_date date; then
+  DATE_BIN="date"
+elif _bench_probe_date gdate; then
+  DATE_BIN="gdate"
+else
+  echo "error: benchmark.sh requires GNU date (install coreutils on macOS) or gdate on PATH" >&2
+  exit 2
+fi
 
 # compile.sh is an order of magnitude slower than the other stages (jq +
 # task --list-all). Running it ITERATIONS times for the cold-cache section
@@ -106,10 +129,11 @@ _median_ms() {
   sort -n "$f" | awk -v m="$mid" 'NR==m { print; exit }'
 }
 
-# _time_ns — prints current time in nanoseconds. GNU date only; macOS
-# users need coreutils `gdate` or the result is meaningless (BSD date's
-# `%N` literal trips here).
-_time_ns() { date +%s%N; }
+# _time_ns — prints current time in nanoseconds via the GNU date binary
+# selected at the top of the script (DATE_BIN is `date` on Linux, `gdate`
+# on macOS with coreutils). The top-of-script probe guarantees the binary
+# returns digits-only output; BSD `date` would have already aborted us.
+_time_ns() { "$DATE_BIN" +%s%N; }
 
 # _run_stage <label> <iters> <sample_file> -- <cmd...>
 # Runs <cmd...> in a loop and appends per-iteration ms to <sample_file>.
