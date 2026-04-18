@@ -118,7 +118,13 @@ else
 fi
 
 # Step 6: Passthrough — if the task has no FLAG declarations, exec the script
-# directly with positional argv. No parser, no CLIFT_FLAG_* env vars.
+# directly with positional argv. No parser, no CLIFT_FLAG_* env vars from a
+# parsed table — but the wrapper may have already exported persistent-flag
+# env vars (CLIFT_FLAG_<NAME>) and advertised them via CLIFT_PERSIST_BOUND.
+# Mirror those into a minimal CLIFT_FLAGS_FILE so the prelude can populate
+# the CLIFT_FLAGS assoc array; otherwise ${CLIFT_FLAGS[profile]} is empty in
+# passthrough scripts even though CLIFT_FLAG_PROFILE is set, contradicting
+# docs/flags.md ("Persistent flags are accessible via the same … machinery").
 if [[ "$merged_table" == '"PASSTHROUGH"' ]] || [[ "$merged_table" == "PASSTHROUGH" ]]; then
   source "${FRAMEWORK_DIR}/lib/log/log.sh"
   local_namespace="${TASK_NAME%%:*}"
@@ -127,6 +133,27 @@ if [[ "$merged_table" == '"PASSTHROUGH"' ]] || [[ "$merged_table" == "PASSTHROUG
     log_error "Unknown command: ${local_namespace}"
     exit "$EXIT_NOT_FOUND"
   fi
+
+  # Emit a minimal CLIFT_FLAGS_FILE for the persistent flags the wrapper
+  # bound. Only writes the file when at least one persistent flag is
+  # advertised — no work, no orphan tempfile when CLIFT_PERSIST_BOUND is
+  # empty/unset. The prelude unlinks this file after reading; the EXIT trap
+  # below covers the failure path where we exit before reaching `exec`.
+  if [[ -n "${CLIFT_PERSIST_BOUND:-}" ]]; then
+    CLIFT_FLAGS_FILE="$(mktemp)"
+    export CLIFT_FLAGS_FILE
+    trap 'rm -f "$CLIFT_FLAGS_FILE"' EXIT
+    for _passthrough_pname in $CLIFT_PERSIST_BOUND; do
+      _passthrough_upper="${_passthrough_pname^^}"
+      _passthrough_var="CLIFT_FLAG_${_passthrough_upper//-/_}"
+      # Skip names whose env var is unset — defensive, but the wrapper
+      # only registers names it actually exports.
+      [[ -z "${!_passthrough_var+x}" ]] && continue
+      printf '%s=%s\0' "$_passthrough_pname" "${!_passthrough_var}" >> "$CLIFT_FLAGS_FILE"
+    done
+    unset _passthrough_pname _passthrough_upper _passthrough_var
+  fi
+
   # Pre-hook: fires before the user script on the passthrough path.
   clift_run_command_pre "$TASK_NAME"
   exec bash "${FRAMEWORK_DIR}/lib/runtime/exec.sh" "$script_path" "${args[@]+"${args[@]}"}"

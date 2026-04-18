@@ -389,3 +389,32 @@ SH
   [[ -f "$CLI_DIR/deploy.out" ]] \
     || { echo "deploy.out missing from baseline run — fixture is broken"; false; }
 }
+
+# --- 9. persistent flag visible in CLIFT_FLAGS on PASSTHROUGH (I1) ---------
+
+# `internal` is a passthrough command (vars.FLAGS: []). Without the router's
+# passthrough-side CLIFT_FLAGS_FILE emit, the wrapper's persistent-flag
+# bind exports CLIFT_FLAG_PROFILE but the prelude's CLIFT_FLAGS assoc array
+# stays empty, contradicting docs/flags.md ("Persistent flags are accessible
+# via the same CLIFT_FLAG_<NAME> / ${CLIFT_FLAGS[name]} machinery as
+# per-command flags"). This test pins the assoc-array exposure.
+@test "persistent flag visible in CLIFT_FLAGS on passthrough command (I1)" {
+  _setup_parity_cli
+  # Replace internal.sh with one that asserts on CLIFT_FLAGS[profile].
+  cat > "$CLI_DIR/cmds/internal/internal.sh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "CLIFT_FLAGS[profile]=${CLIFT_FLAGS[profile]:-UNSET}"
+echo "CLIFT_FLAG_PROFILE=${CLIFT_FLAG_PROFILE:-UNSET}"
+SH
+  chmod +x "$CLI_DIR/cmds/internal/internal.sh"
+
+  run "$CLI_DIR/bin/$CLI_NAME" --profile=staging internal
+  [ "$status" -eq 0 ] \
+    || { echo "exit=$status output=$output"; false; }
+  [[ "$output" == *"CLIFT_FLAGS[profile]=staging"* ]] \
+    || { echo "expected CLIFT_FLAGS[profile]=staging on passthrough; got: $output"; false; }
+  # Belt-and-suspenders: legacy env var path keeps working too.
+  [[ "$output" == *"CLIFT_FLAG_PROFILE=staging"* ]] \
+    || { echo "expected CLIFT_FLAG_PROFILE=staging; got: $output"; false; }
+}
