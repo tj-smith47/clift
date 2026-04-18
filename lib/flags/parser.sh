@@ -32,6 +32,12 @@ _clift_var_name() {
 # parallel map) and emit just those.
 _clift_emit_flags_file() {
   [[ -z "${CLIFT_FLAGS_FILE:-}" ]] && return 0
+  # Skip when the router will intercept before the prelude runs — the file
+  # would be written and abandoned (--help execs into help/detail.sh which
+  # never reads CLIFT_FLAGS_FILE; --version exits before the prelude).
+  if [[ "${CLIFT_FLAG_HELP:-}" == "true" || "${CLIFT_FLAG_VERSION:-}" == "true" ]]; then
+    return 0
+  fi
   local _en _etype _evar _ecount_var _ecount _ei _eval _ejoined _eitem_var
   : > "$CLIFT_FLAGS_FILE"
   for _en in "${!_ft_type[@]}"; do

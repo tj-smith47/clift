@@ -186,6 +186,14 @@ fi
 
 if [[ "${CLIFT_FLAG_HELP:-}" == "true" ]]; then
   local_namespace="${TASK_NAME%%:*}"
+  # `exec` replaces the process and skips the EXIT trap, so the tempfiles
+  # registered above would otherwise leak per --help invocation. Clean them
+  # explicitly before handing off, and unset CLIFT_FLAGS_FILE so detail.sh
+  # cannot see a dangling path. (Belt-and-suspenders with the parser-side
+  # skip in _clift_emit_flags_file: even if that emit ever runs again, the
+  # rm -f here keeps /tmp clean.)
+  rm -f "$tmp_table" "$CLIFT_FLAGS_FILE"
+  unset CLIFT_FLAGS_FILE
   exec bash "${FRAMEWORK_DIR}/lib/help/detail.sh" "$TASK_NAME" "$CLI_DIR/Taskfile.yaml"
 fi
 

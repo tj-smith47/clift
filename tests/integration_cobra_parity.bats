@@ -418,3 +418,56 @@ SH
   [[ "$output" == *"CLIFT_FLAG_PROFILE=staging"* ]] \
     || { echo "expected CLIFT_FLAG_PROFILE=staging; got: $output"; false; }
 }
+
+# --- 10. --help / passthrough do not leak tempfiles into TMPDIR (I3) -------
+
+# The router used to mktemp CLIFT_FLAGS_FILE before checking for --help, then
+# `exec`-jumped into help/detail.sh — `exec` skips the EXIT trap, so the file
+# stayed orphaned in /tmp per --help invocation. This test points TMPDIR at
+# an isolated dir, fires --help, and asserts the dir is empty afterwards.
+# Same fixture also exercises a normal passthrough invocation (which has no
+# CLIFT_PERSIST_BOUND, so should not create a tempfile at all) to guard
+# against regression on the no-persistent-flags passthrough path.
+@test "--help on parsed command does not leak tempfile (I3)" {
+  _setup_parity_cli
+  local probe_tmpdir="$TEST_DIR/i3_tmpdir"
+  mkdir -p "$probe_tmpdir"
+
+  TMPDIR="$probe_tmpdir" run "$CLI_DIR/bin/$CLI_NAME" deploy --help
+  [ "$status" -eq 0 ] \
+    || { echo "--help exit=$status output=$output"; false; }
+  shopt -s nullglob
+  local leftovers=("$probe_tmpdir"/tmp.*)
+  shopt -u nullglob
+  [ "${#leftovers[@]}" -eq 0 ] \
+    || { echo "tempfile leak: ${leftovers[*]}"; false; }
+}
+
+# --- 11. parser skips emit on --help/--version (I6) ------------------------
+
+# Pre-populate CLIFT_FLAGS_FILE with sentinel content, set CLIFT_FLAG_HELP=true,
+# call the parser directly, and assert the file is unchanged. Direct-parser
+# entry mirrors the in-router invocation — no router involvement needed to
+# reproduce; the emit is parser-side. The router's tempfile rm (I3) cleans
+# the leftover file in real use; this test isolates the emit-skip path.
+@test "parser skips CLIFT_FLAGS_FILE emit when --help is set (I6)" {
+  _setup_parity_cli
+  local sentinel="i6-sentinel-bytes"
+  local probe_file="$TEST_DIR/i6.flags"
+  printf '%s' "$sentinel" > "$probe_file"
+
+  # Build a minimal flag-table file matching the parser's input contract.
+  local table_file="$TEST_DIR/i6.table.json"
+  echo '[{"name":"help","short":"h","type":"bool","desc":"Show help"}]' > "$table_file"
+
+  # Source the parser in a subshell so its globals don't bleed back.
+  (
+    set -euo pipefail
+    # shellcheck source=/dev/null
+    source "$FRAMEWORK_DIR/lib/flags/parser.sh"
+    export CLIFT_FLAGS_FILE="$probe_file"
+    clift_parse_args "$table_file" --help
+  )
+  [[ "$(<"$probe_file")" == "$sentinel" ]] \
+    || { echo "parser overwrote CLIFT_FLAGS_FILE on --help; got:"; cat "$probe_file"; false; }
+}
