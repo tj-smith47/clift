@@ -71,8 +71,8 @@ keeps user code decoupled from the framework's internal function names.
 | `help_detail` | `lib/help/detail.sh` | `clift_override_help_detail <default_fn> <task_name> <CLI_DIR>` | Per-command `mycli <cmd> --help` detail view. Per-command tier (`cmds/<cmd>/overrides/help_detail.sh`) takes precedence over CLI-global. |
 | `version_print` | `lib/wrapper/wrapper.sh.tmpl`, `lib/router/router.sh`, `lib/version/version.sh` | `clift_override_version_print <default_fn> <CLI_NAME> <CLI_VERSION> <CLI_DIR>` | Controls the line printed by `mycli --version`, `mycli -V`, and the framework's `mycli version` subcommand. The framework default is `clift_default_version_print`, which prints `"<CLI_NAME> version <CLI_VERSION>"`. Override only replaces that one line — the `version` subcommand's cfgd-status block still follows (see [cfgd-status interleaving](#cfgd-status-interleaving) below). |
 | `log` | `lib/log/log.sh` | **shadow-based** — see [Logging slot](#logging-slot-shadow-based-exception) below | Sourced by the prelude AFTER `lib/log/log.sh`. The user redefines any of `log_info`, `log_error`, `log_warn`, `log_success`, `log_debug` directly. **Does not use the `clift_override_<slot>` callback signature.** Per-command tier (`cmds/<cmd>/overrides/log.sh`) takes precedence. |
-| `command_pre` | `lib/router/router.sh` (pre-exec hook) | `clift_override_command_pre <default_fn> <task_name>` | Fires after parsing / intercepts, before the user script runs. Non-zero exit aborts the command with that code (the script and `command_post` do NOT run). Has access to `CLIFT_FLAG_*` env vars and `CLIFT_TASK`. Per-command tier applies. |
-| `command_post` | `lib/runtime/exec.sh` (EXIT trap) | `clift_override_command_post <default_fn> <task_name> <script_exit_code>` | Fires via EXIT trap in the script's process with the script's rc in `$3`; SIGINT delivers `130`, SIGTERM delivers `143` (explicit INT/TERM handlers stash the canonical signal rc before the EXIT trap runs — bash's default EXIT trap observes `$?=0` when a signal interrupts `source user_script` mid-run). If the user script installs its own `trap … INT` or `trap … TERM`, that replaces the framework handler per bash's last-trap-wins rule — the post-hook then receives whatever rc the user's handler exits with. Has access to `CLIFT_FLAGS` (the assoc array), `CLIFT_FLAG_*` env vars, and any env the script set. Cannot change the script's exit code — if the override exits non-zero (e.g. an uncaught `set -e` bailout), that rc is **suppressed** so the script's own rc always wins the process exit, but the suppression is surfaced at `log_debug` level (visible with `VERBOSE=true` / `-v` / `--verbose`) so a broken post-hook is still debuggable. Per-command tier applies. |
+| `command_pre` | `lib/router/router.sh` (pre-exec hook) | `clift_override_command_pre <default_fn> <task_name>` | Fires after parsing / intercepts, before the user script runs. Non-zero exit aborts the command with that code (the script and `command_post` do NOT run). Has access to `CLIFT_FLAG_*` env vars and `CLIFT_TASK`. On passthrough commands (no `vars.FLAGS` declaration) the parser never runs, so `CLIFT_FLAG_*` and `CLIFT_FLAGS` reflect ONLY wrapper-bound persistent flags — per-command flags are absent because none are declared. Per-command tier applies. |
+| `command_post` | `lib/runtime/exec.sh` (EXIT trap) | `clift_override_command_post <default_fn> <task_name> <script_exit_code>` | Fires via EXIT trap in the script's process with the script's rc in `$3`; SIGINT delivers `130`, SIGTERM delivers `143` (explicit INT/TERM handlers stash the canonical signal rc before the EXIT trap runs — bash's default EXIT trap observes `$?=0` when a signal interrupts `source user_script` mid-run). If the user script installs its own `trap … INT` or `trap … TERM`, that replaces the framework handler per bash's last-trap-wins rule — the post-hook then receives whatever rc the user's handler exits with. Has access to `CLIFT_FLAGS` (the assoc array), `CLIFT_FLAG_*` env vars, and any env the script set. On passthrough commands (no `vars.FLAGS` declaration) the parser never runs, so `CLIFT_FLAGS` and `CLIFT_FLAG_*` reflect ONLY wrapper-bound persistent flags — per-command flags are absent because none are declared. Cannot change the script's exit code — if the override exits non-zero (e.g. an uncaught `set -e` bailout), that rc is **suppressed** so the script's own rc always wins the process exit, but the suppression is surfaced at `log_debug` level (visible with `VERBOSE=true` / `-v` / `--verbose`) so a broken post-hook is still debuggable. Per-command tier applies. |
 
 #### cfgd-status interleaving
 
@@ -146,6 +146,37 @@ cannot change the exit code — the script's code wins regardless.
 targets. If you need sub-second timing, `$EPOCHREALTIME` (bash 5.0+) is
 an option — but clift's documented floor is bash 4.2, so the portable
 recipe uses `date`.
+
+### Example: gate a command on a precondition
+
+`command_pre` non-zero exit aborts the command with that code — the user
+script never runs and `command_post` is NOT invoked (the router raises the
+abort before handing off to the script process, so the EXIT trap that
+would otherwise fire `command_post` never arms). Use this to enforce a
+precondition before the command runs.
+
+`.clift/overrides/command_pre.sh`:
+
+```bash
+clift_override_command_pre() {
+  local default_fn="$1" task="$2"
+  if [[ "$task" == "deploy:prod" && -z "${PROD_DEPLOY_OK:-}" ]]; then
+    clift_exit 2 "deploy:prod requires PROD_DEPLOY_OK=1 in env"
+  fi
+  "$default_fn" "$task"
+}
+```
+
+When the gate trips:
+
+- stderr shows `error: deploy:prod requires PROD_DEPLOY_OK=1 in env`
+  (via `clift_exit`, which prefixes `error:` and writes to stderr);
+- exit code is `2`;
+- the user script and any `command_post` override do NOT run.
+
+Prefer `clift_exit <code> <msg>` over `return <code>` when you want a
+visible stderr diagnostic — bare `return N` from the override produces
+the same abort code but no message, so the user sees silent failure.
 
 ## Logging slot (shadow-based exception)
 
