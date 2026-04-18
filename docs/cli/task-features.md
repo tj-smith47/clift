@@ -144,7 +144,9 @@ mycli watch deploy --force     # equivalent to: mycli --task:watch deploy --forc
 mycli watch                    # error: watch requires a command
 ```
 
-The reservation only matches a literal `watch` as the first argv token — a nested namespace like `watch:foo` (single token containing a colon) is unaffected and dispatches normally. A user-defined command literally named `watch` at the top level would collide; rename it (e.g., `watcher`, `monitor`) to avoid the conflict.
+The reservation only matches a literal `watch` as the first argv token — a nested namespace like `watch:foo` (single token containing a colon) is unaffected and dispatches normally.
+
+A user-defined command literally named `watch` at the top level (or an alias resolving to the bare token `watch`) would collide silently — the wrapper's rewrite fires before the cache is even loaded. The framework rejects this at compile time (`new:cmd` / `setup:cli` / cache rebuild) with a hard error so you find out at scaffold time, not at the next `mycli watch <cmd>` invocation. Rename to `watcher`, `monitor`, etc. to avoid the conflict. The same rule applies to the hidden `_complete` token, though the framework's existing `^_` task-name filter already prevents it from being declared.
 
 ### Position rules
 

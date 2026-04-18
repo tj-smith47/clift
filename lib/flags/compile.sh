@@ -94,6 +94,64 @@ if [[ -n "$_alias_clash_msg" ]]; then
   exit 1
 fi
 
+# Reserved-token check (branch-review I4). Top-level tokens that the wrapper
+# claims for itself can't be reused as user command names or first-token
+# aliases — the wrapper would silently shadow the user's command and they'd
+# wonder why their script never ran. Reject at compile time with a clear
+# error so the conflict surfaces during `setup:cli` / `new:cmd` instead of
+# at the next `mycli watch <user-cmd>` invocation.
+#
+# Reserved set:
+#   watch     — rewritten to `--task:watch` by wrapper.sh.tmpl (the bare
+#               first-token alias documented in docs/cli/task-features.md).
+#   _complete — hidden tab-completion dispatch. Already filtered by the
+#               `^_` rule below, but listed here so the rejection is
+#               explicit and the error message is informative if a future
+#               filter change ever lets it through.
+#
+# `help` is intentionally NOT reserved: the wrapper's `help <cmd>` rewrite
+# already guards with `! _is_task_prefix "help"`, so a user-defined `help`
+# command wins. That guard runs after the cache load — it can't be applied
+# to `watch`, which fires before the cache is read.
+#
+# Scope: only the BARE top-level token. A nested namespace like
+# `watch:foo` (canonical is `watch:foo`, never `watch`) is fine because
+# the wrapper's rewrite matches `[[ "$1" == "watch" ]]` and a single token
+# containing a colon doesn't match.
+_reserved_msg="$(jq -r '
+  ["watch", "_complete"] as $reserved |
+  [ .[]
+    | select(.name | test("^_|:_") | not)
+    | . as $task
+    | ($task.name | sub(":default$"; "")) as $canonical
+    | ($task.name | capture("^(?<ns>.*):[^:]+$").ns // "") as $ns
+    | (
+        # Canonical-name violation: the bare top-level token IS reserved.
+        # Triggered by a root-level task named `watch` or a `watch:default`
+        # namespace task.
+        (if ($canonical | contains(":") | not) and ($reserved | index($canonical))
+         then "error: command \u0027\($canonical)\u0027 is a reserved top-level token (rewritten to --task:\($canonical) by the wrapper; rename to avoid silent shadowing)"
+         else empty end),
+        # User-alias violation: any alias that, after namespace stripping,
+        # becomes a reserved bare top-level token.
+        ( ($task.aliases // [])[]
+          | (if ($ns != "" and startswith($ns + ":"))
+             then ltrimstr($ns + ":")
+             else . end) as $user_alias
+          | select($user_alias != ""
+                   and ($user_alias | contains(":") | not)
+                   and ($reserved | index($user_alias)))
+          | "error: alias \u0027\($user_alias)\u0027 on \u0027\($canonical)\u0027 is a reserved top-level token (rewritten to --task:\($user_alias) by the wrapper; rename to avoid silent shadowing)"
+        )
+      )
+  ]
+  | .[0] // ""
+' <<< "$all_tasks_json")"
+if [[ -n "$_reserved_msg" ]]; then
+  echo "$_reserved_msg" >&2
+  exit 1
+fi
+
 # Skip framework-internal taskfiles — their location.taskfile lives under
 # FRAMEWORK_DIR. The `:-__nomatch__` fallback keeps us safe under `set -u`
 # when FRAMEWORK_DIR isn't exported (e.g. when running outside a wrapper).
