@@ -184,6 +184,57 @@ if [[ " $* " == *" --no-cache "* || " $* " == *" --no-cache="* ]]; then
   unset _nc_new_args _nc_a _nc_saw_terminator
 fi
 
+# Hidden dynamic-completer dispatch (Task 5.5):
+#   <cli> _complete <task> <flag> [partial-word]
+# Hoisted ABOVE clift_ensure_cache because the in-code invariant is
+# "Always exits 0 — a missing, empty, or failing completer must never
+# disrupt tab-completion." A broken Taskfile or a temporary FS hiccup
+# would otherwise make `clift_ensure_cache` exit non-zero (set -e), and
+# the completer would never run — every tab-completion keystroke during
+# a broken-cache window would silently fail.
+#
+# This handler reads NO cache-derived state — only $CLI_DIR + the override
+# file paths under .clift/overrides/ and cmds/<seg>/overrides/. So the
+# pre-cache position is safe.
+#
+# Sources .clift/overrides/completion.sh (CLI-global, wins) and
+# cmds/<cmd-seg>/overrides/completion.sh (per-command; cmd-seg is the
+# first colon segment of <task>), then invokes
+# clift_complete_<task-colons→underscores>_<flag-dashes→underscores>
+# if defined.
+if [[ "${1:-}" == "_complete" ]]; then
+  shift
+  _comp_task="${1:-}"
+  _comp_flag="${2:-}"
+  _comp_word="${3:-}"
+  if [[ -z "$_comp_task" ]] || [[ -z "$_comp_flag" ]]; then
+    exit 0
+  fi
+  # Path-traversal defense: same regex as other CLI-facing names in the
+  # framework. Any character outside the safe set → silent no-op.
+  if [[ ! "$_comp_task" =~ ^[a-z][a-z0-9_:]*$ ]]; then exit 0; fi
+  if [[ ! "$_comp_flag" =~ ^[a-z][a-z0-9_-]*$ ]]; then exit 0; fi
+  _comp_fn="clift_complete_${_comp_task//:/_}_${_comp_flag//-/_}"
+  _comp_cmd_seg="${_comp_task%%:*}"
+  # Per-command first (loaded into scope), then CLI-global (overrides by
+  # redefining the same function name). Both sourced in a subshell so a
+  # broken override file can't poison the wrapper's environment.
+  (
+    if [[ -f "$CLI_DIR/cmds/$_comp_cmd_seg/overrides/completion.sh" ]]; then
+      # shellcheck source=/dev/null
+      source "$CLI_DIR/cmds/$_comp_cmd_seg/overrides/completion.sh" 2>/dev/null || true
+    fi
+    if [[ -f "$CLI_DIR/.clift/overrides/completion.sh" ]]; then
+      # shellcheck source=/dev/null
+      source "$CLI_DIR/.clift/overrides/completion.sh" 2>/dev/null || true
+    fi
+    if declare -F "$_comp_fn" >/dev/null 2>&1; then
+      "$_comp_fn" "$_comp_word" 2>/dev/null || true
+    fi
+  )
+  exit 0
+fi
+
 # shellcheck source=/dev/null
 source "$FRAMEWORK_DIR/lib/cache.sh"
 clift_ensure_cache "$CLI_DIR" "$FRAMEWORK_DIR"
@@ -207,46 +258,6 @@ case "$1" in
     # shellcheck source=/dev/null
     source "${FRAMEWORK_DIR}/lib/runtime/overrides.sh"
     clift_call_override version_print clift_default_version_print "$CLI_NAME" "$CLI_VERSION" "$CLI_DIR"
-    exit 0
-    ;;
-  _complete)
-    # Task 5.5: hidden dynamic-completer dispatch.
-    #   <cli> _complete <task> <flag> [partial-word]
-    # Sources .clift/overrides/completion.sh (CLI-global, wins) and
-    # cmds/<cmd-seg>/overrides/completion.sh (per-command; cmd-seg is the
-    # first colon segment of <task>), then invokes
-    # clift_complete_<task-colons→underscores>_<flag-dashes→underscores>
-    # if defined. Always exits 0 — a missing, empty, or failing completer
-    # must never disrupt tab-completion.
-    shift
-    _comp_task="${1:-}"
-    _comp_flag="${2:-}"
-    _comp_word="${3:-}"
-    if [[ -z "$_comp_task" ]] || [[ -z "$_comp_flag" ]]; then
-      exit 0
-    fi
-    # Path-traversal defense: same regex as other CLI-facing names in the
-    # framework. Any character outside the safe set → silent no-op.
-    if [[ ! "$_comp_task" =~ ^[a-z][a-z0-9_:]*$ ]]; then exit 0; fi
-    if [[ ! "$_comp_flag" =~ ^[a-z][a-z0-9_-]*$ ]]; then exit 0; fi
-    _comp_fn="clift_complete_${_comp_task//:/_}_${_comp_flag//-/_}"
-    _comp_cmd_seg="${_comp_task%%:*}"
-    # Per-command first (loaded into scope), then CLI-global (overrides by
-    # redefining the same function name). Both sourced in a subshell so a
-    # broken override file can't poison the wrapper's environment.
-    (
-      if [[ -f "$CLI_DIR/cmds/$_comp_cmd_seg/overrides/completion.sh" ]]; then
-        # shellcheck source=/dev/null
-        source "$CLI_DIR/cmds/$_comp_cmd_seg/overrides/completion.sh" 2>/dev/null || true
-      fi
-      if [[ -f "$CLI_DIR/.clift/overrides/completion.sh" ]]; then
-        # shellcheck source=/dev/null
-        source "$CLI_DIR/.clift/overrides/completion.sh" 2>/dev/null || true
-      fi
-      if declare -F "$_comp_fn" >/dev/null 2>&1; then
-        "$_comp_fn" "$_comp_word" 2>/dev/null || true
-      fi
-    )
     exit 0
     ;;
 esac

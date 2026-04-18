@@ -193,3 +193,31 @@ SH
   [ "$status" -eq 0 ]
   [[ "$output" == *"_complete"* ]]
 }
+
+@test "_complete still exits 0 when the cache is broken (regression: I2)" {
+  # Invariant: "Always exits 0 — a missing, empty, or failing completer must
+  # never disrupt tab-completion." Prior to the I2 fix, clift_ensure_cache
+  # ran BEFORE the _complete dispatch, so a Taskfile parse failure would
+  # exit non-zero (set -e) and the completer never fired. This test breaks
+  # the cache by corrupting the root Taskfile so a recompile would fail,
+  # then deletes the checksum to force a staleness-driven rebuild attempt.
+  create_test_cli "deploy"
+  mkdir -p "$CLI_DIR/.clift/overrides"
+  cat > "$CLI_DIR/.clift/overrides/completion.sh" <<'SH'
+clift_complete_deploy_region() {
+  echo us-east-1
+}
+SH
+  # Build wrapper FIRST (still uses the valid template), then poison the
+  # Taskfile so the next clift_ensure_cache call (triggered by missing
+  # checksum) would fail.
+  build_test_wrapper
+  echo "{{{garbage::: not yaml" > "$CLI_DIR/Taskfile.yaml"
+  rm -f "$CLI_DIR/.clift/checksum" "$CLI_DIR/.clift/sources"
+
+  # Even with the cache broken, _complete must exit 0 and the completer
+  # output (sourced from the override file directly) must reach stdout.
+  run "$CLI_DIR/bin/$CLI_NAME" _complete deploy region
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"us-east-1"* ]]
+}
