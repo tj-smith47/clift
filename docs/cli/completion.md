@@ -37,19 +37,29 @@ No declaration needed. The generated script reads `.clift/tasks.json` and
 - hidden commands and hidden flags (`hidden: true`) are filtered out
 - command aliases (e.g., `dep` for `deploy`) appear as top-level candidates
 
-## Dynamic completers — convention, not declaration
+## The `_complete` subcommand (reserved protocol)
 
-When the user is completing a value after a long flag (`mycli deploy
---region <TAB>`), the generated script calls the hidden `_complete`
-subcommand:
+`_complete` is a **reserved top-level token** (alongside `watch`) — compile.sh
+rejects any user task or alias declared with that name. It's the protocol the
+generated completion script calls at TAB-press time; users never invoke it
+directly except for debugging (see [Failure modes](#failure-modes)).
 
 ```
 mycli _complete <task> <flag> <partial-word>
 ```
 
-`_complete` sources the completion override files and invokes the matching
-function. **The function's existence is the registration** — nothing in the
-Taskfile declares it.
+The generated script wraps `_complete` calls in a subshell; failures stay
+silent so tab-completion never becomes noisy (full list in Failure modes
+below). See [docs/cli/task-features.md](task-features.md) for the full
+reserved-name list.
+
+## Dynamic completers — convention, not declaration
+
+When the user is completing a value after a long flag (`mycli deploy
+--region <TAB>`), the generated script calls the `_complete` subcommand
+above. `_complete` sources the completion override files and invokes the
+matching function. **The function's existence is the registration** —
+nothing in the Taskfile declares it.
 
 ### Function name
 
@@ -64,11 +74,20 @@ clift_complete_<task>_<flag>
 
 ### Where the function lives
 
-Two tiers, first-match wins (per-command first in load order, CLI-global
-redefines):
+Two tiers, **last-write-wins**: both files are sourced by `_complete`, in
+per-command → CLI-global order. If both define the same function, the CLI-
+global redefinition replaces the per-command one.
 
-1. Per-command — `$CLI_DIR/cmds/<cmd-seg>/overrides/completion.sh`
-2. CLI-global — `$CLI_DIR/.clift/overrides/completion.sh`
+> **Note:** This precedence is **inverted** relative to the callback-slot
+> overrides in [docs/cli/overrides.md](overrides.md) (where per-command
+> wins by first-match). Completers use last-write-wins because both files
+> are sourced unconditionally at dispatch time. A completer copy-pasted
+> from a callback-slot example will get the direction backwards — set the
+> authoritative version in `.clift/overrides/completion.sh` and treat per-
+> command files as local fallbacks, not the other way around.
+
+1. Per-command — `$CLI_DIR/cmds/<cmd-seg>/overrides/completion.sh` (sourced first)
+2. CLI-global — `$CLI_DIR/.clift/overrides/completion.sh` (sourced last; wins)
 
 `<cmd-seg>` is the **first** colon segment of the task name. `deploy:prod`
 looks in `cmds/deploy/overrides/completion.sh` — nested `cmds/deploy/prod/`

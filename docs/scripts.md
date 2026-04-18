@@ -25,6 +25,8 @@ When your script runs (in parsed mode), these env vars are set by the router:
 | `CLIFT_FLAG_<NAME>_1`, `..._COUNT` | List-typed flags. |
 | `VERBOSE`, `QUIET`, `NO_COLOR` | Backward-compat env vars set from `--verbose`, `--quiet`, `--no-color` flags. Read by `log.sh` for theming. |
 
+A second access form, `${CLIFT_FLAGS[<name>]}` (bash associative array), is declared in the main script process — more ergonomic for conditional reads but main-process-only. Subshells see the `CLIFT_FLAG_*` env vars but NOT the assoc array; pass values in or use the env-var form. Full caveat + recipes: [flags.md § Accessing parsed flags](flags.md#accessing-parsed-flags-from-your-script).
+
 ## Shell options and auto-load
 
 User scripts are sourced by the clift boot wrapper (`lib/runtime/exec.sh`) in

@@ -63,6 +63,7 @@ mycli                         # see available commands
 mycli new cmd                 # scaffold your first command
 mycli greet --name world      # run it with flags
 mycli greet --help            # per-command help
+mycli help greet              # equivalent form — `help <cmd>` is an alias
 ```
 
 All `clift init` options are available as flags for non-interactive use:
@@ -94,7 +95,7 @@ task --taskfile ~/.clift/Taskfile.yaml setup:cli -- ~/mycli
 - Hidden commands (`vars.HIDDEN: true`) — executable but omitted from help + completion
 - Command aliases (`aliases: [...]` on tasks) — dispatch, help, completion, and did-you-mean all honor them
 - Override system — per-command and CLI-global tiers for `help_detail`, `version_print`, `log`, and pre/post command hooks (top-level `help_list` is CLI-global only)
-- Cache control — `--no-cache` flag and `CLIFT_CACHE=rebuild|bypass` environment variable
+- Cache control — `--no-cache` flag and `CLIFT_CACHE=rebuild|bypass` environment variable (see [docs/cache.md](docs/cache.md))
 - go-task runner flags as first-class UX — `mycli watch`, `--task:dry`, `--task:interval`, `--task:parallel`, …
 - Did-you-mean error suggestions (Levenshtein)
 - Interactive prompts (gum with read fallback)
@@ -163,6 +164,18 @@ log_info "Hello from mycommand"
 ```
 
 Subcommands work via task namespacing. A command `deploy` can have subcommands `deploy:staging` and `deploy:prod` by adding tasks to its Taskfile.
+
+### Passthrough mode (skip the parser)
+
+Commands with **no** `vars.FLAGS` key in their Taskfile are **passthrough commands**. The router skips the parser entirely and execs your script with raw positional args (`$1`, `$2`, …). No `CLIFT_FLAG_*` env vars, no `--help` interception, no did-you-mean.
+
+This is a first-class choice — use it when:
+
+- The script is written in another language (Go, Python, Rust) with its own argument parsing and you don't want clift's parser to second-guess it.
+- The command wraps an external tool transparently (`mycli docker …` → forward everything to `docker`).
+- You want to own flag handling end-to-end for a niche UX.
+
+`vars.FLAGS: []` (empty list) is **parsed mode** — it gets the parser, `--help`, and globals, just with no per-command flags. Omit the key entirely to go passthrough. See [docs/scripts.md](docs/scripts.md#passthrough-mode) for the full contract (persistent flags still bind; pre/post hooks still fire).
 
 ## Argument Parsing
 

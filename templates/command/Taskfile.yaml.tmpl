@@ -51,8 +51,28 @@ tasks:
     #   prompt: "Deploy to prod?"                 # confirm before running
     #   summary: "Long multi-line description"    # shown in `task --summary`
 
-    # Dynamic completer convention (see docs/cli/completion.md) — drop this
-    # file to provide runtime candidates for any flag on this command:
+    # Per-command overrides (see docs/cli/overrides.md) — drop any of these
+    # files under cmds/%%CMD_NAME%%/overrides/ to hook the slot. No schema
+    # change; framework loads them automatically.
+    #
+    #   command_pre.sh    — runs before the script (logging, gating, timing)
+    #                       clift_override_command_pre() {
+    #                         local default_fn="$1"; local task="$2"
+    #                         log_info "starting $task"; "$default_fn" "$task"
+    #                       }
+    #
+    #   command_post.sh   — runs after the script (cleanup, telemetry)
+    #                       clift_override_command_post() {
+    #                         local default_fn="$1"; local task="$2" rc="$3"
+    #                         "$default_fn" "$task" "$rc"
+    #                         log_debug "$task exited $rc"
+    #                       }
+    #
+    #   log.sh            — shadow the log_* functions (see docs/cli/overrides.md#logging-slot-shadow-based-exception)
+    #   help_detail.sh    — custom --help body for this command
+    #
+    # Dynamic completer convention (see docs/cli/completion.md) — runtime
+    # candidates for any flag on this command:
     #   cmds/%%CMD_NAME%%/overrides/completion.sh
     # containing:
     #   clift_complete_%%CMD_NAME%%_region() {

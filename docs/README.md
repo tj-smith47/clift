@@ -2,21 +2,50 @@
 
 User-facing documentation for clift, the CLI framework built on go-task.
 
-## Topics
+Start with the [repo README](../README.md) for an install and a five-minute
+tour. This directory holds the deep references you'll reach for as you build
+out a CLI.
 
-- [Architecture](architecture.md) — hot-path overview, component boundaries.
-- [Modes](modes.md) — standard vs task invocation modes.
-- [Flags](flags.md) — schema, flag aliases, deprecated markers, hidden flags, mutex / required-together groups, value validation (`choices:` / `pattern:`), persistent flags, reading parsed values.
-- [Scripts](scripts.md) — command scripts, the env-var contract, and hidden commands (`vars.HIDDEN: true`).
-- [Cache](cache.md) — `.clift/` layout, staleness rules, and `--no-cache` / `CLIFT_CACHE=rebuild|bypass` control.
-- [Errors](errors.md) — error-message conventions and exit codes.
+## Getting started
 
-## CLI-author reference
+New to clift? Read in this order:
 
-Deeper references for people building a CLI on top of clift.
+1. [Modes](modes.md) — **standard** (wrapper on PATH, Cobra-like) vs **task**
+   (shell alias, raw go-task). Chosen at setup; changes how you invoke the CLI.
+2. [Scripts](scripts.md) — what your command script looks like, the `CLIFT_FLAG_*`
+   / `CLIFT_POS_*` / `CLIFT_FLAGS` env-var contract, subshell caveats,
+   passthrough mode (commands with no `vars.FLAGS`), and `vars.HIDDEN: true`
+   for hidden commands.
+3. [Flags](flags.md) — schema reference: types, defaults, required, choices,
+   pattern, aliases, hidden, deprecated, mutex / required-together groups,
+   CLI-level persistent flags, and the reserved globals.
+4. [Errors](errors.md) — error-message conventions and exit codes you can
+   return from your scripts.
 
-- [go-task features](cli/task-features.md) — `--task:*` passthrough (`watch`, `dry`, `parallel`, `interval`, …), `mycli watch <cmd>` shortcut, plus passthrough task fields (`deps`, `preconditions`, `sources`, etc.) available in command Taskfiles.
-- [Overrides](cli/overrides.md) — override-slot loader, per-command + CLI-global tiers (per-command wins over CLI-global, except `help_list` which is CLI-global only), callback signature. Slots: `help_list`, `help_detail`, `version_print`, `log` (shadow), `command_pre`, `command_post`.
-- [Completion](cli/completion.md) — static completion derived from the cache, plus dynamic flag-value completers via `clift_complete_<task>_<flag>`.
+## Reference
 
-For the canonical go-task reference, see [taskfile.dev](https://taskfile.dev).
+Deeper material for anyone building a CLI on top of clift.
+
+- [Architecture](architecture.md) — hot-path overview (wrapper → router →
+  parser → script), per-stage timing, and component boundaries.
+- [Cache](cache.md) — the `.clift/` layout, how staleness is detected via the
+  `sources` manifest, and the `--no-cache` / `CLIFT_CACHE=rebuild|bypass`
+  control modes.
+- [Overrides](cli/overrides.md) — the override-slot loader. Per-command +
+  CLI-global tiers (per-command wins, except `help_list`). Slots:
+  `help_list`, `help_detail`, `version_print`, `log` (shadow-based),
+  `command_pre`, `command_post`; plus the `clift_exit` helper.
+- [Completion](cli/completion.md) — bash/zsh completion scripts. Static
+  candidates from the cache, dynamic flag-value completers via
+  `clift_complete_<task>_<flag>`, and the reserved `_complete` subcommand
+  protocol.
+- [go-task features](cli/task-features.md) — the `--task:*` passthrough
+  (`watch`, `dry`, `parallel`, `status`, `summary`, `interval`, …), the
+  `mycli watch <cmd>` shortcut, the reserved command-name list, and the
+  per-task fields (`deps`, `preconditions`, `sources`, `status`, `dotenv`,
+  `run`, `silent`, `platforms`, `generates`, `method`) that pass straight
+  through to the go-task runner.
+
+## External
+
+- [taskfile.dev](https://taskfile.dev) — canonical go-task reference.

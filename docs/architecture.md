@@ -57,3 +57,4 @@ User types: mycli deploy prod --force
 - The precompiled cache is the only runtime source of truth for task lists and flag tables.
 - Standard and task modes share the same router, parser, and cache -- mode affects only entry-point generation and argv reconstruction.
 - No `yq` at runtime. `yq` runs only during `compile.sh` (cold path).
+- Persistent flags found in the pre-command position are bound by the wrapper, not the router. The wrapper advertises which names it bound via `CLIFT_PERSIST_BOUND` (space-separated) so the parser can skip default-application for those names — a wrapper-bound value IS a user value and must outrank a default. Internal protocol; see [flags.md § Internal protocol: `CLIFT_PERSIST_BOUND`](flags.md#internal-protocol-clift_persist_bound).

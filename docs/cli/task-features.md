@@ -146,7 +146,18 @@ mycli watch                    # error: watch requires a command
 
 The reservation only matches a literal `watch` as the first argv token — a nested namespace like `watch:foo` (single token containing a colon) is unaffected and dispatches normally.
 
-A user-defined command literally named `watch` at the top level (or an alias resolving to the bare token `watch`) would collide silently — the wrapper's rewrite fires before the cache is even loaded. The framework rejects this at compile time (`new:cmd` / `setup:cli` / cache rebuild) with a hard error so you find out at scaffold time, not at the next `mycli watch <cmd>` invocation. Rename to `watcher`, `monitor`, etc. to avoid the conflict. The same rule applies to the hidden `_complete` token, though the framework's existing `^_` task-name filter already prevents it from being declared.
+## Reserved command names
+
+Two top-level tokens are **reserved** — the wrapper intercepts them before the cache is even loaded:
+
+| Token | Reserved for | Enforcement |
+|---|---|---|
+| `watch` | shortcut for `--task:watch` (above) | compile-time hard error + runtime probe fallback |
+| `_complete` | shell-completion dispatch protocol (see [docs/cli/completion.md](completion.md)) | `^_` task-name filter blocks declaration |
+
+A user task or alias declared at the top level with either name would collide silently — `watch` would be swallowed by the rewrite, `_complete` would be called as a completion script. The framework rejects these at compile time (`new:cmd` / `setup:cli` / cache rebuild) with a hard error, so you find out at scaffold time, not at the next invocation. Rename to `watcher`, `monitor`, etc. to avoid the conflict.
+
+The reservation applies only to the **bare top-level token**. Namespaced forms (`watch:foo`, `_complete:foo`) are unaffected and dispatch normally — the rewrites match on exact equality, not prefix. Reserved names may appear anywhere except as the first argv segment.
 
 ### Position rules
 
