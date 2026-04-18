@@ -24,21 +24,50 @@ load test_helper
 setup() { common_setup; }
 teardown() { common_teardown; }
 
+# --- Listing-shape assertion helpers ---------------------------------------
+
+# A command is "listed" when it appears as an indented token at the start
+# of a line (i.e. a row in the Commands: block), optionally followed by
+# more whitespace or EOL. This is a stricter check than substring match:
+# the words "deploy" and "internal" can appear in banner text, URLs, or
+# descriptions without ever being listed-as-commands, and plain substring
+# assertions happily accept those false positives.
+_assert_listed() {
+  local needle="$1" haystack="$2"
+  if [[ "$haystack" =~ (^|$'\n')[[:space:]]+${needle}([[:space:]]|,|$) ]]; then
+    return 0
+  fi
+  echo "expected '$needle' in command listing; got:" >&2
+  echo "$haystack" >&2
+  return 1
+}
+
+_refute_listed() {
+  local needle="$1" haystack="$2"
+  if [[ "$haystack" =~ (^|$'\n')[[:space:]]+${needle}([[:space:]]|,|$) ]]; then
+    echo "hidden command '$needle' leaked into listing; got:" >&2
+    echo "$haystack" >&2
+    return 1
+  fi
+  return 0
+}
+
 # --- Fixture ---------------------------------------------------------------
 
 # Build the multi-feature fixture at $CLI_DIR. We write the files inline
 # instead of calling create_test_cli because the latter is too narrow for a
 # CLI that needs persistent flags + aliases + hidden cmd + overrides all
 # stitched together.
+#
+# Hidden commands are distinguished by `vars.HIDDEN: true` (per
+# hidden.bats), NOT by an `_`-prefixed include name — the wrapper's task
+# index filter at wrapper.sh.tmpl line 314 drops every `^_|:_` entry, so
+# an `_internal`-named include would not be dispatchable at all.
+# The root heredoc is unquoted so ${FRAMEWORK_DIR} expands inline — same
+# trick create_test_cli uses for .env.
 _setup_parity_cli() {
   # Root Taskfile — includes the framework's `_help` namespace so
   # `mycli --help` can dispatch to `_help:list` (wrapper line 200 / 516).
-  # Hidden commands are distinguished by `vars.HIDDEN: true` (per
-  # hidden.bats), NOT by an `_`-prefixed include name — the wrapper's task
-  # index filter at wrapper.sh.tmpl line 314 drops every `^_|:_` entry, so
-  # an `_internal`-named include would not be dispatchable at all.
-  # The heredoc is unquoted so ${FRAMEWORK_DIR} expands inline — this is
-  # the same trick create_test_cli uses for .env.
   cat > "$CLI_DIR/Taskfile.yaml" <<YAML
 version: '3'
 silent: true
@@ -94,6 +123,9 @@ tasks:
   default:
     desc: "Deploy the app"
     aliases: [d, dep]
+    # Re-declared on tasks.default to match test_helper.bash:107-121
+    # convention; the compiler walks both layers and the router sees the
+    # per-task list when it routes the default task.
     vars:
       FLAGS:
         - {name: json,   type: bool,   group: format, exclusive: true, desc: "JSON output"}
@@ -102,9 +134,9 @@ tasks:
     cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
 YAML
 
-  # deploy script — writes an observable marker file AND stdout so tests
-  # can assert both via --separate-stderr (stdout only from the script; PRE
-  # goes to stderr from the hook).
+  # deploy script — writes an observable marker to BOTH stdout (for
+  # grouped-output assertions) and a marker file (for "ran vs didn't run"
+  # assertions that don't depend on go-task's output grouping).
   cat > "$CLI_DIR/cmds/deploy/deploy.sh" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -114,12 +146,8 @@ echo "$line" >> "${CLI_DIR}/deploy.out"
 SH
   chmod +x "$CLI_DIR/cmds/deploy/deploy.sh"
 
-  # Hidden command — marked HIDDEN at the task level (per hidden.bats
-  # pattern: `vars.HIDDEN: true` on the command's root Taskfile). Command
-  # name is `internal`, NOT `_internal`: the wrapper's dispatch filter
-  # drops every `^_|:_` task entry before longest-prefix resolution, so
-  # an underscore-prefixed name would be undispatchable — contradicting
-  # the "hidden but still runnable" contract the test is pinning.
+  # Hidden command — `vars.HIDDEN: true`. Name is 'internal', not
+  # '_internal' — see the top-of-file fixture comment.
   mkdir -p "$CLI_DIR/cmds/internal"
   cat > "$CLI_DIR/cmds/internal/Taskfile.yaml" <<'YAML'
 version: '3'
@@ -139,8 +167,8 @@ echo "internal-ran"
 SH
   chmod +x "$CLI_DIR/cmds/internal/internal.sh"
 
-  # Overrides — help_list banner, command_pre stderr marker, dynamic
-  # completer for deploy's --region flag.
+  # Overrides — help_list banner, command_pre marker, dynamic completer
+  # for deploy's --region flag.
   mkdir -p "$CLI_DIR/.clift/overrides"
 
   cat > "$CLI_DIR/.clift/overrides/help_list.sh" <<'SH'
@@ -154,8 +182,11 @@ clift_override_help_list() {
 }
 SH
 
-  # command_pre writes PRE to stderr so stdout tests that match the deploy
-  # script's output line aren't polluted by the hook.
+  # command_pre writes PRE to stderr. go-task's `output: group` config on
+  # the root Taskfile merges stderr onto stdout from the test runner's
+  # view, so PRE is observable in $output — asserting on stream separation
+  # at this seam would fight the framework, not reveal bugs. The marker
+  # file below does the "ran vs didn't run" job independently.
   cat > "$CLI_DIR/.clift/overrides/command_pre.sh" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -181,14 +212,11 @@ SH
 # --- 1. alias + persistent + group-valid + pre-hook ------------------------
 
 # The full happy-path composition: alias resolves to `deploy`, persistent
-# `--profile` binds from the pre-command position, the group-valid mutex
-# pick (only `--json`) passes the group check, and the command_pre hook
-# fires before the script. The hook writes PRE to stderr and the script
-# writes its marker to stdout — both are observable. (go-task's
-# `output: group` setting merges both streams onto stdout for the test
-# runner, which is the intended framework behavior; the marker file proves
-# the script ran, independent of stream routing.)
-@test "alias + persistent + group-valid + pre-hook compose end-to-end" {
+# `--profile` binds from the post-command position (covered here), the
+# group-valid mutex pick (only `--json`) passes the group check, and the
+# command_pre hook fires before the script. The pre-command persistent
+# binding path is exercised separately in Test 6.
+@test "alias + persistent(post) + group-valid + pre-hook compose end-to-end" {
   _setup_parity_cli
   run "$CLI_DIR/bin/$CLI_NAME" d --profile=staging --json
   [ "$status" -eq 0 ]
@@ -221,17 +249,19 @@ SH
 # --- 3. help list: hidden filtered + banner wraps default ------------------
 
 # The help_list override wraps the default renderer with a banner. In the
-# same output, the hidden `internal` command must not appear, but the
-# visible `deploy` command must. This is the composition of two independent
-# filters (help list hidden-filter + override wrap) on the same render path.
+# same output, the hidden `internal` command must not appear as a listing
+# row, but the visible `deploy` command must. Listing-shape assertions
+# (via _assert_listed / _refute_listed) anchor the check to indented
+# leading-column rows so that banner/description text containing the
+# substring "internal" or "deploy" can't drive false passes or failures.
 @test "help list: banner present, hidden filtered, deploy present" {
   _setup_parity_cli
   run "$CLI_DIR/bin/$CLI_NAME" --help
   [ "$status" -eq 0 ]
   [[ "$output" == *"=== BANNER ==="* ]]
   [[ "$output" == *"=== /BANNER ==="* ]]
-  [[ "$output" == *"deploy"* ]]
-  [[ "$output" != *"internal"* ]]
+  _assert_listed "deploy" "$output"
+  _refute_listed "internal" "$output"
 }
 
 # --- 4. hidden command still dispatchable ----------------------------------
@@ -259,4 +289,63 @@ SH
   [[ "$output" == *"us-east-1"* ]]
   [[ "$output" == *"us-west-2"* ]]
   [[ "$output" == *"eu-central-1"* ]]
+}
+
+# --- 6. pre-command persistent flag + alias (I3) ---------------------------
+
+# Test 1 exercises the POST-command persistent binding path. The wrapper
+# has a dedicated PRE-command early-bind loop (wrapper.sh.tmpl:552-610)
+# that fires only when a persistent flag appears BEFORE the first
+# non-flag token. That loop runs alongside alias resolution, and the seam
+# between the two is exactly the kind of compose-bug single-feature
+# suites can't reach. `mycli --profile=staging d --json` must:
+#   - bind --profile via the pre-command path
+#   - resolve alias `d` to canonical `deploy` after the persistent flag
+#   - still parse --json as a deploy-level flag post-command
+@test "pre-command persistent flag + alias: --profile=staging d --json resolves both" {
+  _setup_parity_cli
+  run "$CLI_DIR/bin/$CLI_NAME" --profile=staging d --json
+  [ "$status" -eq 0 ] \
+    || { echo "exit=$status output=$output"; false; }
+  [[ "$output" == *"profile=staging"* ]] \
+    || { echo "expected profile=staging; got: $output"; false; }
+  [[ "$output" == *"json=true"* ]] \
+    || { echo "expected json=true; got: $output"; false; }
+  [[ -f "$CLI_DIR/deploy.out" ]] \
+    || { echo "deploy.out marker missing"; false; }
+}
+
+# --- 7. alias --help resolves to canonical (S1) ----------------------------
+
+# `mycli d --help` must render the DEPLOY detail page, not a "d" page.
+# The wrapper substitutes alias → canonical at the first token of the
+# longest-prefix walk (mirrors tests/aliases_cmd.bats line 145+); if that
+# substitution moves downstream of --help interception this test fails.
+@test "command alias --help resolves to canonical deploy command" {
+  _setup_parity_cli
+  run "$CLI_DIR/bin/$CLI_NAME" d --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"$CLI_NAME deploy"* ]] \
+    || { echo "expected canonical 'deploy' header; got: $output"; false; }
+  # Detail page must still advertise the command's flags.
+  [[ "$output" == *"--json"* ]]
+  [[ "$output" == *"--yaml"* ]]
+  [[ "$output" == *"--region"* ]]
+}
+
+# --- 8. --task:dry passthrough (S2) ----------------------------------------
+
+# `--task:*` flags are consumed by the wrapper's passthrough scan
+# (wrapper.sh.tmpl:21-120) and forwarded to `task` with the prefix
+# stripped. `--task:dry` drives go-task's dry-run mode: the task graph
+# is printed but no command runs, so the deploy.sh script must NOT
+# produce its marker file even though the full parser/group-check
+# pipeline has fired.
+@test "--task:dry passthrough does not execute deploy script" {
+  _setup_parity_cli
+  run "$CLI_DIR/bin/$CLI_NAME" --task:dry d --json
+  [ "$status" -eq 0 ] \
+    || { echo "exit=$status output=$output"; false; }
+  [[ ! -f "$CLI_DIR/deploy.out" ]] \
+    || { echo "deploy.out created — dry-run should not execute"; false; }
 }
