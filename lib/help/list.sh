@@ -10,6 +10,8 @@ set -euo pipefail
 
 # shellcheck source=render_flags.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/render_flags.sh"
+# shellcheck source=../flags/alias_filter.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../flags/alias_filter.sh"
 
 TASKFILE_PATH="${1:-}"
 
@@ -122,13 +124,11 @@ _clift_help_list_default() {
     ' "$index_cache" 2>/dev/null || echo '{}')"
   fi
   # Framework-lib aliases from tasks.json. Silent on malformed JSON.
+  # Uses strip_ns + is_user_surfaceable_alias from alias_filter.sh — same
+  # shared prelude compile.sh and detail.sh consume so a future filter-rule
+  # change ships in one place.
   local fw_aliases_map='{}'
-  fw_aliases_map="$(jq -c '
-    def strip_ns($canonical; $ns; $a):
-      if $ns != "" and ($a | startswith($ns + ":"))
-      then ($a | ltrimstr($ns + ":"))
-      else $a
-      end;
+  fw_aliases_map="$(jq -c "$CLIFT_ALIAS_FILTER_JQ_DEFS"'
     ([.. | .tasks? // empty | .[]
       | select(.name | test("^_|:_") | not)
       | (.name | sub(":default$"; "")) as $disp
@@ -136,12 +136,8 @@ _clift_help_list_default() {
       | {
           disp: $disp,
           aliases: [ (.aliases // [])[]
-            | strip_ns($disp; $ns; .) as $a
-            | select(
-                $a != ""
-                and ($a | contains(":") | not)
-                and $a != $disp
-              )
+            | strip_ns($ns; .) as $a
+            | select(is_user_surfaceable_alias($a; $disp))
             | $a
           ]
         }

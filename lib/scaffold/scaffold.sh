@@ -15,12 +15,13 @@ if [[ -z "$CMD_NAME" || -z "$CMD_DESC" || -z "$CLI_DIR" || -z "$FRAMEWORK_DIR" ]
 fi
 
 source "${FRAMEWORK_DIR}/lib/log/log.sh"
+# shellcheck source=/dev/null
+source "${FRAMEWORK_DIR}/lib/flags/name_rules.sh"
 
 trap 'rm -f "${_tmp:-}"' EXIT
 
 # Validate command name: lowercase, starts with letter, colons for subcommands, no dashes
-NAME_RE='^[a-z][a-z0-9]*(:[a-z][a-z0-9]*)*$'
-if [[ ! "$CMD_NAME" =~ $NAME_RE ]]; then
+if [[ ! "$CMD_NAME" =~ $CLIFT_CMD_NAME_RE ]]; then
   log_error "Invalid: command names must be lowercase alphanumeric, use colons for subcommands (no dashes)"
   exit 1
 fi

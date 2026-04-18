@@ -161,14 +161,17 @@ fi
 
 # Step 7: Parse flags via the merged table.
 
-tmp_table="$(mktemp)"
-# CLIFT_FLAGS_FILE: NUL-separated <name>=<value> records written by the parser
-# for the prelude to materialize as declare -A CLIFT_FLAGS in the user script.
-# Exported so the exec.sh → prelude chain (different process) can read it.
-CLIFT_FLAGS_FILE="$(mktemp)"
+# Single mktemp -d instead of two mktemp calls — one fewer fork per parsed
+# invocation. tmp_table is the parser's INPUT (flag table JSON); CLIFT_FLAGS_FILE
+# is the parser's OUTPUT (NUL-separated <name>=<value> records the prelude reads
+# to materialize `declare -A CLIFT_FLAGS` in the user script). Both live inside
+# the same per-invocation tempdir; the EXIT trap rm -rf covers both.
+_clift_tmp_d="$(mktemp -d)"
+tmp_table="$_clift_tmp_d/table.json"
+CLIFT_FLAGS_FILE="$_clift_tmp_d/flags_env"
 export CLIFT_FLAGS_FILE
-trap 'rm -f "$tmp_table" "$CLIFT_FLAGS_FILE"' EXIT
-echo "$merged_table" > "$tmp_table"
+trap 'rm -rf "$_clift_tmp_d"' EXIT
+printf '%s' "$merged_table" > "$tmp_table"
 
 # shellcheck source=/dev/null
 source "${FRAMEWORK_DIR}/lib/flags/parser.sh"
@@ -186,13 +189,13 @@ fi
 
 if [[ "${CLIFT_FLAG_HELP:-}" == "true" ]]; then
   local_namespace="${TASK_NAME%%:*}"
-  # `exec` replaces the process and skips the EXIT trap, so the tempfiles
-  # registered above would otherwise leak per --help invocation. Clean them
+  # `exec` replaces the process and skips the EXIT trap, so the tempdir
+  # registered above would otherwise leak per --help invocation. Clean it
   # explicitly before handing off, and unset CLIFT_FLAGS_FILE so detail.sh
   # cannot see a dangling path. (Belt-and-suspenders with the parser-side
   # skip in _clift_emit_flags_file: even if that emit ever runs again, the
-  # rm -f here keeps /tmp clean.)
-  rm -f "$tmp_table" "$CLIFT_FLAGS_FILE"
+  # rm -rf here keeps /tmp clean.)
+  rm -rf "$_clift_tmp_d"
   unset CLIFT_FLAGS_FILE
   exec bash "${FRAMEWORK_DIR}/lib/help/detail.sh" "$TASK_NAME" "$CLI_DIR/Taskfile.yaml"
 fi

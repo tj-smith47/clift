@@ -17,8 +17,11 @@ _GLOBALS_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/globals.json"
 RESERVED_NAMES=()
 while IFS= read -r _rn; do RESERVED_NAMES+=("$_rn"); done < <(jq -r '.[].name' "$_GLOBALS_FILE")
 
-# Name regex: lowercase, starts with letter, dashes allowed, NO underscores
-NAME_RE='^[a-z][a-z0-9-]*$'
+# Flag name regex: lowercase, starts with letter, dashes allowed, NO underscores.
+# Kept local (not sourced from `lib/flags/name_rules.sh`) so validate.sh stays
+# dependency-free on the parser hot path; the constant there holds the
+# authoritative definition and these two MUST stay identical.
+CLIFT_FLAG_NAME_RE='^[a-z][a-z0-9-]*$'
 SHORT_RE='^[a-zA-Z0-9]$'
 VALID_TYPES=(bool string int list)
 
@@ -55,8 +58,8 @@ _validate_entry_fields() {
     return 1
   fi
 
-  if [[ ! "$name" =~ $NAME_RE ]]; then
-    echo "error: ${context}: flag name '$name' must match ${NAME_RE} (no underscores, lowercase)" >&2
+  if [[ ! "$name" =~ $CLIFT_FLAG_NAME_RE ]]; then
+    echo "error: ${context}: flag name '$name' must match ${CLIFT_FLAG_NAME_RE} (no underscores, lowercase)" >&2
     return 1
   fi
 
@@ -415,8 +418,8 @@ _validate_layer() {
       IFS=',' read -ra _aliases <<< "$aliases_csv"
       for _alias in "${_aliases[@]}"; do
         [[ -z "$_alias" ]] && continue
-        if [[ ! "$_alias" =~ $NAME_RE ]]; then
-          echo "error: ${context}: flag '$name' alias '$_alias' must match ${NAME_RE} (no underscores, lowercase)" >&2
+        if [[ ! "$_alias" =~ $CLIFT_FLAG_NAME_RE ]]; then
+          echo "error: ${context}: flag '$name' alias '$_alias' must match ${CLIFT_FLAG_NAME_RE} (no underscores, lowercase)" >&2
           return 1
         fi
         if [[ " $seen_names " == *" $_alias "* ]]; then

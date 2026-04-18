@@ -25,11 +25,13 @@ _clift_var_name() {
 # the runtime prelude materializes into `declare -A CLIFT_FLAGS`. No-op when
 # CLIFT_FLAGS_FILE is unset (unit-test / external-caller path — see emit-guard
 # comment in clift_parse_args). Relies on bash dynamic scoping to read the
-# caller's `_ft_type` assoc array (populated in clift_parse_args).
+# caller's `_ft_type` and `_ft_touched` assoc arrays (populated in
+# clift_parse_args).
 #
-# Phase 3 bench-headroom: iterates all known flags. If that becomes a
-# bottleneck, track only set/defaulted names during parse (a `_ft_touched`
-# parallel map) and emit just those.
+# Iterates `_ft_touched` (names set by default-application or user input)
+# instead of all declared flags — saves O(declared - touched) iterations per
+# invocation. For list flags we still confirm count > 0 because a list with an
+# empty default is "touched" but has no emittable value.
 _clift_emit_flags_file() {
   [[ -z "${CLIFT_FLAGS_FILE:-}" ]] && return 0
   # Skip when the router will intercept before the prelude runs — the file
@@ -40,7 +42,7 @@ _clift_emit_flags_file() {
   fi
   local _en _etype _evar _ecount_var _ecount _ei _eval _ejoined _eitem_var
   : > "$CLIFT_FLAGS_FILE"
-  for _en in "${!_ft_type[@]}"; do
+  for _en in "${!_ft_touched[@]}"; do
     _etype="${_ft_type[$_en]}"
     _clift_var_name "$_en"; _evar="$_CLIFT_VAR"
     case "$_etype" in
@@ -60,8 +62,9 @@ _clift_emit_flags_file() {
         printf '%s=%s\0' "$_en" "$_ejoined" >> "$CLIFT_FLAGS_FILE"
         ;;
       *)
-        # bool / string / int: record only if the env var is set.
-        # Unset bool means "not provided" — absent from CLIFT_FLAGS too.
+        # bool / string / int: record only if the env var is set. An
+        # _ft_touched entry without a backing env var would be a bug; the
+        # guard is defensive.
         [[ -z "${!_evar+x}" ]] && continue
         _eval="${!_evar}"
         printf '%s=%s\0' "$_en" "$_eval" >> "$CLIFT_FLAGS_FILE"
@@ -137,8 +140,9 @@ clift_parse_args() {
 
   # Co-locate all _ft_* lookup maps here so future readers see the full set at
   # a glance. _ft_choices / _ft_pattern are populated further below from the
-  # value-validation rows.
-  declare -A _ft_type _ft_name_by_short _ft_alias_to_name _ft_deprecated _ft_choices _ft_pattern
+  # value-validation rows. _ft_touched is populated incrementally during the
+  # defaults pass and by `_clift_set_flag_value`, and drives the emit loop.
+  declare -A _ft_type _ft_name_by_short _ft_alias_to_name _ft_deprecated _ft_choices _ft_pattern _ft_touched
   while IFS=$'\x01' read -r _fn _fs _ftype; do
     [[ -z "$_fn" ]] && continue
     _ft_type["$_fn"]="$_ftype"
@@ -238,6 +242,16 @@ clift_parse_args() {
   # by position — the wrapper's bind IS a user value). The wrapper advertises
   # which names it bound via CLIFT_PERSIST_BOUND (space-separated).
   local _persist_bound=" ${CLIFT_PERSIST_BOUND:-} "
+  # Seed _ft_touched from wrapper-bound persistent flags so the emit loop
+  # surfaces them in CLIFT_FLAGS. The wrapper's bind is a user-provided value
+  # for emit purposes, even though the parser doesn't run them through
+  # _clift_set_flag_value.
+  if [[ -n "${CLIFT_PERSIST_BOUND:-}" ]]; then
+    local _pb_name
+    for _pb_name in $CLIFT_PERSIST_BOUND; do
+      _ft_touched["$_pb_name"]=1
+    done
+  fi
   declare -A _list_was_defaulted
   while IFS=$'\x01' read -r dname dtype ddefault; do
     [[ -z "$dname" ]] && continue
@@ -257,13 +271,18 @@ clift_parse_args() {
           export "${dvar}_${idx}=${item}"
         done
         export "${dvar}_COUNT=${idx}"
+        _ft_touched["$dname"]=1
       else
         # Empty string default → empty list, not a single empty element.
+        # Not touched — the emit loop's list-count guard would skip it anyway
+        # and leaving it untouched keeps CLIFT_FLAGS free of zero-length
+        # defaulted lists.
         export "${dvar}_COUNT=0"
       fi
       _list_was_defaulted["$dname"]=1
     else
       export "${dvar}=${ddefault}"
+      _ft_touched["$dname"]=1
     fi
   done <<< "$_defaults_tsv"
 
@@ -320,6 +339,7 @@ clift_parse_args() {
         export "${var}=${value}"
         ;;
     esac
+    _ft_touched["$name"]=1
   }
 
   # Main parse loop

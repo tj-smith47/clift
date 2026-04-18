@@ -1,5 +1,22 @@
 #!/usr/bin/env bash
-# clift Argument Parser
+# clift Argument Parser — DEPRECATED.
+#
+# This module is the pre-Phase-1 argument parser. Every framework consumer has
+# migrated to `lib/flags/parser.sh` (schema-driven, validated, integrated with
+# the override + help systems). No in-repo code path sources this file; only
+# `tests/args.bats` remains, pinning the legacy behavior until a deprecation
+# period lapses.
+#
+# If you are an external consumer sourcing this directly: switch to declaring
+# `vars.FLAGS` in your command's Taskfile and reading `CLIFT_FLAG_*` env vars
+# from your script — the framework takes care of parsing, validation, help
+# rendering, and completion. See `docs/flags.md`.
+#
+# Removal plan: this file is a candidate for deletion in clift 1.0. A one-shot
+# stderr warning fires whenever `parse_args` is invoked so stale callers see
+# the migration path. Silence via `CLIFT_SILENCE_ARGS_DEPRECATION=1` for tests.
+#
+# Original contract (preserved for compat):
 # Usage (sourced by command scripts):
 #   source <(parse_args "$@" --flags "name,loud,verbose")
 #
@@ -11,7 +28,14 @@
 #
 # All output is properly quoted via `declare -x` (injection-safe).
 
+_CLIFT_ARGS_DEPRECATION_WARNED=0
+
 parse_args() {
+  if [[ "${CLIFT_SILENCE_ARGS_DEPRECATION:-0}" != "1" ]] \
+     && (( _CLIFT_ARGS_DEPRECATION_WARNED == 0 )); then
+    echo "warn: lib/args/args.sh:parse_args is deprecated; use lib/flags/parser.sh (schema-driven FLAGS in Taskfile + CLIFT_FLAG_* env vars). Silence with CLIFT_SILENCE_ARGS_DEPRECATION=1." >&2
+    _CLIFT_ARGS_DEPRECATION_WARNED=1
+  fi
   local known_flags=""
   local -a raw_args=()
 

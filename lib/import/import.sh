@@ -40,6 +40,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 source "${FRAMEWORK_DIR}/lib/log/log.sh"
+# shellcheck source=/dev/null
+source "${FRAMEWORK_DIR}/lib/flags/name_rules.sh"
 
 # Preconditions
 if [[ ! -f "${CLI_DIR}/.clift.yaml" ]]; then
@@ -74,7 +76,6 @@ if [[ -z "$tasks_json" ]]; then
   die "Failed to parse source Taskfile: ${FROM}"
 fi
 
-NAME_RE='^[a-z][a-z0-9]*(:[a-z][a-z0-9]*)*$'
 FRAMEWORK_RESERVED=(config update completion new version help import)
 
 # Collect all task names from root and namespaces (excluding :default synthetic)
@@ -115,7 +116,7 @@ for name in "${all_names[@]}"; do
     continue
   fi
 
-  if [[ ! "$display" =~ $NAME_RE ]]; then
+  if [[ ! "$display" =~ $CLIFT_CMD_NAME_RE ]]; then
     skipped_invalid+=("$display")
     continue
   fi

@@ -762,28 +762,29 @@ for (( j=i; j<=$#; j++ )); do
   remaining+=("${!j}")
 done
 
-# Ambiguity check: if any non-flag token in the remaining args would extend
-# the matched path to a known task, the user likely meant that subcommand but
-# interrupted the command with a flag. Emit a "subcommand must come before
-# flags" error with a reordered suggestion.
-for r in "${remaining[@]+"${remaining[@]}"}"; do
-  [[ "$r" == -* ]] && continue
-  would_be="${matched_task}:${r}"
-  if _is_task_prefix "$would_be"; then
-    display_path="$(echo "$matched_task" | tr ':' ' ')"
-    flag_tail=()
-    for t in "${remaining[@]}"; do
-      [[ "$t" == "$r" ]] && continue
-      flag_tail+=("$t")
-    done
-    clift_err_subcmd_before_flags "$CLI_NAME" "$display_path" "$r" "${flag_tail[@]}" || exit 1
-  fi
-done
-
-# Intercept global flags BEFORE dispatch. This ensures they work for ALL
-# commands — both routed (user cmds) and non-routed (framework cmds like
-# config, completion, update) that bypass router.sh.
+# Single pass over `remaining[]` combining:
+#   1. Ambiguity check — if any non-flag token would extend the matched path to
+#      a known task, the user likely meant that subcommand but interrupted the
+#      command with a flag. Emit a "subcommand must come before flags" error
+#      with a reordered suggestion. (Exits non-zero — never returns to continue
+#      the global-flag pass for that invocation.)
+#   2. Global-flag intercept — `--help`, `--verbose`, `--quiet`, `--no-color`
+#      work for ALL commands (both routed user cmds and non-routed framework
+#      cmds that bypass router.sh).
 for _ha in "${remaining[@]+"${remaining[@]}"}"; do
+  if [[ "$_ha" != -* ]]; then
+    would_be="${matched_task}:${_ha}"
+    if _is_task_prefix "$would_be"; then
+      display_path="${matched_task//:/ }"
+      flag_tail=()
+      for t in "${remaining[@]}"; do
+        [[ "$t" == "$_ha" ]] && continue
+        flag_tail+=("$t")
+      done
+      clift_err_subcmd_before_flags "$CLI_NAME" "$display_path" "$_ha" "${flag_tail[@]}" || exit 1
+    fi
+    continue
+  fi
   case "$_ha" in
     --help|-h)
       exec bash "$FRAMEWORK_DIR/lib/help/detail.sh" "$matched_task" "$CLI_DIR/Taskfile.yaml"

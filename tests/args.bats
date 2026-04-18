@@ -1,6 +1,14 @@
 #!/usr/bin/env bats
+# Pins legacy lib/args/args.sh behavior — see deprecation banner in that
+# file. Tests export CLIFT_SILENCE_ARGS_DEPRECATION so the runtime warning
+# doesn't pollute the captured stderr/stdout assertions.
 
 load test_helper
+
+setup() {
+  common_setup
+  export CLIFT_SILENCE_ARGS_DEPRECATION=1
+}
 
 @test "key=value parsing produces declare statement" {
   source "$FRAMEWORK_DIR/lib/args/args.sh"

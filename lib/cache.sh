@@ -27,11 +27,20 @@ clift_max_mtime() {
       _CLIFT_STAT_FMT="bsd"
     fi
   fi
+  # One stat fork — both GNU and BSD accept multiple files. Then scan the
+  # output in pure bash for the max; avoids the `sort -rn | head -1` pipeline
+  # that would add two forks per warm-cache invocation.
+  local _stat_out _m _max=0
   if [[ "$_CLIFT_STAT_FMT" == "gnu" ]]; then
-    stat -c '%Y' "${files[@]}" | sort -rn | head -1
+    _stat_out="$(stat -c '%Y' "${files[@]}")"
   else
-    stat -f '%m' "${files[@]}" | sort -rn | head -1
+    _stat_out="$(stat -f '%m' "${files[@]}")"
   fi
+  while IFS= read -r _m; do
+    [[ -z "$_m" ]] && continue
+    (( _m > _max )) && _max=$_m
+  done <<< "$_stat_out"
+  echo "$_max"
 }
 
 # Ensure the .clift/ cache is fresh. Rebuilds if checksum differs or is missing.
