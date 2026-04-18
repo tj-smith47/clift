@@ -28,13 +28,14 @@
 # through `clift_call_override` (which is a callback dispatcher) and so the
 # prelude loads the override file directly.
 #
-# Process-lifetime assumption: the probe-cache vars `_CLIFT_CMD_OV_<seg>` and
-# `_CLIFT_CLI_OV` (below) are populated lazily and never cleared. That is
-# safe because the router `exec`s a fresh `bash` per dispatch — every
-# invocation starts with an empty cache. If a future refactor lets one shell
-# handle multiple dispatches back-to-back, these caches must be reset
-# between dispatches (they would otherwise carry a stale view of the
-# overrides directory layout across dispatches to different commands).
+# Process-lifetime assumption: the probe-cache vars `_CLIFT_CMD_OV_<seg>`,
+# `_CLIFT_CLI_OV`, and `_CLIFT_OV_FN_<slot>` (below) are populated lazily
+# and never cleared. That is safe because the router `exec`s a fresh `bash`
+# per dispatch — every invocation starts with an empty cache. If a future
+# refactor lets one shell handle multiple dispatches back-to-back, these
+# caches must be reset between dispatches (they would otherwise carry a
+# stale view of the overrides directory layout OR of which override
+# functions were defined on a prior dispatch).
 #
 # Dynamic flag completers use a different, user-keyed prefix
 # (clift_complete_<task>_<flag>) and are documented separately.
@@ -126,7 +127,20 @@ clift_call_override() {
     shift 2
   fi
   _clift_load_override "$slot" "$task"
-  if declare -F "clift_override_${slot}" >/dev/null; then
+  # Cache the function-exists result per slot to mirror the directory-exists
+  # caches above — consistent convention across every probe in this module.
+  # `declare -F` is a builtin (cheap), but caching keeps every "does the
+  # override exist?" lookup in one shape: first-touch probes, subsequent
+  # calls short-circuit via indirect expansion.
+  local fn_cache_var="_CLIFT_OV_FN_${slot}"
+  if [[ -z "${!fn_cache_var+x}" ]]; then
+    if declare -F "clift_override_${slot}" >/dev/null; then
+      printf -v "$fn_cache_var" '%s' '1'
+    else
+      printf -v "$fn_cache_var" '%s' '0'
+    fi
+  fi
+  if [[ "${!fn_cache_var}" == 1 ]]; then
     "clift_override_${slot}" "$default_fn" "$@"
   else
     "$default_fn" "$@"
