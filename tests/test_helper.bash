@@ -130,6 +130,176 @@ YAML
   fi
 }
 
+# Build the cobra-parity multi-feature integration fixture at $CLI_DIR.
+#
+# Writes the files inline (not via create_test_cli) because the fixture
+# needs persistent flags + aliases + hidden cmd + overrides all stitched
+# together — a shape create_test_cli does not cover.
+#
+# Default fixture includes:
+#   * root Taskfile with PERSISTENT_FLAGS: [profile]
+#   * deploy command (aliases d/dep, mutex group json|yaml, string flag region)
+#   * hidden 'internal' command (vars.HIDDEN: true; passthrough)
+#   * .clift/overrides/help_list.sh     (banner wrap)
+#   * .clift/overrides/command_pre.sh   (echoes "PRE" to stderr then delegates)
+#   * .clift/overrides/completion.sh    (dynamic completer for deploy --region)
+#
+# Hidden commands are distinguished by `vars.HIDDEN: true` (per
+# hidden.bats), NOT by an `_`-prefixed include name — the wrapper's task
+# index filter at wrapper.sh.tmpl line 314 drops every `^_|:_` entry, so
+# an `_internal`-named include would not be dispatchable at all.
+# The root heredoc is unquoted so ${FRAMEWORK_DIR} expands inline — same
+# trick create_test_cli uses for .env.
+#
+# After writing files, compiles the cache and builds the wrapper so the
+# fixture is immediately dispatchable.
+#
+# Caller contract: CLI_DIR, CLI_NAME, CLI_VERSION, FRAMEWORK_DIR must be
+# set (common_setup establishes these).
+setup_parity_cli() {
+  # Root Taskfile — includes the framework's `_help` namespace so
+  # `mycli --help` can dispatch to `_help:list` (wrapper line 200 / 516).
+  cat > "$CLI_DIR/Taskfile.yaml" <<YAML
+version: '3'
+silent: true
+output:
+  group:
+    begin: ''
+    end: ''
+set: [errexit, pipefail]
+dotenv: ['.env']
+vars:
+  FLAGS:
+    - {name: help, short: h, type: bool, desc: "Show help"}
+    - {name: verbose, short: v, type: bool, desc: "Verbose"}
+    - {name: quiet, short: q, type: bool, desc: "Quiet"}
+    - {name: no-color, type: bool, desc: "No color"}
+    - {name: no-cache, type: bool, desc: "Force-rebuild the .clift cache"}
+    - {name: version, type: bool, desc: "Version"}
+  PERSISTENT_FLAGS:
+    - {name: profile, type: string, default: "dev", desc: "Profile"}
+includes:
+  _help:
+    taskfile: '${FRAMEWORK_DIR}/lib/help'
+  deploy:
+    taskfile: ./cmds/deploy
+  internal:
+    taskfile: ./cmds/internal
+tasks:
+  default:
+    cmd: echo root
+YAML
+
+  cat > "$CLI_DIR/.env" <<ENV
+CLI_NAME=$CLI_NAME
+CLI_VERSION=$CLI_VERSION
+CLI_DIR=$CLI_DIR
+FRAMEWORK_DIR=$FRAMEWORK_DIR
+CLIFT_MODE=standard
+LOG_THEME=minimal
+ENV
+
+  # deploy command — aliases + mutex group + string flag (no `complete:`
+  # field: dynamic completion is convention-only, discovered via a function
+  # in .clift/overrides/completion.sh, not declared in the flag schema).
+  mkdir -p "$CLI_DIR/cmds/deploy"
+  cat > "$CLI_DIR/cmds/deploy/Taskfile.yaml" <<'YAML'
+version: '3'
+vars:
+  FLAGS:
+    - {name: json,   type: bool,   group: format, exclusive: true, desc: "JSON output"}
+    - {name: yaml,   type: bool,   group: format, exclusive: true, desc: "YAML output"}
+    - {name: region, type: string, desc: "Region"}
+tasks:
+  default:
+    desc: "Deploy the app"
+    aliases: [d, dep]
+    # Re-declared on tasks.default to match test_helper.bash:107-121
+    # convention; the compiler walks both layers and the router sees the
+    # per-task list when it routes the default task.
+    vars:
+      FLAGS:
+        - {name: json,   type: bool,   group: format, exclusive: true, desc: "JSON output"}
+        - {name: yaml,   type: bool,   group: format, exclusive: true, desc: "YAML output"}
+        - {name: region, type: string, desc: "Region"}
+    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
+YAML
+
+  # deploy script — writes an observable marker to BOTH stdout (for
+  # grouped-output assertions) and a marker file (for "ran vs didn't run"
+  # assertions that don't depend on go-task's output grouping).
+  cat > "$CLI_DIR/cmds/deploy/deploy.sh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+line="deploy: profile=${CLIFT_FLAG_PROFILE:-unset} json=${CLIFT_FLAG_JSON:-unset} region=${CLIFT_FLAG_REGION:-unset}"
+echo "$line"
+echo "$line" >> "${CLI_DIR}/deploy.out"
+SH
+  chmod +x "$CLI_DIR/cmds/deploy/deploy.sh"
+
+  # Hidden command — `vars.HIDDEN: true`. Name is 'internal', not
+  # '_internal' — see the top-of-function fixture comment.
+  mkdir -p "$CLI_DIR/cmds/internal"
+  cat > "$CLI_DIR/cmds/internal/Taskfile.yaml" <<'YAML'
+version: '3'
+vars:
+  HIDDEN: true
+  FLAGS: []
+tasks:
+  default:
+    vars:
+      FLAGS: []
+    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
+YAML
+  cat > "$CLI_DIR/cmds/internal/internal.sh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "internal-ran"
+SH
+  chmod +x "$CLI_DIR/cmds/internal/internal.sh"
+
+  # Overrides — help_list banner, command_pre marker, dynamic completer
+  # for deploy's --region flag.
+  mkdir -p "$CLI_DIR/.clift/overrides"
+
+  cat > "$CLI_DIR/.clift/overrides/help_list.sh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+clift_override_help_list() {
+  local default_fn="$1"; shift
+  echo "=== BANNER ==="
+  "$default_fn" "$@"
+  echo "=== /BANNER ==="
+}
+SH
+
+  # command_pre writes PRE to stderr. go-task's `output: group` config on
+  # the root Taskfile merges stderr onto stdout from the test runner's
+  # view, so PRE is observable in $output — asserting on stream separation
+  # at this seam would fight the framework, not reveal bugs. The marker
+  # file below does the "ran vs didn't run" job independently.
+  cat > "$CLI_DIR/.clift/overrides/command_pre.sh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+clift_override_command_pre() {
+  local default_fn="$1"; shift
+  echo "PRE" >&2
+  "$default_fn" "$@"
+}
+SH
+
+  cat > "$CLI_DIR/.clift/overrides/completion.sh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+clift_complete_deploy_region() {
+  printf '%s\n' us-east-1 us-west-2 eu-central-1
+}
+SH
+
+  bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$CLI_DIR"
+  build_test_wrapper
+}
+
 # Render wrapper.sh.tmpl into $CLI_DIR/bin/$CLI_NAME.
 # Requires CLI_DIR, CLI_NAME, CLI_VERSION, FRAMEWORK_DIR to be set.
 build_test_wrapper() {

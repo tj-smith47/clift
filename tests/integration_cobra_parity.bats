@@ -68,161 +68,11 @@ _refute_listed() {
 }
 
 # --- Fixture ---------------------------------------------------------------
-
-# Build the multi-feature fixture at $CLI_DIR. We write the files inline
-# instead of calling create_test_cli because the latter is too narrow for a
-# CLI that needs persistent flags + aliases + hidden cmd + overrides all
-# stitched together.
 #
-# Hidden commands are distinguished by `vars.HIDDEN: true` (per
-# hidden.bats), NOT by an `_`-prefixed include name — the wrapper's task
-# index filter at wrapper.sh.tmpl line 314 drops every `^_|:_` entry, so
-# an `_internal`-named include would not be dispatchable at all.
-# The root heredoc is unquoted so ${FRAMEWORK_DIR} expands inline — same
-# trick create_test_cli uses for .env.
-_setup_parity_cli() {
-  # Root Taskfile — includes the framework's `_help` namespace so
-  # `mycli --help` can dispatch to `_help:list` (wrapper line 200 / 516).
-  cat > "$CLI_DIR/Taskfile.yaml" <<YAML
-version: '3'
-silent: true
-output:
-  group:
-    begin: ''
-    end: ''
-set: [errexit, pipefail]
-dotenv: ['.env']
-vars:
-  FLAGS:
-    - {name: help, short: h, type: bool, desc: "Show help"}
-    - {name: verbose, short: v, type: bool, desc: "Verbose"}
-    - {name: quiet, short: q, type: bool, desc: "Quiet"}
-    - {name: no-color, type: bool, desc: "No color"}
-    - {name: no-cache, type: bool, desc: "Force-rebuild the .clift cache"}
-    - {name: version, type: bool, desc: "Version"}
-  PERSISTENT_FLAGS:
-    - {name: profile, type: string, default: "dev", desc: "Profile"}
-includes:
-  _help:
-    taskfile: '${FRAMEWORK_DIR}/lib/help'
-  deploy:
-    taskfile: ./cmds/deploy
-  internal:
-    taskfile: ./cmds/internal
-tasks:
-  default:
-    cmd: echo root
-YAML
-
-  cat > "$CLI_DIR/.env" <<ENV
-CLI_NAME=$CLI_NAME
-CLI_VERSION=$CLI_VERSION
-CLI_DIR=$CLI_DIR
-FRAMEWORK_DIR=$FRAMEWORK_DIR
-CLIFT_MODE=standard
-LOG_THEME=minimal
-ENV
-
-  # deploy command — aliases + mutex group + string flag (no `complete:`
-  # field: dynamic completion is convention-only, discovered via a function
-  # in .clift/overrides/completion.sh, not declared in the flag schema).
-  mkdir -p "$CLI_DIR/cmds/deploy"
-  cat > "$CLI_DIR/cmds/deploy/Taskfile.yaml" <<'YAML'
-version: '3'
-vars:
-  FLAGS:
-    - {name: json,   type: bool,   group: format, exclusive: true, desc: "JSON output"}
-    - {name: yaml,   type: bool,   group: format, exclusive: true, desc: "YAML output"}
-    - {name: region, type: string, desc: "Region"}
-tasks:
-  default:
-    desc: "Deploy the app"
-    aliases: [d, dep]
-    # Re-declared on tasks.default to match test_helper.bash:107-121
-    # convention; the compiler walks both layers and the router sees the
-    # per-task list when it routes the default task.
-    vars:
-      FLAGS:
-        - {name: json,   type: bool,   group: format, exclusive: true, desc: "JSON output"}
-        - {name: yaml,   type: bool,   group: format, exclusive: true, desc: "YAML output"}
-        - {name: region, type: string, desc: "Region"}
-    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
-YAML
-
-  # deploy script — writes an observable marker to BOTH stdout (for
-  # grouped-output assertions) and a marker file (for "ran vs didn't run"
-  # assertions that don't depend on go-task's output grouping).
-  cat > "$CLI_DIR/cmds/deploy/deploy.sh" <<'SH'
-#!/usr/bin/env bash
-set -euo pipefail
-line="deploy: profile=${CLIFT_FLAG_PROFILE:-unset} json=${CLIFT_FLAG_JSON:-unset} region=${CLIFT_FLAG_REGION:-unset}"
-echo "$line"
-echo "$line" >> "${CLI_DIR}/deploy.out"
-SH
-  chmod +x "$CLI_DIR/cmds/deploy/deploy.sh"
-
-  # Hidden command — `vars.HIDDEN: true`. Name is 'internal', not
-  # '_internal' — see the top-of-file fixture comment.
-  mkdir -p "$CLI_DIR/cmds/internal"
-  cat > "$CLI_DIR/cmds/internal/Taskfile.yaml" <<'YAML'
-version: '3'
-vars:
-  HIDDEN: true
-  FLAGS: []
-tasks:
-  default:
-    vars:
-      FLAGS: []
-    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
-YAML
-  cat > "$CLI_DIR/cmds/internal/internal.sh" <<'SH'
-#!/usr/bin/env bash
-set -euo pipefail
-echo "internal-ran"
-SH
-  chmod +x "$CLI_DIR/cmds/internal/internal.sh"
-
-  # Overrides — help_list banner, command_pre marker, dynamic completer
-  # for deploy's --region flag.
-  mkdir -p "$CLI_DIR/.clift/overrides"
-
-  cat > "$CLI_DIR/.clift/overrides/help_list.sh" <<'SH'
-#!/usr/bin/env bash
-set -euo pipefail
-clift_override_help_list() {
-  local default_fn="$1"; shift
-  echo "=== BANNER ==="
-  "$default_fn" "$@"
-  echo "=== /BANNER ==="
-}
-SH
-
-  # command_pre writes PRE to stderr. go-task's `output: group` config on
-  # the root Taskfile merges stderr onto stdout from the test runner's
-  # view, so PRE is observable in $output — asserting on stream separation
-  # at this seam would fight the framework, not reveal bugs. The marker
-  # file below does the "ran vs didn't run" job independently.
-  cat > "$CLI_DIR/.clift/overrides/command_pre.sh" <<'SH'
-#!/usr/bin/env bash
-set -euo pipefail
-clift_override_command_pre() {
-  local default_fn="$1"; shift
-  echo "PRE" >&2
-  "$default_fn" "$@"
-}
-SH
-
-  cat > "$CLI_DIR/.clift/overrides/completion.sh" <<'SH'
-#!/usr/bin/env bash
-set -euo pipefail
-clift_complete_deploy_region() {
-  printf '%s\n' us-east-1 us-west-2 eu-central-1
-}
-SH
-
-  bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$CLI_DIR"
-  build_test_wrapper
-}
+# The multi-feature fixture used across every case below lives in
+# `tests/test_helper.bash` as `setup_parity_cli`. It stitches together
+# persistent flags + aliases + hidden command + overrides + a dynamic
+# completer — see the function header there for the exact shape.
 
 # --- 1. alias + persistent + group-valid + pre-hook ------------------------
 
@@ -232,7 +82,7 @@ SH
 # command_pre hook fires before the script. The pre-command persistent
 # binding path is exercised separately in Test 6.
 @test "alias + persistent(post) + group-valid + pre-hook compose end-to-end" {
-  _setup_parity_cli
+  setup_parity_cli
   run "$CLI_DIR/bin/$CLI_NAME" d --profile=staging --json
   [ "$status" -eq 0 ]
   [[ "$output" == *"deploy: profile=staging json=true"* ]]
@@ -251,7 +101,7 @@ SH
 # lib/flags/errors.sh line 179: "mutually exclusive") and must abort
 # BEFORE the deploy script runs — the marker file must not exist.
 @test "group mutex: --json --yaml errors and deploy never runs" {
-  _setup_parity_cli
+  setup_parity_cli
   run "$CLI_DIR/bin/$CLI_NAME" d --json --yaml
   [ "$status" -ne 0 ]
   [[ "$output" == *"mutually exclusive"* ]]
@@ -270,7 +120,7 @@ SH
 # leading-column rows so that banner/description text containing the
 # substring "internal" or "deploy" can't drive false passes or failures.
 @test "help list: banner present, hidden filtered, deploy present" {
-  _setup_parity_cli
+  setup_parity_cli
   run "$CLI_DIR/bin/$CLI_NAME" --help
   [ "$status" -eq 0 ]
   [[ "$output" == *"=== BANNER ==="* ]]
@@ -285,7 +135,7 @@ SH
 # dispatch layer must still route the name to the command. Regression
 # guard for anyone tempted to make "hidden" mean "removed from the index".
 @test "hidden command: absent from help list but still dispatchable" {
-  _setup_parity_cli
+  setup_parity_cli
   run "$CLI_DIR/bin/$CLI_NAME" internal
   [ "$status" -eq 0 ]
   [[ "$output" == *"internal-ran"* ]]
@@ -298,7 +148,7 @@ SH
 # Protocol matches tests/completion_dynamic.bats: one candidate per line,
 # always exits 0.
 @test "_complete deploy region: dynamic completer yields region list" {
-  _setup_parity_cli
+  setup_parity_cli
   run "$CLI_DIR/bin/$CLI_NAME" _complete deploy region
   [ "$status" -eq 0 ]
   [[ "$output" == *"us-east-1"* ]]
@@ -318,7 +168,7 @@ SH
 #   - resolve alias `d` to canonical `deploy` after the persistent flag
 #   - still parse --json as a deploy-level flag post-command
 @test "pre-command persistent flag + alias: --profile=staging d --json resolves both" {
-  _setup_parity_cli
+  setup_parity_cli
   run "$CLI_DIR/bin/$CLI_NAME" --profile=staging d --json
   [ "$status" -eq 0 ] \
     || { echo "exit=$status output=$output"; false; }
@@ -343,7 +193,7 @@ SH
 # Prepending $'\n' to `$output` lets us use glob matching to anchor on
 # either line-start or string-start without dropping into regex.
 @test "command alias --help resolves to canonical deploy command" {
-  _setup_parity_cli
+  setup_parity_cli
   run "$CLI_DIR/bin/$CLI_NAME" d --help
   [ "$status" -eq 0 ]
   [[ $'\n'"$output" == *$'\n'"$CLI_NAME deploy "* ]] \
@@ -374,7 +224,7 @@ SH
 # shape is not viable; the marker-file contrast is the strongest
 # observable signal available.)
 @test "--task:dry passthrough does not execute deploy script" {
-  _setup_parity_cli
+  setup_parity_cli
   # Dry-run: pipeline fires, exec suppressed, no marker.
   run "$CLI_DIR/bin/$CLI_NAME" --task:dry d --json
   [ "$status" -eq 0 ] \
@@ -399,7 +249,7 @@ SH
 # via the same CLIFT_FLAG_<NAME> / ${CLIFT_FLAGS[name]} machinery as
 # per-command flags"). This test pins the assoc-array exposure.
 @test "persistent flag visible in CLIFT_FLAGS on passthrough command (I1)" {
-  _setup_parity_cli
+  setup_parity_cli
   # Replace internal.sh with one that asserts on CLIFT_FLAGS[profile].
   cat > "$CLI_DIR/cmds/internal/internal.sh" <<'SH'
 #!/usr/bin/env bash
@@ -429,7 +279,7 @@ SH
 # CLIFT_PERSIST_BOUND, so should not create a tempfile at all) to guard
 # against regression on the no-persistent-flags passthrough path.
 @test "--help on parsed command does not leak tempfile (I3)" {
-  _setup_parity_cli
+  setup_parity_cli
   local probe_tmpdir="$TEST_DIR/i3_tmpdir"
   mkdir -p "$probe_tmpdir"
 
@@ -451,7 +301,7 @@ SH
 # reproduce; the emit is parser-side. The router's tempfile rm (I3) cleans
 # the leftover file in real use; this test isolates the emit-skip path.
 @test "parser skips CLIFT_FLAGS_FILE emit when --help is set (I6)" {
-  _setup_parity_cli
+  setup_parity_cli
   local sentinel="i6-sentinel-bytes"
   local probe_file="$TEST_DIR/i6.flags"
   printf '%s' "$sentinel" > "$probe_file"
