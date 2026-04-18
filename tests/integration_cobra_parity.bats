@@ -26,15 +26,29 @@ teardown() { common_teardown; }
 
 # --- Listing-shape assertion helpers ---------------------------------------
 
-# A command is "listed" when it appears as an indented token at the start
-# of a line (i.e. a row in the Commands: block), optionally followed by
-# more whitespace or EOL. This is a stricter check than substring match:
-# the words "deploy" and "internal" can appear in banner text, URLs, or
-# descriptions without ever being listed-as-commands, and plain substring
-# assertions happily accept those false positives.
+# A command is "listed" when it appears as the first column of a
+# command-table row. `lib/help/list.sh` renders rows as
+# `  <name>[, alias1, …]  <desc>` — the `sed 's/^/  /'` pass at
+# list.sh:265 fixes the leading indent at EXACTLY two spaces, and
+# `column -t -s $'\t'` rebuilds the name/desc separator with ≥2 spaces.
+# The regex below anchors to that exact shape:
+#
+#   (line-start) + "  " (exactly 2 spaces) + needle + (space|comma|EOL)
+#
+# Width-anchoring the indent to two spaces (vs. the earlier
+# `[[:space:]]+`) closes the false-positive case where a description
+# line wrapped with different leading whitespace and happened to start
+# with the needle word. Comma handles the `name, alias1, alias2`
+# alias-joined form.
+#
+# Caller contract: `needle` is interpolated raw into a bash `=~` regex,
+# so it must be a regex-literal with no metacharacters. Current callers
+# use bare identifiers (`deploy`, `internal`); a future caller with a
+# dotted, starred, or bracketed name must escape first.
 _assert_listed() {
   local needle="$1" haystack="$2"
-  if [[ "$haystack" =~ (^|$'\n')[[:space:]]+${needle}([[:space:]]|,|$) ]]; then
+  # Caller must pass a regex-literal needle (no metachars).
+  if [[ "$haystack" =~ (^|$'\n')"  "${needle}(" "|","|$) ]]; then
     return 0
   fi
   echo "expected '$needle' in command listing; got:" >&2
@@ -44,7 +58,8 @@ _assert_listed() {
 
 _refute_listed() {
   local needle="$1" haystack="$2"
-  if [[ "$haystack" =~ (^|$'\n')[[:space:]]+${needle}([[:space:]]|,|$) ]]; then
+  # Caller must pass a regex-literal needle (no metachars).
+  if [[ "$haystack" =~ (^|$'\n')"  "${needle}(" "|","|$) ]]; then
     echo "hidden command '$needle' leaked into listing; got:" >&2
     echo "$haystack" >&2
     return 1
@@ -321,12 +336,18 @@ SH
 # The wrapper substitutes alias → canonical at the first token of the
 # longest-prefix walk (mirrors tests/aliases_cmd.bats line 145+); if that
 # substitution moves downstream of --help interception this test fails.
+#
+# Anchor the header match to line-start: plain `*"$CLI_NAME deploy"*`
+# also accepts a trailing `Run 'testcli deploy <cmd> --help'` hint, so
+# a regression that drops the header but keeps the hint would pass.
+# Prepending $'\n' to `$output` lets us use glob matching to anchor on
+# either line-start or string-start without dropping into regex.
 @test "command alias --help resolves to canonical deploy command" {
   _setup_parity_cli
   run "$CLI_DIR/bin/$CLI_NAME" d --help
   [ "$status" -eq 0 ]
-  [[ "$output" == *"$CLI_NAME deploy"* ]] \
-    || { echo "expected canonical 'deploy' header; got: $output"; false; }
+  [[ $'\n'"$output" == *$'\n'"$CLI_NAME deploy "* ]] \
+    || { echo "expected line-start '$CLI_NAME deploy ' header; got: $output"; false; }
   # Detail page must still advertise the command's flags.
   [[ "$output" == *"--json"* ]]
   [[ "$output" == *"--yaml"* ]]
@@ -338,14 +359,33 @@ SH
 # `--task:*` flags are consumed by the wrapper's passthrough scan
 # (wrapper.sh.tmpl:21-120) and forwarded to `task` with the prefix
 # stripped. `--task:dry` drives go-task's dry-run mode: the task graph
-# is printed but no command runs, so the deploy.sh script must NOT
+# is walked but no command runs, so the deploy.sh script must NOT
 # produce its marker file even though the full parser/group-check
 # pipeline has fired.
+#
+# Positive assertion (guarding the "wrapper silently swallowed the flag"
+# failure mode the reviewer flagged): the complementary invocation of
+# the SAME fixture WITHOUT --task:dry DOES create the marker. That pins
+# --task:dry as the observable differentiator — if the wrapper dropped
+# the flag, the "dry" run would execute and the marker would appear,
+# making it indistinguishable from the baseline run. (Note: under the
+# fixture's `silent: true` + `output: group` root-Taskfile config,
+# go-task emits no visible dry-run trace, so asserting on stdout
+# shape is not viable; the marker-file contrast is the strongest
+# observable signal available.)
 @test "--task:dry passthrough does not execute deploy script" {
   _setup_parity_cli
+  # Dry-run: pipeline fires, exec suppressed, no marker.
   run "$CLI_DIR/bin/$CLI_NAME" --task:dry d --json
   [ "$status" -eq 0 ] \
-    || { echo "exit=$status output=$output"; false; }
+    || { echo "dry-run exit=$status output=$output"; false; }
   [[ ! -f "$CLI_DIR/deploy.out" ]] \
     || { echo "deploy.out created — dry-run should not execute"; false; }
+  # Baseline: same invocation minus the dry flag runs the script and
+  # DOES create the marker. Proves the flag is the only differentiator.
+  run "$CLI_DIR/bin/$CLI_NAME" d --json
+  [ "$status" -eq 0 ] \
+    || { echo "baseline exit=$status output=$output"; false; }
+  [[ -f "$CLI_DIR/deploy.out" ]] \
+    || { echo "deploy.out missing from baseline run — fixture is broken"; false; }
 }
