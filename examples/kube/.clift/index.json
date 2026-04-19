@@ -1,0 +1,17 @@
+{
+  "tasks": {},
+  "persistent_flags": [
+    {
+      "name": "profile",
+      "short": "p",
+      "type": "string",
+      "default": "default",
+      "desc": "Config profile"
+    },
+    {
+      "name": "config-file",
+      "type": "string",
+      "desc": "Override config file path"
+    }
+  ]
+}

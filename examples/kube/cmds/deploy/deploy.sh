@@ -7,8 +7,9 @@ target="${CLIFT_FLAG_TARGET}"
 force="${CLIFT_FLAG_FORCE:-}"
 replicas="${CLIFT_FLAG_REPLICAS:-3}"
 tag_count="${CLIFT_FLAG_TAG_COUNT:-0}"
+profile="${CLIFT_FLAG_PROFILE:-default}"
 
-log_info "Deploying to ${target} (replicas: ${replicas})"
+log_info "Deploying to ${target} (profile=${profile}, replicas=${replicas})"
 
 if (( tag_count == 0 )); then
   log_warn "No tags specified — deploying latest"

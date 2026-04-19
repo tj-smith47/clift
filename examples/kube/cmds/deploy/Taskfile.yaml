@@ -2,14 +2,28 @@ version: '3'
 
 vars:
   FLAGS:
-    - {name: target, short: t, type: string, default: staging, desc: "Target environment"}
+    - {name: target, short: t, type: string, default: staging, desc: "Target environment",
+       choices: [staging, prod, eu-west, us-east], aliases: [env]}
     - {name: force, short: f, type: bool, desc: "Skip confirmation prompt"}
     - {name: tag, type: list, desc: "Image tags to deploy (repeatable)"}
     - {name: replicas, short: r, type: int, default: "3", desc: "Number of replicas"}
+    - {name: old-replicas, type: int, deprecated: "use --replicas instead",
+       desc: "Legacy replica count"}
+    - {name: json, type: bool, desc: "Emit JSON output",
+       group: output, exclusive: true}
+    - {name: yaml, type: bool, desc: "Emit YAML output",
+       group: output, exclusive: true}
+    - {name: user, type: string, desc: "Authenticating user",
+       group: auth, requires: all}
+    - {name: token, type: string, desc: "Authenticating token",
+       group: auth, requires: all}
+    - {name: semver, type: string, desc: "Release version",
+       pattern: "^v?[0-9]+\\.[0-9]+\\.[0-9]+$"}
 
 tasks:
   default:
     desc: "Deploy services to an environment"
+    aliases: [dep]
     summary: |
       Deploy services to the specified target environment.
 
@@ -18,14 +32,27 @@ tasks:
 
       Examples:
         kube deploy --target prod --tag=api:v1.2 --tag=web:v1.3
-        kube deploy -t staging --replicas 5
+        kube dep -t staging --replicas 5
         kube deploy --force --tag=api:latest
     vars:
       FLAGS:
-        - {name: target, short: t, type: string, default: staging, desc: "Target environment"}
+        - {name: target, short: t, type: string, default: staging, desc: "Target environment",
+           choices: [staging, prod, eu-west, us-east], aliases: [env]}
         - {name: force, short: f, type: bool, desc: "Skip confirmation prompt"}
         - {name: tag, type: list, desc: "Image tags to deploy (repeatable)"}
         - {name: replicas, short: r, type: int, default: "3", desc: "Number of replicas"}
+        - {name: old-replicas, type: int, deprecated: "use --replicas instead",
+           desc: "Legacy replica count"}
+        - {name: json, type: bool, desc: "Emit JSON output",
+           group: output, exclusive: true}
+        - {name: yaml, type: bool, desc: "Emit YAML output",
+           group: output, exclusive: true}
+        - {name: user, type: string, desc: "Authenticating user",
+           group: auth, requires: all}
+        - {name: token, type: string, desc: "Authenticating token",
+           group: auth, requires: all}
+        - {name: semver, type: string, desc: "Release version",
+           pattern: "^v?[0-9]+\\.[0-9]+\\.[0-9]+$"}
     cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
 
   rollback:
@@ -38,5 +65,6 @@ tasks:
         kube deploy rollback -t staging
     vars:
       FLAGS:
-        - {name: target, short: t, type: string, default: staging, desc: "Target environment"}
+        - {name: target, short: t, type: string, default: staging, desc: "Target environment",
+           choices: [staging, prod, eu-west, us-east]}
     cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"

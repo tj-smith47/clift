@@ -422,7 +422,7 @@ while IFS=$'\x01' read -r -d '' task_name source_tf aliases_json summary; do
         (
           if ($pnames | index($f.name)) then
             "error: flag '\''\($f.name)'\'' declared in persistent flags conflicts with per-command flag in \($tf)"
-          elif (($f.aliases // []) | map(select($pnames | index(.))) | length > 0) then
+          elif (($f.aliases // []) | map(. as $a | select($pnames | index($a))) | length > 0) then
             "error: alias of flag '\''\($f.name)'\'' conflicts with persistent flag name in \($tf)"
           elif (($f.short // "") != "" and ($pshorts | index($f.short))) then
             "error: short '\''-\($f.short)'\'' of flag '\''\($f.name)'\'' conflicts with persistent flag short in \($tf)"

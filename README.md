@@ -11,12 +11,40 @@
 <details>
 <summary>More demos</summary>
 
-| Demo | Description |
-|------|-------------|
-| <img src=".vhs/gifs/init.gif" width="500"> | `clift init` — create a new CLI |
-| <img src=".vhs/gifs/help.gif" width="500"> | Help at every level |
-| <img src=".vhs/gifs/errors.gif" width="500"> | Error UX — typos, wrong types, missing flags |
-| <img src=".vhs/gifs/flags.gif" width="500"> | Flag parsing — string, bool, int, list |
+### Help at every level
+<img src=".vhs/gifs/help.gif" alt="help output">
+
+Rich `--help` with groups, choices, deprecated markers, and completion install hint.
+
+### Flag parsing
+<img src=".vhs/gifs/flags.gif" alt="flag parsing">
+
+String, bool, int, list, and repeated flags all export as `CLIFT_FLAG_*` env vars.
+
+### Validation — choices and patterns
+<img src=".vhs/gifs/validation.gif" alt="choices and pattern validation">
+
+`choices:` and `pattern:` fail fast before the user script runs.
+
+### Mutex and required-together groups
+<img src=".vhs/gifs/groups.gif" alt="group constraints">
+
+Flat group schema: mutually exclusive (`--json` vs `--yaml`) and required-together (`--user` + `--token`).
+
+### Persistent flags
+<img src=".vhs/gifs/persistent.gif" alt="persistent flags">
+
+Declared on the root Taskfile, accepted either before or after the command token.
+
+### Aliases and deprecated flags
+<img src=".vhs/gifs/aliases.gif" alt="aliases and deprecation">
+
+Command aliases (`dep` → `deploy`), flag aliases (`--env` → `--target`), and one-shot deprecation warnings.
+
+### Error UX
+<img src=".vhs/gifs/errors.gif" alt="error messages">
+
+Typos get did-you-mean suggestions; wrong types and missing flags get clear, actionable errors.
 
 </details>
 

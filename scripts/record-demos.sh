@@ -80,6 +80,12 @@ else
   echo "warn: kubectl not found — the hero tape requires a reachable cluster" >&2
 fi
 
+# Purge stale GIFs BEFORE recording so renamed/deleted tapes don't leave
+# orphans committed. Invariant: after a successful run, the set of gifs in
+# .vhs/gifs/ equals the set of .tape files.
+echo "Purging stale gifs..."
+find "$FRAMEWORK_DIR/.vhs/gifs" -maxdepth 1 -type f -name '*.gif' -delete
+
 echo "Recording tapes (HOME=$HOME)..."
 for tape in "$FRAMEWORK_DIR"/.vhs/*.tape; do
   name="$(basename "$tape" .tape)"
