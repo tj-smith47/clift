@@ -1,0 +1,32 @@
+version: '3'
+
+vars:
+  FLAGS:
+    - {name: tag, type: list, desc: "Tag (repeatable)"}
+    - {name: pin, type: bool, desc: "Pin to top of notes list"}
+    - {name: encrypt, type: bool, desc: "Encrypt this note at rest",
+       group: enc, requires: all}
+    - {name: passphrase, type: string, desc: "Passphrase for encryption",
+       group: enc, requires: all}
+
+tasks:
+  default:
+    desc: "Capture a note"
+    aliases: [n]
+    summary: |
+      Drop a quick note. Accepts a positional body, repeated --tag.
+      To encrypt, pass --encrypt AND --passphrase together (the
+      required-together group 'enc' enforces this).
+
+      Examples:
+        jarvis note "idea: queue should backoff" --tag arch --tag queue
+        jarvis n "1:1 with sam" --tag private --encrypt --passphrase=hunter2
+    vars:
+      FLAGS:
+        - {name: tag, type: list, desc: "Tag (repeatable)"}
+        - {name: pin, type: bool, desc: "Pin to top of notes list"}
+        - {name: encrypt, type: bool, desc: "Encrypt this note at rest",
+           group: enc, requires: all}
+        - {name: passphrase, type: string, desc: "Passphrase for encryption",
+           group: enc, requires: all}
+    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"

@@ -1,0 +1,22 @@
+version: '3'
+
+vars:
+  FLAGS:
+    - {name: json, type: bool, desc: "Emit JSON", group: output, exclusive: true}
+    - {name: yaml, type: bool, desc: "Emit YAML", group: output, exclusive: true}
+
+tasks:
+  default:
+    desc: "Dashboard — tasks, reminders, focus streak"
+    summary: |
+      Quick view of everything jarvis is tracking for you.
+
+      Examples:
+        jarvis status
+        jarvis status --json
+        jarvis status --yaml
+    vars:
+      FLAGS:
+        - {name: json, type: bool, desc: "Emit JSON", group: output, exclusive: true}
+        - {name: yaml, type: bool, desc: "Emit YAML", group: output, exclusive: true}
+    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"

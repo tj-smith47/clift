@@ -1,0 +1,20 @@
+version: '3'
+
+vars:
+  FLAGS:
+    - {name: since, type: string, default: "yesterday", desc: "Commit window"}
+
+tasks:
+  default:
+    desc: "Generate standup notes from commits"
+    summary: |
+      Rough draft of a standup message assembled from your recent
+      commit activity.
+
+      Examples:
+        jarvis standup
+        jarvis standup --since "2 days ago"
+    vars:
+      FLAGS:
+        - {name: since, type: string, default: "yesterday", desc: "Commit window"}
+    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"

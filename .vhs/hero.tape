@@ -1,29 +1,27 @@
-# clift hero demo — why wrap a tool with clift?
-# Left column: the raw kubectl recipe (two commands, explicit namespace).
-# Right column: the same job, one clift command, one spinner, one success line.
-# Both run against the `clift-demo` namespace applied by record-demos.sh —
-# no personal cluster content ever appears in the recording.
+# jarvis hero — a personal ops concierge CLI built on clift.
+# Morning routine: briefing → coffee (with spinner) → focus session.
 # Run standalone: vhs .vhs/hero.tape
 
 Output .vhs/gifs/hero.gif
 
 Set Shell "bash"
-Set FontSize 24
+Set FontSize 22
 Set Width 1200
-Set Height 600
+Set Height 900
 Set Padding 20
 Set TypingSpeed 75ms
 
-# The kubectl way — verbose, two commands, explicit namespace each time.
-Type "kubectl rollout restart deployment/web -n clift-demo"
+# Concierge greeting: themed sections, bold headers, canned data.
+Type "jarvis brief"
 Enter
-Sleep 2s
+Sleep 3s
 
-Type "kubectl rollout status deployment/web -n clift-demo --timeout 60s"
+# Gum spinner — brewing takes 3s, themed success with emoji.
+Type "jarvis coffee --size large --milk"
 Enter
 Sleep 5s
 
-# The clift way — same work, one line, spinner UX, success log.
-Type "clear && kube restart web"
+# Focus session with command_pre override announcement + spinner.
+Type "jarvis focus 4s --on 'write tests'"
 Enter
-Sleep 7s
+Sleep 6s

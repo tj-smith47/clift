@@ -4,6 +4,12 @@
 
 set -euo pipefail
 
+# Swallow go-task's "Failed to run task ..." summary lines: clift's own
+# error messages already explain what went wrong, and the trailing
+# "task: Failed to run task 'X': exit status N" is noise that leaks
+# framework internals to end users.
+exec 2> >(stdbuf -oL -eL grep -Ev $'^(\x1b\\[[0-9;]*m)*task: Failed to run task ' >&2)
+
 export FRAMEWORK_DIR="%%FRAMEWORK_DIR%%"
 export CLI_DIR="%%CLI_DIR%%"
 CLI_NAME="%%CLI_NAME%%"

@@ -1,6 +1,5 @@
-# clift aliases — commands AND flags can declare aliases.
-# `deploy` → alias `dep`; `--target` → alias `--env`.
-# Prerequisite: run scripts/record-demos.sh (sets up kube on PATH)
+# jarvis aliases — commands AND flags can declare aliases; deprecated flags
+# emit a one-shot warning and are flagged in help.
 # Run standalone: vhs .vhs/aliases.tape
 
 Output .vhs/gifs/aliases.gif
@@ -12,17 +11,22 @@ Set Height 700
 Set Padding 20
 Set TypingSpeed 75ms
 
-# Command alias: `dep` resolves to `deploy`
-Type "kube dep --target staging"
+# Command alias: `n` resolves to `note`
+Type "jarvis n 'quick idea' --tag arch"
 Enter
 Sleep 2s
 
-# Flag alias: --env is an alias for --target
-Type "kube deploy --env prod --force"
+# Subcommand alias: `task ls` resolves to `task list`
+Type "jarvis task ls --priority high"
 Enter
 Sleep 2s
 
-# --help shows the aliases declared on the command
-Type "kube --help | head -20"
+# Flag alias: --pri is an alias for --priority
+Type "jarvis task add 'wire up jarvis' --pri low"
+Enter
+Sleep 2s
+
+# Deprecated flag — still works, emits a warning
+Type "jarvis task add 'old-school call' --urgency high"
 Enter
 Sleep 3s

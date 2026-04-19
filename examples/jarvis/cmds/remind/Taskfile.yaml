@@ -1,0 +1,29 @@
+version: '3'
+
+vars:
+  FLAGS:
+    - {name: in, type: string, desc: "Delay (e.g. 10m, 1h, 2d)",
+       pattern: "^[0-9]+[smhd]$", group: when, exclusive: true}
+    - {name: at, type: string, desc: "Absolute time (HH:MM 24h)",
+       pattern: "^[0-2][0-9]:[0-5][0-9]$", group: when, exclusive: true}
+    - {name: via, type: string, default: push, desc: "Delivery channel",
+       choices: [slack, email, push, sms]}
+
+tasks:
+  default:
+    desc: "Schedule a reminder"
+    summary: |
+      Schedule a reminder. Provide exactly one of --in or --at.
+
+      Examples:
+        jarvis remind "stand up" --in 10m
+        jarvis remind "1:1 with sam" --at 13:30 --via slack
+    vars:
+      FLAGS:
+        - {name: in, type: string, desc: "Delay (e.g. 10m, 1h, 2d)",
+           pattern: "^[0-9]+[smhd]$", group: when, exclusive: true}
+        - {name: at, type: string, desc: "Absolute time (HH:MM 24h)",
+           pattern: "^[0-2][0-9]:[0-5][0-9]$", group: when, exclusive: true}
+        - {name: via, type: string, default: push, desc: "Delivery channel",
+           choices: [slack, email, push, sms]}
+    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"

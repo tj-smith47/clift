@@ -498,33 +498,37 @@ If cfgd is not installed, nothing changes:
 
 ## Example
 
-See [`examples/kube/`](examples/kube/) for a realistic multi-command CLI with:
+See [`examples/jarvis/`](examples/jarvis/) — a personal ops concierge CLI that exercises the full framework surface:
 
-- 3 commands: `deploy`, `status`, `logs`
-- Subcommand: `deploy rollback`
-- All flag types: `--target` (string), `--force` (bool), `--replicas` (int), `--tag` (list, repeatable)
-- Required flags (`--service` on `logs`)
-- Help, global flags, and themed output
+- 9 commands including hidden (`debug`) and composed (`task add/list/done`, `note`, `remind`, `standup`, `coffee`, `focus`, `brief`, `status`)
+- Command + flag aliases (`n` → `note`, `--pri` → `--priority`)
+- Subcommand aliases (`ls` → `list`, `new` → `add`)
+- Choices, patterns, mutex + required-together groups, deprecated flags
+- Persistent `--profile work|home` accepted before or after any command
+- Dynamic tag completer for `jarvis note --tag`
+- `command_pre` override hook on `focus`
+- gum spinner integrations on `coffee` and `focus`
+
+Everything is simulated — no network, no cluster, fully reproducible.
 
 ## Error UX
 
 clift provides production-grade error messages out of the box — no code required:
 
 ```
-$ kube hllo
-error: unknown command 'hllo'
-  did you mean 'hello'?
-  run 'kube --help' for commands
+$ jarvis breif
+error: unknown command 'breif'
+  did you mean 'brief'?
+  run 'jarvis --help' for commands
 
-$ kube deploy -t prod
-error: subcommand must come before flags
-  did you mean: kube deploy prod -t
+$ jarvis task add 'x' --priority bogus
+error: flag '--priority' requires one of: low, med, high, got 'bogus'
 
-$ kube deploy --replicas abc
-error: flag '--replicas' requires an integer, got 'abc'
+$ jarvis remind 'standup' --in 5
+error: flag '--in' requires value matching pattern '^[0-9]+[smhd]$', got '5'
 
-$ kube logs
-error: required flag '--service' not provided
+$ jarvis remind 'standup' --in 10m --at 13:00
+error: flags '--in', '--at' in group 'when' are mutually exclusive
 ```
 
 ## Development

@@ -1,5 +1,4 @@
-# clift flag parsing — the core schema: string, bool, int, list flags in action.
-# Prerequisite: run scripts/record-demos.sh (sets up kube on PATH)
+# jarvis flag parsing — string, bool, int, list flags in action.
 # Run standalone: vhs .vhs/flags.tape
 
 Output .vhs/gifs/flags.gif
@@ -11,17 +10,17 @@ Set Height 700
 Set Padding 20
 Set TypingSpeed 75ms
 
-# String + bool flags
-Type "kube deploy --target prod --force"
+# String + int: priority (choice) + custom due date
+Type "jarvis task add 'ship demos' --priority high --due today"
 Enter
 Sleep 2s
 
-# Integer flag
-Type "kube deploy --target staging --replicas 5"
+# List flag — repeated --tag — plus bool --pin
+Type "jarvis note 'queue should backoff' --tag arch --tag queue --pin"
 Enter
-Sleep 2s
+Sleep 3s
 
-# List flag (repeatable)
-Type "kube deploy -t prod -f --tag=api:v1.2 --tag=web:v3.0"
+# Short-flag forms + pattern-constrained value
+Type "jarvis remind 'standup' --in 10m --via slack"
 Enter
 Sleep 2s

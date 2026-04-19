@@ -1,5 +1,5 @@
-# clift error UX — typo correction, wrong types, missing required, mutex violation.
-# Prerequisite: run scripts/record-demos.sh (sets up kube on PATH)
+# jarvis error UX — typo correction, choices violation, pattern mismatch,
+# mutex violation. Every error is actionable and names the offending value.
 # Run standalone: vhs .vhs/errors.tape
 
 Output .vhs/gifs/errors.gif
@@ -12,21 +12,21 @@ Set Padding 20
 Set TypingSpeed 75ms
 
 # Typo with did-you-mean suggestion
-Type "kube deplooy"
+Type "jarvis breif"
 Enter
 Sleep 2s
 
-# Wrong flag type (int expected)
-Type "kube deploy --replicas abc"
+# Choices violation — priority must be low|med|high
+Type "jarvis task add 'x' --priority bogus"
 Enter
 Sleep 2s
 
-# Missing required flag
-Type "kube logs"
+# Pattern violation — --in must match ^[0-9]+[smhd]$
+Type "jarvis remind 'standup' --in 5"
 Enter
 Sleep 2s
 
-# Mutex-group violation: --json and --yaml are exclusive
-Type "kube deploy --json --yaml"
+# Mutex — --in and --at are in the same exclusive group 'when'
+Type "jarvis remind 'standup' --in 10m --at 13:00"
 Enter
 Sleep 3s

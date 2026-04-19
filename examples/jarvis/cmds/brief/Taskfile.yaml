@@ -1,0 +1,21 @@
+version: '3'
+
+vars:
+  FLAGS:
+    - {name: short, short: s, type: bool, desc: "One-line summary instead of full brief"}
+
+tasks:
+  default:
+    desc: "Morning briefing — calendar, PRs, deploys, oncall"
+    summary: |
+      Run this when you sit down. It's your start-of-day dashboard:
+      today's calendar, PRs awaiting review, recent deploys, and
+      who's on call.
+
+      Examples:
+        jarvis brief
+        jarvis brief --short
+    vars:
+      FLAGS:
+        - {name: short, short: s, type: bool, desc: "One-line summary instead of full brief"}
+    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"

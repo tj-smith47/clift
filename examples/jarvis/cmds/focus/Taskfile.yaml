@@ -1,0 +1,24 @@
+version: '3'
+
+vars:
+  FLAGS:
+    - {name: on, type: string, desc: "What you're focusing on (shown in title)"}
+    - {name: silent, type: bool, desc: "No end-of-session chime"}
+
+tasks:
+  default:
+    desc: "Start a focus session ⏱"
+    aliases: [pomodoro]
+    summary: |
+      Start a timed focus session. Duration is the first positional
+      argument, e.g. `25m`, `10s`, `1h`. Shows a countdown spinner.
+
+      Examples:
+        jarvis focus 25m --on "write tests"
+        jarvis focus 10s --on demo
+        jarvis pomodoro 25m
+    vars:
+      FLAGS:
+        - {name: on, type: string, desc: "What you're focusing on (shown in title)"}
+        - {name: silent, type: bool, desc: "No end-of-session chime"}
+    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"

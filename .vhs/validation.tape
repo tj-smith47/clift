@@ -1,6 +1,5 @@
-# clift flag validation — `choices:` constrains to an enum, `pattern:` to a regex.
-# Both fail fast with a clear message before the user script ever runs.
-# Prerequisite: run scripts/record-demos.sh (sets up kube on PATH)
+# jarvis flag validation — `choices:` constrains to an enum, `pattern:` to a
+# regex. Both fail fast with a clear message before the user script runs.
 # Run standalone: vhs .vhs/validation.tape
 
 Output .vhs/gifs/validation.gif
@@ -12,17 +11,17 @@ Set Height 700
 Set Padding 20
 Set TypingSpeed 75ms
 
-# choices: bogus value rejected with the allowed list
-Type "kube deploy --target bogus"
+# choices: bogus channel rejected with the allowed list
+Type "jarvis remind 'x' --in 10m --via telegram"
 Enter
 Sleep 2s
 
-# pattern: 1.2 doesn't match semver; error names the offending pattern
-Type "kube deploy --semver 1.2"
+# pattern: '5' doesn't match ^[0-9]+[smhd]$; error names the offending pattern
+Type "jarvis remind 'x' --in 5"
 Enter
 Sleep 2s
 
-# Both constraints satisfied — deploy proceeds
-Type "kube deploy --semver v1.2.3 --target prod --force"
+# Both constraints satisfied — reminder scheduled
+Type "jarvis remind 'standup' --at 13:30 --via slack"
 Enter
 Sleep 3s

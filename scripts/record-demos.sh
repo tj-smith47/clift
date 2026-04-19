@@ -10,7 +10,8 @@
 #   - HOME is redirected to a tempdir for the duration of recording, so VHS's
 #     spawned bash sources a stub ~/.bashrc (neutral prompt, no aliases, no
 #     hostname, no history) rather than the developer's real one.
-#   - KUBECONFIG is preserved so the hero tape can query a live cluster.
+#   - The jarvis example is hermetic (no network, no cluster) — demos are
+#     reproducible anywhere.
 #   - Original HOME is restored on EXIT/INT/TERM.
 
 set -euo pipefail
@@ -32,13 +33,6 @@ DEMO_DIR="$(mktemp -d)"
 ORIG_HOME="$HOME"
 trap 'rm -rf "$DEMO_DIR"; export HOME="$ORIG_HOME"' EXIT INT TERM
 
-# Resolve the user's kubeconfig BEFORE we swap HOME — kubectl defaults to
-# $HOME/.kube/config when KUBECONFIG is unset, and the stub HOME won't have
-# one. Copy the path forward explicitly so the hero tape still works.
-if [[ -z "${KUBECONFIG:-}" && -f "$ORIG_HOME/.kube/config" ]]; then
-  export KUBECONFIG="$ORIG_HOME/.kube/config"
-fi
-
 # Stub bashrc: neutral prompt, no history, no aliases, no user customization.
 # Anything VHS's bash might source gets pointed here.
 cat > "$DEMO_DIR/.bashrc" <<'STUB'
@@ -58,27 +52,15 @@ export PROMPT=false
 export RECONFIGURE_YES=1
 
 # Copy only the command sources, not build artifacts
-mkdir -p "$DEMO_DIR/kube/cmds"
-cp "$FRAMEWORK_DIR/examples/kube/Taskfile.yaml" "$DEMO_DIR/kube/"
-cp -r "$FRAMEWORK_DIR/examples/kube/cmds/"* "$DEMO_DIR/kube/cmds/"
+mkdir -p "$DEMO_DIR/jarvis/cmds"
+cp "$FRAMEWORK_DIR/examples/jarvis/Taskfile.yaml" "$FRAMEWORK_DIR/examples/jarvis/.env" "$DEMO_DIR/jarvis/"
+cp -r "$FRAMEWORK_DIR/examples/jarvis/cmds/"* "$DEMO_DIR/jarvis/cmds/"
 
-echo "Setting up kube example for recording..."
+echo "Setting up jarvis example for recording..."
 bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
-  "$DEMO_DIR/kube" "$FRAMEWORK_DIR" "kube" "1.0.0" "icons-color" "standard"
+  "$DEMO_DIR/jarvis" "$FRAMEWORK_DIR" "jarvis" "1.0.0" "icons-color" "standard"
 
-export PATH="$DEMO_DIR/kube/bin:$FRAMEWORK_DIR/bin:$PATH"
-
-# Apply the dummy demo resources used by the hero tape. Idempotent —
-# safe to run repeatedly against any cluster. The `clift-demo` namespace
-# and its `web` deployment are deliberately generic so nothing in the
-# recording identifies the underlying cluster.
-if command -v kubectl &>/dev/null; then
-  echo "Applying demo resources (namespace clift-demo)..."
-  kubectl apply -f "$FRAMEWORK_DIR/examples/kube/demo-resources.yaml" >/dev/null
-  kubectl -n clift-demo rollout status deployment/web --timeout=60s >/dev/null
-else
-  echo "warn: kubectl not found — the hero tape requires a reachable cluster" >&2
-fi
+export PATH="$DEMO_DIR/jarvis/bin:$FRAMEWORK_DIR/bin:$PATH"
 
 # Purge stale GIFs BEFORE recording so renamed/deleted tapes don't leave
 # orphans committed. Invariant: after a successful run, the set of gifs in

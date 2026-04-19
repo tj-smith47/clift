@@ -1,7 +1,6 @@
-# clift flag groups — mutex (exclusive) and required-together (requires: all).
-# `--json` / `--yaml` are in the `output` mutex group.
-# `--user` / `--token` are in the `auth` requires-all group.
-# Prerequisite: run scripts/record-demos.sh (sets up kube on PATH)
+# jarvis flag groups — mutex (exclusive) and required-together (requires: all).
+# `remind --in` / `--at` are in the `when` mutex group.
+# `note --encrypt` / `--passphrase` are in the `enc` requires-all group.
 # Run standalone: vhs .vhs/groups.tape
 
 Output .vhs/gifs/groups.gif
@@ -13,17 +12,17 @@ Set Height 700
 Set Padding 20
 Set TypingSpeed 75ms
 
-# Mutex violation: --json and --yaml cannot both be set
-Type "kube deploy --json --yaml"
+# Mutex violation: --in and --at can't both be set
+Type "jarvis remind 'x' --in 10m --at 13:00"
 Enter
 Sleep 2s
 
-# Requires-all violation: --user without its partner --token
-Type "kube deploy --user alice"
+# Requires-all violation: --encrypt without its partner --passphrase
+Type "jarvis note 'secrets' --encrypt"
 Enter
 Sleep 2s
 
-# Both satisfied — groups pass, deploy runs
-Type "kube deploy --user alice --token xyz --force --target prod"
+# Both satisfied — groups pass, note is saved encrypted
+Type "jarvis note 'secrets' --encrypt --passphrase=hunter2 --tag private"
 Enter
 Sleep 3s
