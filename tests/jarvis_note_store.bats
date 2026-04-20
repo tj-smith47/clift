@@ -81,3 +81,13 @@ teardown() { jarvis_common_teardown; }
   run jq -r '."inbox/goner" // "absent"' "$idx"
   [ "$output" = "absent" ]
 }
+
+@test "note_store_new errors on slug collision" {
+  note_store_new inbox dup "First"
+  run --separate-stderr note_store_new inbox dup "Second"
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"already exists"* ]]
+  # First note's title preserved.
+  run fm_get "$(note_path inbox/dup)" "title" ""
+  [ "$output" = "First" ]
+}

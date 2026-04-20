@@ -75,8 +75,10 @@ fm_emit() {
 # fm_get <file> <dotted-key> [default]
 # Dotted-key paths use "." as separator. Keys containing literal dots are not
 # addressable via this API; use fm_parse + jq directly for those.
-# Path segments that parse as non-negative integers (e.g. "0", "12") are
-# coerced to numeric indexes so array elements are addressable as "tags.0".
+# Path segments are resolved type-aware: digit-only segments index arrays
+# numerically (so "tags.0" works), but are treated as literal string keys
+# when the current node is an object (so "scores.2024" still resolves
+# against `{ "scores": { "2024": ... } }`).
 # Returns the literal scalar (including `false` / `0`); default fires only when
 # the key is absent (path resolves to null / missing).
 fm_get() {
@@ -87,8 +89,22 @@ fm_get() {
     return 0
   fi
   val="$(jq -r --arg k "$key" '
-    ($k | split(".") | map(if test("^[0-9]+$") then tonumber else . end)) as $p |
-    getpath($p) as $v |
+    def walk($path; $idx):
+      if . == null then null
+      elif ($idx == ($path | length)) then .
+      else
+        ($path[$idx]) as $seg |
+        if (type == "array" and ($seg | test("^[0-9]+$"))) then
+          ($seg | tonumber) as $i |
+          (if $i < length then .[$i] else null end) | walk($path; $idx + 1)
+        elif (type == "object" and (has($seg))) then
+          .[$seg] | walk($path; $idx + 1)
+        else
+          null
+        end
+      end;
+    ($k | split(".")) as $path |
+    walk($path; 0) as $v |
     if $v == null then empty else $v end
   ' <<< "$json" 2>/dev/null)"
   if [[ -z "$val" ]]; then

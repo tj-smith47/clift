@@ -54,6 +54,26 @@ teardown() { jarvis_common_teardown; }
   [ "$output" = "fallback" ]
 }
 
+@test "fm_get addresses object keys that look like integers" {
+  cat > "$NOTE" <<'EOF'
+---
+scores:
+  "2024": 100
+  "2025": 200
+tags: [a, b]
+---
+body
+EOF
+  run fm_get "$NOTE" "scores.2024" ""
+  [ "$output" = "100" ]
+  run fm_get "$NOTE" "scores.2025" ""
+  [ "$output" = "200" ]
+  run fm_get "$NOTE" "tags.0" ""
+  [ "$output" = "a" ]
+  run fm_get "$NOTE" "tags.1" ""
+  [ "$output" = "b" ]
+}
+
 @test "fm_set mutates scalar in place preserving body" {
   fm_set "$NOTE" "title" "new-title"
   run fm_get "$NOTE" "title" ""

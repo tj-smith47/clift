@@ -4,6 +4,13 @@
 #
 # Library — intentionally does NOT set `set -euo pipefail`; options inherit
 # from the caller (matches state/*.sh convention).
+#
+# Crash-consistency model: the `.md` file is the source of truth; `.index.json`
+# is a cache. If a process is killed between `note_store_new`'s file rename
+# and its `note_index_update`, the note exists but the index lacks the row.
+# `note_resolve` falls through to a filesystem scan, so the system degrades
+# gracefully. `note_index_rebuild` (wired to `doctor --rebuild-index` in Task
+# 16) regenerates `.index.json` from disk to close the gap.
 
 # shellcheck disable=SC2317
 if [[ -n "${_JARVIS_NOTE_STORE_LOADED:-}" ]]; then
@@ -36,6 +43,8 @@ _note_store_parse_flags() {
 # note_store_new <kind> <slug> <title> [--tags JSON] [--template FILE] [--extra-fm JSON]
 # Creates notes/<kind>/<slug>.md atomically (tmp + rename). Calls
 # note_index_update. Emits the resolved <kind>/<slug> on stdout.
+# Returns 1 if a note at <kind>/<slug> already exists — callers get an
+# explicit collision error instead of silently overwriting.
 note_store_new() {
   local kind="$1" slug="$2" title="$3"
   shift 3
@@ -45,6 +54,10 @@ note_store_new() {
   local key="$kind/$slug"
   local file
   file="$(note_path "$key")"
+  if [[ -e "$file" ]]; then
+    printf 'note_store_new: note already exists: %s\n' "$key" >&2
+    return 1
+  fi
   mkdir -p "$(dirname "$file")"
 
   local now template_fm="{}" template_body=""

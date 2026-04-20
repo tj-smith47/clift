@@ -63,3 +63,20 @@ teardown() { jarvis_common_teardown; }
   run jq -r '."inbox/y" // "absent"' "$(note_index_file)"
   [ "$output" = "absent" ]
 }
+
+@test "note_index_update is safe against keys with shell metacharacters" {
+  # Seed a normal note so the index file exists.
+  note_store_new inbox normal "Normal"
+  # Now invoke with an injection-style key; note_index_update requires the
+  # referenced .md to exist, so it returns 1 — but the injection attempt
+  # must not execute any shell in the locked body (no INJECTED token should
+  # appear on stderr, no sentinel file should be written).
+  local sentinel="$TEST_DIR/injected.sentinel"
+  run --separate-stderr note_index_update "x'; echo INJECTED >&2; touch '$sentinel'; #"
+  [ "$status" -ne 0 ]
+  [[ "$stderr" != *"INJECTED"* ]]
+  [ ! -e "$sentinel" ]
+  # The normal row is still present and intact.
+  run jq -r '."inbox/normal".title' "$(note_index_file)"
+  [ "$output" = "Normal" ]
+}

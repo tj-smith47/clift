@@ -82,42 +82,51 @@ note_index_update() {
       original_kind: (if $original_kind == "" then null else $original_kind end)
     }')"
 
-  # Write row to a tmp file and read it back inside the lock body to avoid
-  # shell-interpolating multi-line JSON into the eval'd command string.
-  local idx row_file
+  # Write row AND key to tmp files; read both back inside the lock body so
+  # neither multi-line JSON nor arbitrary shell metacharacters in the key
+  # (defensive — callers sanitize, but note_index_rebuild walks the fs and
+  # could encounter a hand-edited .md filename with quotes) ever hit the
+  # eval'd command string.
+  local idx row_file key_file
   idx="$(note_index_file)"
   row_file="${idx}.row.$$.$BASHPID.$RANDOM"
+  key_file="${idx}.key.$$.$BASHPID.$RANDOM"
   printf '%s' "$row" > "$row_file"
+  printf '%s' "$key" > "$key_file"
 
-  # The single-quoted segments break out of the outer single quotes to embed
-  # literal shell values for $row_file, $idx, and $key — same pattern as
-  # lib/task/store.sh's task_store_next_seq. Slugs are validated upstream
-  # (lib/slug.sh) to contain only [a-z0-9-], so $key is safe as a literal.
   # shellcheck disable=SC2016
   state_with_lock "$idx" '
     _row="$(cat '"'$row_file'"')"
+    _key="$(cat '"'$key_file'"')"
     _cur="$(cat '"'$idx'"' 2>/dev/null || printf "{}")"
-    _new="$(jq --arg k '"'$key'"' --argjson row "$_row" ".[\$k] = \$row" <<< "$_cur")"
+    _new="$(jq --arg k "$_key" --argjson row "$_row" ".[\$k] = \$row" <<< "$_cur")"
     printf "%s\n" "$_new" > '"'$idx'"'
   '
   local rc=$?
-  rm -f "$row_file"
+  rm -f "$row_file" "$key_file"
   return "$rc"
 }
 
 # note_index_remove <kind/slug>
 # Drops the key from the index. No-op if the index file is missing.
+# $key routed through a tmp file so shell metacharacters stay inert.
 note_index_remove() {
   local key="$1"
-  local idx
+  local idx key_file
   idx="$(note_index_file)"
   [[ -f "$idx" ]] || return 0
+  key_file="${idx}.key.$$.$BASHPID.$RANDOM"
+  printf '%s' "$key" > "$key_file"
   # shellcheck disable=SC2016
   state_with_lock "$idx" '
+    _key="$(cat '"'$key_file'"')"
     _cur="$(cat '"'$idx'"')"
-    _new="$(jq --arg k '"'$key'"' "del(.[\$k])" <<< "$_cur")"
+    _new="$(jq --arg k "$_key" "del(.[\$k])" <<< "$_cur")"
     printf "%s\n" "$_new" > '"'$idx'"'
   '
+  local rc=$?
+  rm -f "$key_file"
+  return "$rc"
 }
 
 # note_index_rebuild
