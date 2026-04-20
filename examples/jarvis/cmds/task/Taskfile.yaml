@@ -55,3 +55,16 @@ tasks:
     vars:
       FLAGS: []
     cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
+
+  remove:
+    desc: "Remove a task (hard-delete)"
+    aliases: [rm]
+    summary: |
+      Hard-delete a task file by slug (or unique prefix).
+
+      Examples:
+        jarvis task remove fix-k3s
+        jarvis task rm fix-k3s-etcd
+    vars:
+      FLAGS: []
+    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
