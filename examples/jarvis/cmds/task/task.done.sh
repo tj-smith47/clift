@@ -31,7 +31,8 @@ fi
 if slug_is_jira_key "$input"; then
   transition="$(config_get jira.done_transition Done)"
   if command -v jira >/dev/null 2>&1; then
-    exec jira issue move "$input" "$transition"
+    jira issue move "$input" "$transition"
+    exit $?
   else
     clift_exit 4 "jira binary missing — install jira-cli (or use task done <slug> for local tasks)"
   fi
