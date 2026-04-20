@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# Slug utilities for jarvis: generate, detect Jira keys, resolve collisions
+# and user-typed prefixes. Pure bash — no state, no side effects.
+
+# shellcheck disable=SC2317
+if [[ -n "${_JARVIS_SLUG_LOADED:-}" ]]; then
+  return 0 2>/dev/null || exit 0
+fi
+_JARVIS_SLUG_LOADED=1
+
+# slug_from_desc "<desc>"
+# First line only, lowercased, non-alnum → -, collapse --, trim edges.
+slug_from_desc() {
+  local raw="${1:-}"
+  local first_line="${raw%%$'\n'*}"
+  local lower="${first_line,,}"
+  local hyphened="${lower//[^a-z0-9]/-}"
+  while [[ "$hyphened" == *--* ]]; do
+    hyphened="${hyphened//--/-}"
+  done
+  hyphened="${hyphened#-}"
+  hyphened="${hyphened%-}"
+  if [[ -z "$hyphened" ]]; then
+    return 1
+  fi
+  printf '%s\n' "$hyphened"
+}
+
+# slug_is_jira_key "<s>"
+# True for ABC-123 style keys. Bypasses generated-slug pipeline.
+slug_is_jira_key() {
+  [[ "${1:-}" =~ ^[A-Z]+-[0-9]+$ ]]
+}
+
+# slug_resolve_collision <base> <tasks-dir>
+# Returns <base> if free, else <base>-2, -3, ... until no matching .json exists.
+slug_resolve_collision() {
+  local base="$1"
+  local dir="$2"
+  local candidate="$base"
+  local n=2
+  while [[ -e "$dir/$candidate.json" ]]; do
+    candidate="${base}-${n}"
+    n=$((n + 1))
+  done
+  printf '%s\n' "$candidate"
+}
+
+# slug_resolve_prefix <query> <tasks-dir>
+# Exact match wins. Otherwise unique-prefix wins. No match or ambiguous → 1.
+slug_resolve_prefix() {
+  local query="$1"
+  local dir="$2"
+  if [[ -f "$dir/$query.json" ]]; then
+    printf '%s\n' "$query"
+    return 0
+  fi
+  local matches=()
+  local f slug
+  for f in "$dir"/*.json; do
+    [[ -e "$f" ]] || continue
+    slug="$(basename "$f" .json)"
+    if [[ "$slug" == "$query"* ]]; then
+      matches+=("$slug")
+    fi
+  done
+  case "${#matches[@]}" in
+    0)
+      printf 'no task matches "%s"\n' "$query" >&2
+      return 1
+      ;;
+    1)
+      printf '%s\n' "${matches[0]}"
+      return 0
+      ;;
+    *)
+      printf 'ambiguous prefix "%s" — candidates:\n' "$query" >&2
+      printf '  %s\n' "${matches[@]}" >&2
+      return 1
+      ;;
+  esac
+}
