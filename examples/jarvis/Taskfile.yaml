@@ -52,6 +52,8 @@ includes:
     taskfile: ./cmds/coffee
   status:
     taskfile: ./cmds/status
+  doctor:
+    taskfile: ./cmds/doctor
 tasks:
   default:
     cmd:
