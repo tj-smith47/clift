@@ -1,32 +1,22 @@
 version: '3'
 
-vars:
-  FLAGS:
-    - {name: tag, type: list, desc: "Tag (repeatable)"}
-    - {name: pin, type: bool, desc: "Pin to top of notes list"}
-    - {name: encrypt, type: bool, desc: "Encrypt this note at rest",
-       group: enc, requires: all}
-    - {name: passphrase, type: string, desc: "Passphrase for encryption",
-       group: enc, requires: all}
-
 tasks:
   default:
-    desc: "Capture a note"
+    desc: "Capture a note (create or append depending on current note + --on)"
     aliases: [n]
     summary: |
-      Drop a quick note. Accepts a positional body, repeated --tag.
-      To encrypt, pass --encrypt AND --passphrase together (the
-      required-together group 'enc' enforces this).
+      Capture a note. With no current note set and no --on, creates a quick
+      capture in inbox/. With a current note set, appends there. --on overrides
+      for a single call without mutating current.
 
       Examples:
-        jarvis note "idea: queue should backoff" --tag arch --tag queue
-        jarvis n "1:1 with sam" --tag private --encrypt --passphrase=hunter2
+        jarvis note "deployed the shim"
+        jarvis note "quick thought" --tag idea --tag infra
+        jarvis note "unrelated" --on "Perf Investigation"
     vars:
       FLAGS:
         - {name: tag, type: list, desc: "Tag (repeatable)"}
-        - {name: pin, type: bool, desc: "Pin to top of notes list"}
-        - {name: encrypt, type: bool, desc: "Encrypt this note at rest",
-           group: enc, requires: all}
-        - {name: passphrase, type: string, desc: "Passphrase for encryption",
-           group: enc, requires: all}
+        - {name: on, type: string, desc: "Append to this note for one call (title or slug)"}
+        - {name: no-timestamp, type: bool, desc: "Skip the timestamp header on append"}
+        - {name: format, type: string, desc: "Strftime format for append header"}
     cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
