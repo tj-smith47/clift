@@ -78,6 +78,12 @@ _note_ambiguous() {
   done
 }
 
+# Exit codes:
+#   0 — resolved; stdout holds the single <kind>/<slug> key
+#   1 — miss (no candidate matched at any tier)
+#   2 — ambiguous (multiple candidates at the winning tier; stderr lists them)
+# The 1-vs-2 split lets consumers (e.g. `note --on`) branch between
+# "create in inbox" and "abort and show candidates".
 note_resolve() {
   local q="$1"
   [[ -z "$q" ]] && { printf 'note_resolve: empty query\n' >&2; return 1; }
@@ -105,7 +111,7 @@ note_resolve() {
   case "${#matches[@]}" in
     1) printf '%s\n' "${matches[0]}"; return 0 ;;
     0) : ;;
-    *) _note_ambiguous "$q" "${matches[@]}"; return 1 ;;
+    *) _note_ambiguous "$q" "${matches[@]}"; return 2 ;;
   esac
 
   # 3. Title exact (case-insensitive, via index)
@@ -113,7 +119,7 @@ note_resolve() {
   case "${#matches[@]}" in
     1) printf '%s\n' "${matches[0]}"; return 0 ;;
     0) : ;;
-    *) _note_ambiguous "$q" "${matches[@]}"; return 1 ;;
+    *) _note_ambiguous "$q" "${matches[@]}"; return 2 ;;
   esac
 
   # 4. Title prefix (ci)
@@ -121,7 +127,7 @@ note_resolve() {
   case "${#matches[@]}" in
     1) printf '%s\n' "${matches[0]}"; return 0 ;;
     0) : ;;
-    *) _note_ambiguous "$q" "${matches[@]}"; return 1 ;;
+    *) _note_ambiguous "$q" "${matches[@]}"; return 2 ;;
   esac
 
   # 5. Slug prefix across kinds
@@ -133,6 +139,6 @@ note_resolve() {
   case "${#matches[@]}" in
     1) printf '%s\n' "${matches[0]}"; return 0 ;;
     0) printf 'no note matches "%s"\n' "$q" >&2; return 1 ;;
-    *) _note_ambiguous "$q" "${matches[@]}"; return 1 ;;
+    *) _note_ambiguous "$q" "${matches[@]}"; return 2 ;;
   esac
 }

@@ -72,7 +72,7 @@ teardown() { jarvis_common_teardown; }
 }
 EOF
   run note_resolve "foo"
-  [ "$status" -eq 1 ]
+  [ "$status" -eq 2 ]
   [[ "$output$stderr" == *"inbox/foo-a"* ]]
   [[ "$output$stderr" == *"inbox/foo-b"* ]]
 }
@@ -135,7 +135,7 @@ EOF
 }
 EOF
   run note_resolve "perf-investigation"
-  [ "$status" -eq 1 ]
+  [ "$status" -eq 2 ]
   [[ "$output$stderr" == *"projects/clift/perf-investigation"* ]]
   [[ "$output$stderr" == *"ref/perf-investigation"* ]]
 }

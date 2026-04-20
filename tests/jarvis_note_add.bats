@@ -74,6 +74,58 @@ run_add() {
   [ -f "$(note_path inbox/ghost-note)" ]
 }
 
+@test "note <body> --on with missing target creates AND appends the body" {
+  CLIFT_POS_1="quick capture" run run_add --on "Ghost Note"
+  [ "$status" -eq 0 ]
+  local f
+  f="$(note_path inbox/ghost-note)"
+  [ -f "$f" ]
+  grep -q 'quick capture' "$f"
+}
+
+@test "note <body> --on ambiguous → exit 2, doesn't create" {
+  note_store_new inbox perf-one "Perf One"
+  note_store_new inbox perf-two "Perf Two"
+  CLIFT_POS_1="x" run run_add --on "perf"
+  [ "$status" -eq 2 ]
+  [[ "$stderr$output" == *"ambiguous"* ]]
+  [ ! -f "$(note_path inbox/perf)" ]
+}
+
+@test "note <body> --on overrides current without mutating current state" {
+  note_current_write "kind=daily"
+  note_store_new inbox alpha "Alpha"
+  CLIFT_POS_1="override test" run run_add --on inbox/alpha
+  [ "$status" -eq 0 ]
+  grep -q 'override test' "$(note_path inbox/alpha)"
+  [ ! -f "$(note_path "daily/$(date +%F)")" ]
+  run note_current_read
+  [ "$output" = "kind=daily" ]
+}
+
+@test "note <body>: malformed current state → exit 1" {
+  note_current_write "junk_line"
+  CLIFT_POS_1="x" run run_add
+  [ "$status" -eq 1 ]
+}
+
+@test "note <body>: current=slug pointing to deleted note → exit 1" {
+  note_current_write "slug=inbox/deleted"
+  CLIFT_POS_1="x" run run_add
+  [ "$status" -eq 1 ]
+}
+
+@test "note <body>: concurrent quick-capture with same body tolerates collision" {
+  # Pre-create so the second call races into the collision guard.
+  note_store_new inbox "race-test" "race test"
+  CLIFT_POS_1="race test" run run_add
+  [ "$status" -eq 0 ]
+  # First note intact.
+  [ -f "$(note_path inbox/race-test)" ]
+  # Second call got a fresh slug (-2 suffix).
+  [ -f "$(note_path inbox/race-test-2)" ]
+}
+
 @test "note <body> without body → exit 2" {
   run run_add
   [ "$status" -eq 2 ]

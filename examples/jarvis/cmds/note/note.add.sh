@@ -95,80 +95,136 @@ if [[ -n "$fmt" ]]; then
 fi
 
 # _create_in_inbox <title> — mint a new inbox/<slug> note from a title string.
-# Uses slug_from_desc + slug_resolve_collision against the notes root.
+# Emits the resolved key on stdout. Tolerates the create-race: if a concurrent
+# writer already claimed the same slug, re-resolve and yield the next free
+# candidate. The final return value is the key that *this* invocation creates.
 _create_in_inbox() {
   local title="$1"
-  local base slug file
+  local base
   base="$(slug_from_desc "$title")" || clift_exit 2 "title is empty after slug normalization"
-  # Resolve slug collisions against any existing .md in the inbox/ subtree.
   local inbox_dir
   inbox_dir="$(note_root)/inbox"
   mkdir -p "$inbox_dir"
   local candidate="$base" n=2
-  while [[ -e "$inbox_dir/$candidate.md" ]]; do
+  # Retry loop: slug_resolve_collision, then attempt note_store_new. If the
+  # store reports "already exists" (another writer won), bump the suffix and
+  # retry. Cap at 50 attempts — beyond that, something is broken.
+  local attempt=0 max=50
+  while (( attempt < max )); do
+    while [[ -e "$inbox_dir/$candidate.md" ]]; do
+      candidate="${base}-${n}"
+      n=$((n + 1))
+    done
+    if note_store_new inbox "$candidate" "$title" --tags "$tags_json" >/dev/null 2>&1; then
+      printf '%s\n' "inbox/$candidate"
+      return 0
+    fi
+    # Collision with a concurrent writer — bump and retry.
     candidate="${base}-${n}"
     n=$((n + 1))
+    attempt=$((attempt + 1))
   done
-  slug="$candidate"
-  note_store_new inbox "$slug" "$title" --tags "$tags_json" >/dev/null
-  file="$(note_path "inbox/$slug")"
-  printf '%s\n' "inbox/$slug"
-  _last_created_file="$file"
+  clift_exit 1 "inbox create-retry exhausted for: $title"
 }
 
-# _ensure_daily <yyyy-mm-dd> — create daily/<date> from the daily template if
-# absent; no-op if it already exists. Echoes the key.
+# _ensure_daily <kind/slug> — create daily/<date> from the daily template if
+# absent. No-op (including under concurrent creation) if the file lands on
+# disk by the time we re-check. Echoes the key.
 _ensure_daily() {
-  local date="$1"
-  local key="daily/$date"
+  local key="$1"
+  local date="${key#daily/}"
   local file
   file="$(note_path "$key")"
   if [[ ! -f "$file" ]]; then
+    # Tolerate races: if two writers hit this simultaneously, one wins the
+    # store's collision guard and the other sees "already exists" — either
+    # way, as long as the file ends up on disk, we're good.
     note_store_new daily "$date" "$date" \
       --template "$CLI_DIR/templates/daily.md" \
-      --tags "$tags_json" >/dev/null
+      --tags "$tags_json" >/dev/null 2>&1 || true
+    [[ -f "$file" ]] || clift_exit 1 "daily auto-create failed: $key"
   fi
   printf '%s\n' "$key"
 }
 
-target=""
-if [[ -n "$on" ]]; then
-  # --on TARGET: resolve an existing note, or create inbox/<slug-of-title>.
-  if resolved="$(note_resolve "$on" 2>/dev/null)"; then
-    target="$resolved"
-  else
-    target="$(_create_in_inbox "$on")"
-  fi
-elif current_line="$(note_current_read)" && [[ -n "$current_line" ]]; then
-  # current-note routing.
-  case "$current_line" in
-    kind=daily)
-      today="$(date +%F)"
-      target="$(_ensure_daily "$today")"
+# Resolve --on TARGET, distinguishing miss (create) from ambiguous (abort).
+# Returns the resolved key on stdout, or clift_exits on the ambiguous path.
+_resolve_on_target() {
+  local query="$1"
+  local resolved rc
+  # Capture stderr into a variable while keeping stdout for the key.
+  # Run note_resolve in a subshell and reconstruct: stdout → key, stderr → msg,
+  # exit code → branch.
+  local stderr_tmp stdout_tmp
+  stderr_tmp="$(mktemp)"
+  stdout_tmp="$(mktemp)"
+  set +e
+  note_resolve "$query" >"$stdout_tmp" 2>"$stderr_tmp"
+  rc=$?
+  set -e
+  resolved="$(<"$stdout_tmp")"
+  local msg
+  msg="$(<"$stderr_tmp")"
+  rm -f "$stdout_tmp" "$stderr_tmp"
+  case "$rc" in
+    0)
+      printf '%s\n' "$resolved"
+      return 0
       ;;
-    slug=*)
-      key="${current_line#slug=}"
-      # Resolve through note_resolve so we pick up retitled/moved notes.
-      if resolved="$(note_resolve "$key" 2>/dev/null)"; then
-        target="$resolved"
-      else
-        clift_exit 1 "current note '$key' no longer exists"
-      fi
+    1)
+      # Miss → create in inbox.
+      _create_in_inbox "$query"
+      return 0
+      ;;
+    2)
+      # Ambiguous → surface candidates and abort.
+      [[ -n "$msg" ]] && printf '%s\n' "$msg" >&2
+      clift_exit 2 "refusing to create on ambiguous target: $query"
       ;;
     *)
-      clift_exit 1 "current note state malformed: $current_line"
+      [[ -n "$msg" ]] && printf '%s\n' "$msg" >&2
+      clift_exit "$rc" "note_resolve failed for: $query"
       ;;
   esac
+}
+
+target=""
+if [[ -n "$on" ]]; then
+  # --on TARGET: resolve (and create on miss; abort on ambiguity).
+  target="$(_resolve_on_target "$on")"
 else
-  # Quick capture: mint inbox/<slug-from-body>.
-  target="$(_create_in_inbox "$body")"
-  # When --no-timestamp / --format were passed for a create-only path, they
-  # do not apply (no append happens). Silently ignored, matching other
-  # capture flags.
-  log_success "$target"
-  exit 0
+  # No --on: consult current-note state via the single-source-of-truth resolver.
+  set +e
+  current_key="$(note_current_resolve 2>/dev/null)"
+  current_rc=$?
+  set -e
+  case "$current_rc" in
+    0)
+      # Current is set. kind=daily may point to a file that doesn't exist yet;
+      # slug=<kind>/<slug> must point to an existing note.
+      case "$current_key" in
+        daily/*)
+          target="$(_ensure_daily "$current_key")"
+          ;;
+        *)
+          [[ -f "$(note_path "$current_key")" ]] \
+            || clift_exit 1 "current note target missing: $current_key"
+          target="$current_key"
+          ;;
+      esac
+      ;;
+    1)
+      # No current set → quick-capture: mint inbox/<slug-from-body>.
+      target="$(_create_in_inbox "$body")"
+      log_success "$target" >&2
+      exit 0
+      ;;
+    2|*)
+      clift_exit 1 "current note state malformed"
+      ;;
+  esac
 fi
 
-# Append to the resolved target.
+# Append path (used for --on and current-note routing).
 note_store_append "$target" "$body" ${append_flags[@]+"${append_flags[@]}"}
-log_success "$target"
+log_success "$target" >&2
