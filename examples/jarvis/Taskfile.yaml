@@ -52,10 +52,6 @@ includes:
     taskfile: ./cmds/coffee
   status:
     taskfile: ./cmds/status
-  # Hidden command — parses + runs, absent from help + completion.
-  debug:
-    taskfile: ./cmds/debug
-
 tasks:
   default:
     cmd:
