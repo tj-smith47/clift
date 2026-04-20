@@ -32,6 +32,7 @@ seed() {
 run_list() {
   FRAMEWORK_DIR="$CLIFT_FRAMEWORK_DIR" \
   CLI_DIR="$CLIFT_JARVIS_DIR" \
+  NO_COLOR="${NO_COLOR:-}" \
   bash -c '
     set -euo pipefail
     declare -A CLIFT_FLAGS=(
@@ -121,4 +122,28 @@ run_list() {
   [ "$(jq -r '.[0].slug' <<< "$output")" = "a" ]
   [ "$(jq -r '.[1].slug' <<< "$output")" = "b" ]
   [ "$(jq -r '.[2].slug' <<< "$output")" = "c" ]
+}
+
+@test "task list skips malformed JSON files with warning" {
+  seed a "good" med open inbox "" 1
+  printf 'not-json{{\n' > "$JARVIS_HOME/test/tasks/bad.json"
+  run run_list "" "" "" "" "" ""
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"good"* ]]
+  [[ "$output" == *"malformed"* ]] || [[ "$stderr" == *"malformed"* ]]
+}
+
+@test "task list honors NO_COLOR env" {
+  seed fix-k3s "Fix k3s" high open release "" 1
+  NO_COLOR=1 run run_list
+  [ "$status" -eq 0 ]
+  [[ "$output" != *$'\033['* ]]
+}
+
+@test "task list with no matching tasks after filter prints 'no open tasks'" {
+  seed a "high one" high open inbox "" 1
+  seed b "med one"  med  open inbox "" 2
+  run run_list "" low
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"no open tasks"* ]]
 }

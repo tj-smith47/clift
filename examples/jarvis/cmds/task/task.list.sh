@@ -36,6 +36,20 @@ shopt -s nullglob
 files=("$tasks_dir"/*.json)
 shopt -u nullglob
 
+# Resilient-skip malformed JSON: one bad file shouldn't kill the whole listing.
+# Validate each file up-front with `jq -e .`; warn on failures, drop from the
+# slurp input. The `+"${array[@]}"` expansion form guards against `set -u`
+# firing when the array is empty (bash 4 quirk).
+valid_files=()
+for f in "${files[@]+"${files[@]}"}"; do
+  if jq -e . "$f" >/dev/null 2>&1; then
+    valid_files+=("$f")
+  else
+    log_warn "skipping malformed task record: ${f##*/}"
+  fi
+done
+files=("${valid_files[@]+"${valid_files[@]}"}")
+
 # Build filtered array via single jq pass.
 # Filter values are passed via --arg to avoid injection (projects / due
 # values with quotes would otherwise break the filter string).
@@ -80,7 +94,15 @@ if (( count == 0 )); then
   exit 0
 fi
 
+_use_color() {
+  [[ -z "${NO_COLOR:-}" ]]
+}
+
 _pr_color() {
+  if ! _use_color; then
+    printf '%s' "$1"
+    return
+  fi
   case "$1" in
     high) printf '\033[31m%s\033[0m' "$1" ;;
     med)  printf '\033[33m%s\033[0m' "$1" ;;
@@ -89,11 +111,22 @@ _pr_color() {
   esac
 }
 
-printf '\n  \033[1m%-24s %-6s %-40s %-10s %s\033[0m\n' "SLUG" "PRI" "DESCRIPTION" "DUE" "PROJECT"
+if _use_color; then
+  printf '\n  \033[1m%-24s %-6s %-40s %-10s %s\033[0m\n' "SLUG" "PRI" "DESCRIPTION" "DUE" "PROJECT"
+else
+  printf '\n  %-24s %-6s %-40s %-10s %s\n' "SLUG" "PRI" "DESCRIPTION" "DUE" "PROJECT"
+fi
 while IFS=$'\t' read -r slug desc priority due_s project_s; do
   [[ -z "$slug" ]] && continue
   [[ "$due_s" == "null" ]] && due_s="—"
-  printf '  %-24s %-15s %-40s %-10s %s\n' \
-    "$slug" "$(_pr_color "$priority")" "$desc" "$due_s" "$project_s"
+  if _use_color; then
+    # Data row uses %-15s for PRI to absorb ANSI escapes (~9 bytes of
+    # \033[NNm...\033[0m) so visible alignment matches the header's %-6s.
+    printf '  %-24s %-15s %-40s %-10s %s\n' \
+      "$slug" "$(_pr_color "$priority")" "$desc" "$due_s" "$project_s"
+  else
+    printf '  %-24s %-6s %-40s %-10s %s\n' \
+      "$slug" "$priority" "$desc" "$due_s" "$project_s"
+  fi
 done < <(jq -r '.[] | [.slug, .desc, .priority, (.due // "null"), .project] | @tsv' <<< "$records")
 printf '\n'
