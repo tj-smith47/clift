@@ -42,7 +42,7 @@ probe_version() {
   esac
 }
 
-for bin in jq dasel rg; do
+for bin in jq dasel rg jira; do
   if command -v "$bin" >/dev/null 2>&1; then
     ver="$(probe_version "$bin" || true)"
     printf '\u2713 %-13s %-20s %s\n' "$bin" "$ver" "available"
