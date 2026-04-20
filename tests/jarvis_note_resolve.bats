@@ -88,3 +88,60 @@ EOF
   run note_slug_of "projects/clift/perf-investigation"
   [ "$output" = "clift/perf-investigation" ]
 }
+
+@test "note_resolve: jira-key slug preserves upper-snake" {
+  : > "$NOTES/inbox/DEV-123.md"
+  cat > "$(note_index_file)" <<'EOF'
+{
+  "inbox/audit-the-flock": {"title":"Audit the flock path","kind":"inbox","tags":[]},
+  "inbox/DEV-123": {"title":"DEV-123 something","kind":"inbox","tags":[]}
+}
+EOF
+  run note_resolve "DEV-123"
+  [ "$status" -eq 0 ]
+  [ "$output" = "inbox/DEV-123" ]
+}
+
+@test "note_resolve: explicit kind/slug that doesn't exist falls through to title match" {
+  run note_resolve "ref/perf investigation"
+  # slash-bearing query, literal file missing → falls through; nothing matches title "ref/perf investigation"
+  [ "$status" -eq 1 ]
+}
+
+@test "note_resolve: tier 2 (unique slug) wins over tier 3 (title)" {
+  # add a note whose slug matches another note's title
+  mkdir -p "$NOTES/ref"
+  : > "$NOTES/ref/perf-investigation-reference.md"
+  cat > "$(note_index_file)" <<'EOF'
+{
+  "projects/clift/perf-investigation": {"title":"Perf Investigation","kind":"project","tags":[]},
+  "ref/perf-investigation-reference": {"title":"Perf Investigation","kind":"ref","tags":[]}
+}
+EOF
+  # Two index entries now have title "Perf Investigation" — tier 3 is ambiguous.
+  # But a query of the unique slug "perf-investigation" should still hit tier 2 (single match).
+  run note_resolve "perf-investigation"
+  [ "$status" -eq 0 ]
+  [ "$output" = "projects/clift/perf-investigation" ]
+}
+
+@test "note_resolve: ambiguous bare slug (same slug in two kinds) lists candidates" {
+  mkdir -p "$NOTES/ref"
+  : > "$NOTES/ref/perf-investigation.md"
+  cat > "$(note_index_file)" <<'EOF'
+{
+  "projects/clift/perf-investigation": {"title":"A","kind":"project","tags":[]},
+  "ref/perf-investigation": {"title":"B","kind":"ref","tags":[]}
+}
+EOF
+  run note_resolve "perf-investigation"
+  [ "$status" -eq 1 ]
+  [[ "$output$stderr" == *"projects/clift/perf-investigation"* ]]
+  [[ "$output$stderr" == *"ref/perf-investigation"* ]]
+}
+
+@test "note_resolve: ascii case-insensitive title match" {
+  run note_resolve "ETCD RESTORE RUNBOOK"
+  [ "$status" -eq 0 ]
+  [ "$output" = "ref/etcd-restore-runbook" ]
+}

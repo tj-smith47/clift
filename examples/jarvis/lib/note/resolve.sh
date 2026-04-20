@@ -49,20 +49,22 @@ _note_fs_keys() {
   done < <(find "$root" -type f -name '*.md' -print0 2>/dev/null)
 }
 
+# Uses ASCII-only case folding (jq ascii_downcase). Non-ASCII titles must match byte-for-byte.
 _note_title_match() {
-  local idx q mode lowq
+  local idx q mode
   idx="$(note_index_file)"
   q="$1"
   mode="$2"
   [[ -f "$idx" ]] || return 0
-  lowq="${q,,}"
   if [[ "$mode" == "exact" ]]; then
-    jq -r --arg q "$lowq" '
-      to_entries[] | select((.value.title // "") | ascii_downcase == $q) | .key
+    jq -r --arg q "$q" '
+      ($q | ascii_downcase) as $lowq
+      | to_entries[] | select((.value.title // "") | ascii_downcase == $lowq) | .key
     ' "$idx" 2>/dev/null
   else
-    jq -r --arg q "$lowq" '
-      to_entries[] | select((.value.title // "") | ascii_downcase | startswith($q)) | .key
+    jq -r --arg q "$q" '
+      ($q | ascii_downcase) as $lowq
+      | to_entries[] | select((.value.title // "") | ascii_downcase | startswith($lowq)) | .key
     ' "$idx" 2>/dev/null
   fi
 }
