@@ -26,40 +26,16 @@ source "${CLI_DIR}/lib/note/store.sh"
 # shellcheck source=/dev/null
 source "${CLI_DIR}/lib/note/current.sh"
 
-# CLIFT_FLAGS may not be declared when invoked standalone (tests, direct calls).
-# In that case, parse argv ourselves for the flags the router would normally
-# have exported. The router path leaves $@ empty and sets CLIFT_FLAGS +
-# CLIFT_FLAG_TAG_*; the standalone path reads remaining argv.
+# CLIFT_FLAGS may not be declared when invoked standalone (tests, direct
+# calls). In that case, parse argv via the shared jarvis helper — the
+# router path leaves $@ empty and sets CLIFT_FLAGS + CLIFT_FLAG_TAG_*, and
+# the helper mirrors that contract from raw argv.
 if ! declare -p CLIFT_FLAGS >/dev/null 2>&1; then
-  declare -A CLIFT_FLAGS=()
-  _tag_idx=0
-  while (( $# > 0 )); do
-    case "$1" in
-      --tag)
-        _tag_idx=$((_tag_idx + 1))
-        printf -v "CLIFT_FLAG_TAG_${_tag_idx}" '%s' "$2"
-        export "CLIFT_FLAG_TAG_${_tag_idx}"
-        shift 2
-        ;;
-      --tag=*)
-        _tag_idx=$((_tag_idx + 1))
-        printf -v "CLIFT_FLAG_TAG_${_tag_idx}" '%s' "${1#--tag=}"
-        export "CLIFT_FLAG_TAG_${_tag_idx}"
-        shift
-        ;;
-      --on)         CLIFT_FLAGS[on]="$2"; shift 2 ;;
-      --on=*)       CLIFT_FLAGS[on]="${1#--on=}"; shift ;;
-      --no-timestamp) CLIFT_FLAGS[no-timestamp]="true"; shift ;;
-      --format)     CLIFT_FLAGS[format]="$2"; shift 2 ;;
-      --format=*)   CLIFT_FLAGS[format]="${1#--format=}"; shift ;;
-      *)
-        clift_exit 2 "unknown argument: $1"
-        ;;
-    esac
-  done
-  if (( _tag_idx > 0 )); then
-    export CLIFT_FLAG_TAG_COUNT="$_tag_idx"
-  fi
+  # shellcheck source=/dev/null
+  source "${CLI_DIR}/lib/runtime/standalone_argv.sh"
+  jarvis_standalone_argv_parse \
+    '[{"name":"tag","type":"list"},{"name":"on","type":"string"},{"name":"no-timestamp","type":"bool"},{"name":"format","type":"string"}]' \
+    "$@"
 fi
 
 body="${CLIFT_POS_1:-}"
