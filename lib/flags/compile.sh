@@ -41,6 +41,34 @@ mkdir -p "$CACHE_DIR"
 
 trap 'rm -f "${CACHE_DIR}/tasks.json.tmp" "${CACHE_DIR}/flags.json.tmp" "${CACHE_DIR}/index.json.tmp" "${CACHE_DIR}/checksum.tmp" "${CACHE_DIR}/entries.tmp" "${CACHE_DIR}/sources.tmp"' EXIT
 
+# go-task 3.x does NOT expose dotenv values as `{{.VAR}}` template
+# substitutions — it loads them into the process env at run-time but not
+# into task's own variable scope, so `includes.completion.taskfile:
+# '{{.FRAMEWORK_DIR}}/lib/completion'` only resolves when FRAMEWORK_DIR
+# is already exported. wrapper.sh.tmpl handles this at runtime by
+# `export FRAMEWORK_DIR=…` before `exec task …`; compile.sh must do the
+# same or it silently produces an empty flags.json whenever invoked
+# without the wrapper (fresh install, new:cmd, stale-cache rebuild via
+# `bash lib/flags/compile.sh <cli_dir>`).
+#
+# Preserve the caller-supplied $CLI_DIR across the source — dotenv files
+# commonly set `CLI_DIR=.` (runtime relative-pathing for task), which
+# would clobber our absolute-path authority below.
+if [[ -f "${CLI_DIR}/.env" ]]; then
+  _clift_compile_cli_dir="$CLI_DIR"
+  # shellcheck disable=SC1090,SC1091
+  set -a; source "${CLI_DIR}/.env"; set +a
+  CLI_DIR="$_clift_compile_cli_dir"
+  unset _clift_compile_cli_dir
+fi
+# Resolve a relative FRAMEWORK_DIR (dotenv may set `../..` for a checked-in
+# example) to an absolute path so `{{.FRAMEWORK_DIR}}/lib/...` substitutions
+# work regardless of compile.sh's own CWD.
+if [[ -n "${FRAMEWORK_DIR:-}" && "$FRAMEWORK_DIR" != /* ]]; then
+  FRAMEWORK_DIR="$(cd "${CLI_DIR}/${FRAMEWORK_DIR}" && pwd)"
+  export FRAMEWORK_DIR
+fi
+
 # Step 1: capture task list via `task --list-all --json --nested`.
 # Must run from within the CLI dir so Task resolves includes correctly.
 # This runs FIRST so we can derive the authoritative list of command Taskfile
@@ -160,10 +188,15 @@ fi
 # when FRAMEWORK_DIR isn't exported (e.g. when running outside a wrapper).
 FW_DIR="${FRAMEWORK_DIR:-__nomatch__}"
 
-unique_taskfiles="$(jq -r --arg fw "$FW_DIR" '
+# Skip framework-internal taskfiles — their location.taskfile lives under
+# FRAMEWORK_DIR. BUT: an example CLI living inside the framework repo (e.g.
+# examples/jarvis) has CLI_DIR *under* FRAMEWORK_DIR too, which would
+# incorrectly strip the CLI's own command taskfiles. Keep any taskfile under
+# CLI_DIR even when it's also under FRAMEWORK_DIR — CLI taskfiles win.
+unique_taskfiles="$(jq -r --arg fw "$FW_DIR" --arg cli "$CLI_DIR" '
   [ .[]
     | .location.taskfile
-    | select(startswith($fw) | not)
+    | select(startswith($cli) or (startswith($fw) | not))
   ] | unique | .[]
 ' <<< "$all_tasks_json")"
 
@@ -313,8 +346,13 @@ while IFS=$'\x01' read -r -d '' task_name source_tf aliases_json summary; do
 
   # Root-level helpers (version, default) are not dispatched through the router.
   [[ "$source_tf" == "$ROOT_TASKFILE" ]] && continue
-  # Framework library taskfiles (lib/help/Taskfile.yaml, etc.).
-  [[ "$source_tf" == "$FW_DIR"* ]] && continue
+  # Framework library taskfiles (lib/help/Taskfile.yaml, etc.). Mirror the
+  # CLI-under-framework guard from unique_taskfiles above: a taskfile under
+  # CLI_DIR is never framework-internal, even if CLI_DIR itself lives under
+  # FRAMEWORK_DIR (examples/jarvis layout).
+  if [[ "$source_tf" != "$CLI_DIR"* && "$source_tf" == "$FW_DIR"* ]]; then
+    continue
+  fi
 
   tf_data="${taskfile_data[$source_tf]:-}"
   [[ -z "$tf_data" ]] && continue
