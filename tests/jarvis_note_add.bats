@@ -115,8 +115,11 @@ run_add() {
   [ "$status" -eq 1 ]
 }
 
-@test "note <body>: concurrent quick-capture with same body tolerates collision" {
-  # Pre-create so the second call races into the collision guard.
+@test "note <body>: quick-capture with existing slug yields -2 suffix" {
+  # With inbox/race-test already on disk, a fresh quick-capture of the same
+  # body must mint inbox/race-test-2 rather than colliding or overwriting.
+  # (Real concurrency coverage lives in jarvis_note_store.bats — this test
+  # pins the caller-side retry-loop behavior only.)
   note_store_new inbox "race-test" "race test"
   CLIFT_POS_1="race test" run run_add
   [ "$status" -eq 0 ]

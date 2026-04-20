@@ -41,10 +41,16 @@ _note_store_parse_flags() {
 }
 
 # note_store_new <kind> <slug> <title> [--tags JSON] [--template FILE] [--extra-fm JSON]
-# Creates notes/<kind>/<slug>.md atomically (tmp + rename). Calls
-# note_index_update. Emits the resolved <kind>/<slug> on stdout.
-# Returns 1 if a note at <kind>/<slug> already exists — callers get an
-# explicit collision error instead of silently overwriting.
+# Creates notes/<kind>/<slug>.md atomically via `ln(2)` — the hardlink create
+# fails with EEXIST atomically under the kernel, so under a concurrent race
+# exactly one writer wins and the rest get return 1. Emits the resolved
+# <kind>/<slug> on stdout on success. Returns 1 on collision (explicit
+# "already exists" error on stderr), 2 on bad flag args.
+#
+# Prior implementations used `[[ -e $file ]]` + `mv -f` — neither atomic:
+# all racers passed the existence check, all racers overwrote one file, and
+# callers relying on the 1-on-collision contract silently got 0 for every
+# racer. The `ln` form below is the canonical POSIX atomic-create pattern.
 note_store_new() {
   local kind="$1" slug="$2" title="$3"
   shift 3
@@ -54,10 +60,6 @@ note_store_new() {
   local key="$kind/$slug"
   local file
   file="$(note_path "$key")"
-  if [[ -e "$file" ]]; then
-    printf 'note_store_new: note already exists: %s\n' "$key" >&2
-    return 1
-  fi
   mkdir -p "$(dirname "$file")"
 
   local now template_fm="{}" template_body=""
@@ -87,7 +89,15 @@ note_store_new() {
     printf -- '---\n%s\n---\n' "$yaml"
     printf '%s' "$template_body"
   } > "$tmp"
-  mv -f "$tmp" "$file"
+
+  # Atomic create: ln(2) fails with EEXIST if the target exists, and the
+  # check+create happens under a single kernel call — no TOCTOU window.
+  if ! ln "$tmp" "$file" 2>/dev/null; then
+    rm -f "$tmp"
+    printf 'note_store_new: note already exists: %s\n' "$key" >&2
+    return 1
+  fi
+  rm -f "$tmp"
 
   note_index_update "$key"
   printf '%s\n' "$key"

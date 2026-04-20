@@ -91,3 +91,57 @@ teardown() { jarvis_common_teardown; }
   run fm_get "$(note_path inbox/dup)" "title" ""
   [ "$output" = "First" ]
 }
+
+@test "note_store_new is atomic under concurrent launch" {
+  # Launch 4 workers racing to create distinct slugs. All 4 must win — this
+  # confirms the atomic path doesn't spuriously reject non-colliding writers
+  # (no shared-locks regression).
+  local i pids=()
+  for i in 1 2 3 4; do
+    ( note_store_new inbox "race-$i" "race $i" ) >/dev/null 2>&1 &
+    pids+=($!)
+  done
+  for pid in "${pids[@]}"; do
+    wait "$pid" || true
+  done
+  local n
+  n="$(ls "$(note_root)/inbox"/race-*.md 2>/dev/null | wc -l)"
+  [ "$n" -eq 4 ]
+}
+
+@test "note_store_new atomically rejects exact collision" {
+  # Launch 4 workers ALL trying the same key. Exactly 1 wins (rc=0), 3 fail
+  # (rc=1). The ln(2) EEXIST path guarantees this under the kernel.
+  #
+  # `wait $pid` propagates the child's exit code; under bats's set -e a
+  # non-zero child aborts the test before we can tally winners/losers.
+  # Guard each wait with `|| true` — the rc files are the source of truth.
+  #
+  # The rc files are written from backgrounded subshells. bats tweaks the
+  # child shell's error handling in ways that caused the rc files to not
+  # land when the note_store_new call returned non-zero (set -e + pipe
+  # handling inside `run` harness). Using an explicit `{ …; } 2>/dev/null`
+  # + sequenced command list with explicit rc capture avoids that.
+  local i rc
+  local tmpdir="$TEST_DIR"
+  for i in 1 2 3 4; do
+    # Disable set -e inside each backgrounded subshell so a failing
+    # note_store_new doesn't abort before the rc capture line runs. The
+    # rc files are the atomic-path evidence.
+    ( set +e
+      note_store_new inbox dup "dup $i" >/dev/null 2>&1
+      echo "$?" > "$tmpdir/rc.$i"
+    ) &
+  done
+  wait 2>/dev/null || true
+  local winners=0 losers=0
+  for i in 1 2 3 4; do
+    [[ -f "$tmpdir/rc.$i" ]] || { echo "missing rc.$i" >&2; ls "$tmpdir" >&2; return 1; }
+    rc="$(<"$tmpdir/rc.$i")"
+    (( rc == 0 )) && winners=$((winners+1))
+    (( rc == 1 )) && losers=$((losers+1))
+  done
+  [ "$winners" -eq 1 ]
+  [ "$losers" -eq 3 ]
+  [ -f "$(note_path inbox/dup)" ]
+}
