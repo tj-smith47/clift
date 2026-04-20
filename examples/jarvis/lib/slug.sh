@@ -74,8 +74,10 @@ slug_resolve_prefix() {
       return 0
       ;;
     *)
+      local sorted
+      mapfile -t sorted < <(printf '%s\n' "${matches[@]}" | sort)
       printf 'ambiguous prefix "%s" — candidates:\n' "$query" >&2
-      printf '  %s\n' "${matches[@]}" >&2
+      printf '  %s\n' "${sorted[@]}" >&2
       return 1
       ;;
   esac

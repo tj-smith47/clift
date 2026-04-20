@@ -110,3 +110,18 @@ teardown() { jarvis_common_teardown; }
   [[ "$output" == *"fix-a"* ]] || [[ "$stderr" == *"fix-a"* ]]
   [[ "$output" == *"fix-b"* ]] || [[ "$stderr" == *"fix-b"* ]]
 }
+
+@test "slug_resolve_prefix emits candidates alphabetically on ambiguous" {
+  : > "$TASKS_DIR/zebra-task.json"
+  : > "$TASKS_DIR/alpha-task.json"
+  : > "$TASKS_DIR/mango-task.json"
+  run slug_resolve_prefix "" "$TASKS_DIR"   # empty prefix matches all
+  [ "$status" -eq 1 ]
+  # Find the alpha/mango/zebra lines in order (stderr merged into $output by default)
+  local idx_a idx_m idx_z
+  idx_a="$(printf '%s\n' "$output" | grep -n alpha-task | head -1 | cut -d: -f1)"
+  idx_m="$(printf '%s\n' "$output" | grep -n mango-task | head -1 | cut -d: -f1)"
+  idx_z="$(printf '%s\n' "$output" | grep -n zebra-task | head -1 | cut -d: -f1)"
+  [ "$idx_a" -lt "$idx_m" ]
+  [ "$idx_m" -lt "$idx_z" ]
+}
