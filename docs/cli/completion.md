@@ -141,6 +141,46 @@ mycli _complete deploy region us-
   nothing and the generator falls through to subcommand completion — the
   useful default.
 
+### Positional completion
+
+The same convention extends to **positional arguments** — use `pos<N>` in
+place of the flag name. `N` is the 1-indexed position of the current token
+after the fully-resolved task path, counting only non-flag words.
+
+```
+clift_complete_<task>_pos<N>
+```
+
+At `mycli deploy <TAB>` the completion script calls
+`mycli _complete deploy pos1 <partial>`, which sources the override files
+and invokes `clift_complete_deploy_pos1` if defined. Intervening flags
+(`mycli deploy --force <TAB>`) do **not** advance the positional counter —
+the TAB after `--force` still resolves to `pos1`.
+
+Discovery, precedence, and failure-mode rules are identical to flag-value
+completers (see above): live in the same override files, CLI-global wins
+by last-write, missing functions fall through to subcommand completion.
+
+```bash
+# $CLI_DIR/cmds/deploy/overrides/completion.sh
+clift_complete_deploy_pos1() {
+  local prefix="${1:-}"
+  for t in prod-east prod-west staging dev; do
+    [[ "$t" == "$prefix"* ]] && printf '%s\n' "$t"
+  done
+}
+```
+
+`mycli deploy <TAB>` now offers `prod-east prod-west staging dev`;
+`mycli deploy prod-<TAB>` narrows to `prod-east prod-west`.
+
+Higher positions (`pos2`, `pos3`, …) work when the accepted value for the
+previous positional is a valid task-path segment (lowercase alphanumeric +
+colon/underscore — same regex the `_complete` dispatcher enforces on the
+task name). Values containing characters outside that set (e.g. the dash
+in `prod-east`) make `cmd_path` unparseable and tab-completion falls
+through to subcommand completion.
+
 ### Interaction with the override system
 
 Completers share the `.clift/overrides/` and `cmds/<cmd>/overrides/`

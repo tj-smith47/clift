@@ -76,6 +76,40 @@ _${CLI_NAME}_completions() {
     fi
   fi
 
+  # Task P1.1: dynamic completer for positional slots. After a task path is
+  # resolved and the current word is not a flag value (prev != --foo) and
+  # not itself a flag, count positional tokens after cmd_path and delegate
+  # to \`_complete <task> pos<N>\`. If undefined or empty, fall through to
+  # subcommand completion so unaffected commands keep working.
+  #
+  # cmd_path absorbed every non-flag word before the cursor, so the number
+  # of colons in cmd_path tells us how many of those words were task-path
+  # segments — everything past them is a positional. The rule is:
+  #   N = (non-flag words seen) - (colon count in cmd_path) + 1
+  # then offer pos<N> for the current slot. If cmd_path is a single word
+  # (zero colons) the count collapses to "every non-flag word past the
+  # command word, plus one for the cursor slot" — the common case.
+  if [[ -n "\$cmd_path" ]] && [[ "\$cur" != -* ]]; then
+    local _nf=0
+    local _j
+    for (( _j=1; _j<COMP_CWORD; _j++ )); do
+      local _w="\${COMP_WORDS[\$_j]}"
+      [[ "\$_w" == -* ]] && continue
+      _nf=\$(( _nf + 1 ))
+    done
+    local _colons="\${cmd_path//[^:]}"
+    local _pos_n=\$(( _nf - \${#_colons} ))
+    if (( _pos_n >= 1 )); then
+      local _posfn="pos\${_pos_n}"
+      local _pdyn
+      _pdyn="\$(${CLI_NAME} _complete "\$cmd_path" "\$_posfn" "\$cur" 2>/dev/null)"
+      if [[ -n "\$_pdyn" ]]; then
+        COMPREPLY=(\$(compgen -W "\$_pdyn" -- "\$cur"))
+        return
+      fi
+    fi
+  fi
+
   # Complete subcommands: offer the next segment after cmd_path.
   # Hidden commands (vars.HIDDEN: true) are filtered out via index.json lookup.
   # Task 5.1: aliases declared on a command are included as additional
@@ -158,6 +192,33 @@ _${CLI_NAME}() {
       if (( \${#_dyn[@]} > 0 )) && [[ -n "\${_dyn[1]}" ]]; then
         _describe 'value' _dyn
         return
+      fi
+    fi
+  fi
+
+  # Task P1.1: dynamic completer for positional slots (see bash branch for
+  # the counting rationale). zsh words[] is 1-indexed; words[1] is the
+  # command name itself so non-flag counting starts at index 2.
+  if [[ -n "\$cmd_path" ]]; then
+    local _pcur="\${words[\$CURRENT]}"
+    if [[ "\$_pcur" != -* ]]; then
+      local _nf=0
+      local _j
+      for (( _j=2; _j<CURRENT; _j++ )); do
+        local _w="\${words[\$_j]}"
+        [[ "\$_w" == -* ]] && continue
+        _nf=\$(( _nf + 1 ))
+      done
+      local _colons="\${cmd_path//[^:]}"
+      local _pos_n=\$(( _nf - \${#_colons} ))
+      if (( _pos_n >= 1 )); then
+        local _posfn="pos\${_pos_n}"
+        local -a _pdyn
+        _pdyn=("\${(@f)\$(${CLI_NAME} _complete "\$cmd_path" "\$_posfn" "\$_pcur" 2>/dev/null)}")
+        if (( \${#_pdyn[@]} > 0 )) && [[ -n "\${_pdyn[1]}" ]]; then
+          _describe 'value' _pdyn
+          return
+        fi
       fi
     fi
   fi
