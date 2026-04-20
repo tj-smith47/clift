@@ -174,12 +174,18 @@ clift_complete_deploy_pos1() {
 `mycli deploy <TAB>` now offers `prod-east prod-west staging dev`;
 `mycli deploy prod-<TAB>` narrows to `prod-east prod-west`.
 
-Higher positions (`pos2`, `pos3`, …) work when the accepted value for the
-previous positional is a valid task-path segment (lowercase alphanumeric +
-colon/underscore — same regex the `_complete` dispatcher enforces on the
-task name). Values containing characters outside that set (e.g. the dash
-in `prod-east`) make `cmd_path` unparseable and tab-completion falls
-through to subcommand completion.
+**Current support:** `pos1` only.
+
+Higher positions (`pos2`, `pos3`, …) are a **known limitation**, not a
+supported feature. The bash and zsh completion generators greedily
+colon-join every non-flag word before the cursor into `cmd_path`, which
+collapses the positional counter: for `mycli deploy foo <TAB>`, `cmd_path`
+becomes `deploy:foo` and the dispatcher fires `pos1` (not `pos2`) against
+the non-existent task `deploy:foo`. A correct pos2+ dispatch requires
+cache-aware resolution — reading `.clift/tasks.json` at completion time
+to learn where the real task path ends and where positionals begin. That
+work is tracked as a future enhancement; for now, design completers
+against `pos1` only.
 
 ### Interaction with the override system
 

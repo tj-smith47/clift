@@ -78,17 +78,21 @@ _${CLI_NAME}_completions() {
 
   # Task P1.1: dynamic completer for positional slots. After a task path is
   # resolved and the current word is not a flag value (prev != --foo) and
-  # not itself a flag, count positional tokens after cmd_path and delegate
-  # to \`_complete <task> pos<N>\`. If undefined or empty, fall through to
-  # subcommand completion so unaffected commands keep working.
+  # not itself a flag, delegate to \`_complete <task> pos<N>\` for the
+  # cursor slot. If undefined or empty, fall through to subcommand
+  # completion so unaffected commands keep working.
   #
-  # cmd_path absorbed every non-flag word before the cursor, so the number
-  # of colons in cmd_path tells us how many of those words were task-path
-  # segments — everything past them is a positional. The rule is:
-  #   N = (non-flag words seen) - (colon count in cmd_path) + 1
-  # then offer pos<N> for the current slot. If cmd_path is a single word
-  # (zero colons) the count collapses to "every non-flag word past the
-  # command word, plus one for the cursor slot" — the common case.
+  # NOTE: this block currently supports pos1 only. cmd_path greedily
+  # colon-joins every non-flag word before the cursor, so the counter
+  #   N = _nf - (colons in cmd_path)
+  # collapses to 1 whenever a prior positional value is also a valid
+  # path-segment token — \`mycli deploy foo <TAB>\` yields cmd_path
+  # \`deploy:foo\` and dispatches pos1 (against a non-existent task),
+  # not pos2. Correct pos2+ dispatch needs cache-aware resolution of
+  # where the real task path ends, which requires reading
+  # .clift/tasks.json at completion time. Tracked as a known limitation
+  # (see docs/cli/completion.md and .claude/known-bugs.md); design
+  # completers against pos1 only until cache-aware dispatch lands.
   if [[ -n "\$cmd_path" ]] && [[ "\$cur" != -* ]]; then
     local _nf=0
     local _j
@@ -196,29 +200,29 @@ _${CLI_NAME}() {
     fi
   fi
 
-  # Task P1.1: dynamic completer for positional slots (see bash branch for
-  # the counting rationale). zsh words[] is 1-indexed; words[1] is the
-  # command name itself so non-flag counting starts at index 2.
-  if [[ -n "\$cmd_path" ]]; then
-    local _pcur="\${words[\$CURRENT]}"
-    if [[ "\$_pcur" != -* ]]; then
-      local _nf=0
-      local _j
-      for (( _j=2; _j<CURRENT; _j++ )); do
-        local _w="\${words[\$_j]}"
-        [[ "\$_w" == -* ]] && continue
-        _nf=\$(( _nf + 1 ))
-      done
-      local _colons="\${cmd_path//[^:]}"
-      local _pos_n=\$(( _nf - \${#_colons} ))
-      if (( _pos_n >= 1 )); then
-        local _posfn="pos\${_pos_n}"
-        local -a _pdyn
-        _pdyn=("\${(@f)\$(${CLI_NAME} _complete "\$cmd_path" "\$_posfn" "\$_pcur" 2>/dev/null)}")
-        if (( \${#_pdyn[@]} > 0 )) && [[ -n "\${_pdyn[1]}" ]]; then
-          _describe 'value' _pdyn
-          return
-        fi
+  # Task P1.1: dynamic completer for positional slots. Supports pos1 only;
+  # pos2+ collapses to pos1 because cmd_path greedily colon-joins every
+  # non-flag word before the cursor (see bash branch above and
+  # docs/cli/completion.md for the full rationale). zsh words[] is
+  # 1-indexed; words[1] is the command name itself so non-flag counting
+  # starts at index 2.
+  if [[ -n "\$cmd_path" ]] && [[ "\${words[\$CURRENT]}" != -* ]]; then
+    local _nf=0
+    local _j
+    for (( _j=2; _j<CURRENT; _j++ )); do
+      local _w="\${words[\$_j]}"
+      [[ "\$_w" == -* ]] && continue
+      _nf=\$(( _nf + 1 ))
+    done
+    local _colons="\${cmd_path//[^:]}"
+    local _pos_n=\$(( _nf - \${#_colons} ))
+    if (( _pos_n >= 1 )); then
+      local _posfn="pos\${_pos_n}"
+      local -a _pdyn
+      _pdyn=("\${(@f)\$(${CLI_NAME} _complete "\$cmd_path" "\$_posfn" "\${words[\$CURRENT]}" 2>/dev/null)}")
+      if (( \${#_pdyn[@]} > 0 )) && [[ -n "\${_pdyn[1]}" ]]; then
+        _describe 'value' _pdyn
+        return
       fi
     fi
   fi
