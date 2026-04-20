@@ -24,18 +24,23 @@ tasks:
     cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
 
   list:
-    desc: "List open tasks"
+    desc: "List tasks"
     aliases: [ls]
     summary: |
-      Show currently open tasks.
-
-      Examples:
-        jarvis task list
-        jarvis task ls --priority high
+      Show open tasks by default; --all includes done.
     vars:
       FLAGS:
+        - {name: all, short: a, type: bool, desc: "Include done tasks"}
         - {name: priority, short: P, type: string, desc: "Filter by priority",
            choices: [low, med, high]}
+        - {name: project, type: string, desc: "Filter by project"}
+        - {name: due, type: string, desc: "Filter by due (today|tomorrow|YYYY-MM-DD)"}
+        - {name: jira, type: bool, desc: "Include Jira-assigned tasks",
+           hidden: true}
+        - {name: json, type: bool, desc: "Emit JSON array",
+           group: output, exclusive: true}
+        - {name: yaml, type: bool, desc: "Emit YAML array",
+           group: output, exclusive: true}
     cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
 
   done:
