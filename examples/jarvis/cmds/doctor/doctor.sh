@@ -34,9 +34,17 @@ else
 fi
 
 # Integration checks (expand per-phase; P0 stubs only the presence probe pattern)
+# Per-binary version probe — some tools (dasel) expose version via subcommand, not --flag.
+probe_version() {
+  case "$1" in
+    dasel) dasel version 2>/dev/null | head -1 ;;
+    *)     "$1" --version 2>&1 | head -1 ;;
+  esac
+}
+
 for bin in jq dasel rg; do
   if command -v "$bin" >/dev/null 2>&1; then
-    ver="$("$bin" --version 2>&1 | head -1 || true)"
+    ver="$(probe_version "$bin" || true)"
     printf '\u2713 %-13s %-20s %s\n' "$bin" "$ver" "available"
   else
     printf '\u2717 %-13s %-20s %s\n' "$bin" "missing" "install $bin"

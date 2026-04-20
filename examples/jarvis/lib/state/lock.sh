@@ -20,6 +20,9 @@ state_with_lock() {
   local status=0
   {
     flock 9
+    # eval is intentional: callers pass shell snippets (redirects, subshells)
+    # as a single string, not argv — e.g. state_with_lock "$f" 'mv a b'.
+    # shellcheck disable=SC2294
     eval "$@"
     status=$?
   } 9<"$lockfile"
