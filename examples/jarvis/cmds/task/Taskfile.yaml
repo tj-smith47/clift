@@ -68,3 +68,17 @@ tasks:
     vars:
       FLAGS: []
     cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
+
+  edit:
+    desc: "Edit a task's fields in place"
+    summary: |
+      Update fields on an existing task (slug or unique prefix).
+      At least one of --desc/--priority/--due/--project is required.
+    vars:
+      FLAGS:
+        - {name: desc, type: string, desc: "New description"}
+        - {name: priority, short: P, type: string, desc: "New priority",
+           choices: [low, med, high]}
+        - {name: due, type: string, desc: "New due (today|tomorrow|YYYY-MM-DD|clear)"}
+        - {name: project, type: string, desc: "New project (inbox|<name>)"}
+    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"

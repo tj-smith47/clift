@@ -121,14 +121,17 @@ task_store_set_done() {
     ".status = \"done\" | .done_at = \"$now\" | .updated_at = \"$now\""
 }
 
-# task_store_mutate <slug> <jq-filter>
+# task_store_mutate <slug> <jq-filter> [--arg NAME VALUE ...]
 # Applies filter to existing record, bumps updated_at, rewrites.
 # Read → jq → write runs inside a single flock window (state_json_mutate),
 # so concurrent mutators on the same slug serialize without lost updates.
+# Optional --arg pairs thread through to jq, letting callers bind values
+# safely as \$NAME instead of embedding them in the filter text.
 task_store_mutate() {
   local slug="$1" filter="$2"
+  shift 2
   local now
   now="$(task_store_now_iso)"
   state_json_mutate "$(task_store_path "$slug")" \
-    "$filter | .updated_at = \"$now\""
+    "$filter | .updated_at = \"$now\"" "$@"
 }
