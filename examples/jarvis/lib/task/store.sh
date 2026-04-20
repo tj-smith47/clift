@@ -115,22 +115,20 @@ task_store_list() {
 
 task_store_set_done() {
   local slug="$1"
-  local now path payload
+  local now
   now="$(task_store_now_iso)"
-  path="$(task_store_path "$slug")"
-  payload="$(state_json_read "$path")" || return $?
-  payload="$(jq --arg now "$now" '.status = "done" | .done_at = $now | .updated_at = $now' <<< "$payload")"
-  state_json_write "$path" "$payload"
+  state_json_mutate "$(task_store_path "$slug")" \
+    ".status = \"done\" | .done_at = \"$now\" | .updated_at = \"$now\""
 }
 
 # task_store_mutate <slug> <jq-filter>
 # Applies filter to existing record, bumps updated_at, rewrites.
+# Read → jq → write runs inside a single flock window (state_json_mutate),
+# so concurrent mutators on the same slug serialize without lost updates.
 task_store_mutate() {
   local slug="$1" filter="$2"
-  local now path payload
+  local now
   now="$(task_store_now_iso)"
-  path="$(task_store_path "$slug")"
-  payload="$(state_json_read "$path")" || return $?
-  payload="$(jq --arg now "$now" "$filter | .updated_at = \$now" <<< "$payload")"
-  state_json_write "$path" "$payload"
+  state_json_mutate "$(task_store_path "$slug")" \
+    "$filter | .updated_at = \"$now\""
 }
