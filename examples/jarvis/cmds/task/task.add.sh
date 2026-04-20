@@ -54,7 +54,6 @@ if [[ -n "$due" ]]; then
 fi
 
 state_ensure_tree
-
 base="$(slug_from_desc "$desc")" || clift_exit 2 "description is empty after slug normalization"
 tasks_dir="$(task_store_dir)"
 slug="$(slug_resolve_collision "$base" "$tasks_dir")"

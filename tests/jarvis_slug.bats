@@ -45,6 +45,16 @@ teardown() { jarvis_common_teardown; }
   [ "$status" -ne 0 ]
 }
 
+@test "slug_from_desc caps at 100 chars" {
+  local long_desc
+  long_desc="$(printf 'word %.0s' {1..200})"  # ~1000 chars
+  run slug_from_desc "$long_desc"
+  [ "$status" -eq 0 ]
+  [ "${#output}" -le 100 ]
+  # Must not end with trailing hyphen
+  [[ "$output" != *- ]]
+}
+
 @test "slug_is_jira_key recognizes PLAT-123" {
   run slug_is_jira_key "PLAT-123"
   [ "$status" -eq 0 ]

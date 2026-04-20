@@ -20,6 +20,13 @@ slug_from_desc() {
   done
   hyphened="${hyphened#-}"
   hyphened="${hyphened%-}"
+  # Cap at 100 chars — keep paths well under filesystem NAME_MAX (255 on ext4)
+  # with headroom for collision suffixes (-2, -3, …) and .json/.tmp sidecars.
+  if (( ${#hyphened} > 100 )); then
+    hyphened="${hyphened:0:100}"
+    # Re-trim trailing hyphen if the cut lands on one
+    hyphened="${hyphened%-}"
+  fi
   if [[ -z "$hyphened" ]]; then
     return 1
   fi

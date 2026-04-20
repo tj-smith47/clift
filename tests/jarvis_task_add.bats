@@ -94,3 +94,28 @@ run_add() {
   [ "$(jq -r '.seq' "$JARVIS_HOME/test/tasks/two.json")" = "2" ]
   [ "$(jq -r '.seq' "$JARVIS_HOME/test/tasks/three.json")" = "3" ]
 }
+
+@test "task add with --priority explicit beats --urgency (priority high wins over urgency low)" {
+  run run_add "Pick one" high "" inbox low
+  [ "$status" -eq 0 ]
+  local slug="${lines[-1]}"
+  [ "$(jq -r '.priority' "$JARVIS_HOME/test/tasks/$slug.json")" = "high" ]
+}
+
+@test "task add with invalid --priority exits 2" {
+  run run_add "foo" urgent
+  [ "$status" -eq 2 ]
+}
+
+@test "task add with desc that normalizes to empty exits 2" {
+  run run_add "---"
+  [ "$status" -eq 2 ]
+}
+
+@test "task add persists full multi-line desc; slug is first-line-only" {
+  run run_add $'Line one\nLine two detail'
+  [ "$status" -eq 0 ]
+  local slug="${lines[-1]}"
+  [ "$slug" = "line-one" ]
+  [ "$(jq -r '.desc' "$JARVIS_HOME/test/tasks/$slug.json")" = $'Line one\nLine two detail' ]
+}
