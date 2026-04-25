@@ -32,9 +32,14 @@ if [[ "$want_jira" == "true" ]]; then
 fi
 
 tasks_dir="$(task_store_dir)"
+# Save/restore nullglob so we don't clobber the caller's shell options
+# (matches the task_store_list pattern in lib/task/store.sh).
+_had_nullglob=0
+shopt -q nullglob && _had_nullglob=1
 shopt -s nullglob
 files=("$tasks_dir"/*.json)
-shopt -u nullglob
+(( _had_nullglob )) || shopt -u nullglob
+unset _had_nullglob
 
 # Resilient-skip malformed JSON: one bad file shouldn't kill the whole listing.
 # Validate each file up-front with `jq -e .`; warn on failures, drop from the
@@ -118,7 +123,11 @@ else
 fi
 while IFS=$'\t' read -r slug desc priority due_s project_s; do
   [[ -z "$slug" ]] && continue
-  [[ "$due_s" == "null" ]] && due_s="—"
+  # Render null/empty as the same "—" placeholder for both due and
+  # project so the column doesn't look broken (asymmetric blank vs "—"
+  # was a P1.5 review finding).
+  [[ "$due_s" == "null" || -z "$due_s" ]] && due_s="—"
+  [[ "$project_s" == "null" || -z "$project_s" ]] && project_s="—"
   if _use_color; then
     # Data row uses %-15s for PRI to absorb ANSI escapes (~9 bytes of
     # \033[NNm...\033[0m) so visible alignment matches the header's %-6s.
@@ -128,5 +137,5 @@ while IFS=$'\t' read -r slug desc priority due_s project_s; do
     printf '  %-24s %-6s %-40s %-10s %s\n' \
       "$slug" "$priority" "$desc" "$due_s" "$project_s"
   fi
-done < <(jq -r '.[] | [.slug, .desc, .priority, (.due // "null"), .project] | @tsv' <<< "$records")
+done < <(jq -r '.[] | [.slug, .desc, .priority, (.due // "null"), (.project // "null")] | @tsv' <<< "$records")
 printf '\n'

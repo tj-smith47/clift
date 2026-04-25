@@ -66,7 +66,7 @@ run_list() {
 
 @test "task list hides done by default" {
   seed a "open one" med open inbox "" 1
-  seed b "done one" med done inbox "" 2
+  seed b "done one" med "done" inbox "" 2
   run run_list
   [[ "$output" == *"open one"* ]]
   [[ "$output" != *"done one"* ]]
@@ -74,7 +74,7 @@ run_list() {
 
 @test "task list --all includes done" {
   seed a "open one" med open inbox "" 1
-  seed b "done one" med done inbox "" 2
+  seed b "done one" med "done" inbox "" 2
   run run_list true
   [[ "$output" == *"open one"* ]]
   [[ "$output" == *"done one"* ]]
@@ -127,10 +127,18 @@ run_list() {
 @test "task list skips malformed JSON files with warning" {
   seed a "good" med open inbox "" 1
   printf 'not-json{{\n' > "$JARVIS_HOME/test/tasks/bad.json"
-  run run_list "" "" "" "" "" ""
+  # log_warn writes to stderr; --separate-stderr lets us assert against
+  # the right stream instead of hedging against a merged $output.
+  run --separate-stderr bash -c '
+    set -euo pipefail
+    declare -A CLIFT_FLAGS=([all]="" [priority]="" [project]="" [due]="" [json]="" [yaml]="")
+    FRAMEWORK_DIR='"'$CLIFT_FRAMEWORK_DIR'"' \
+    CLI_DIR='"'$CLIFT_JARVIS_DIR'"' \
+    source "$1"
+  ' _ "$CLIFT_JARVIS_DIR/cmds/task/task.list.sh"
   [ "$status" -eq 0 ]
   [[ "$output" == *"good"* ]]
-  [[ "$output" == *"malformed"* ]] || [[ "$stderr" == *"malformed"* ]]
+  [[ "$stderr" == *"malformed"* ]]
 }
 
 @test "task list honors NO_COLOR env" {
@@ -146,4 +154,56 @@ run_list() {
   run run_list "" low
   [ "$status" -eq 0 ]
   [[ "$output" == *"no open tasks"* ]]
+}
+
+@test "task list --yaml emits yaml list of records" {
+  seed a "hello" med open inbox today 1
+  seed b "world" high open inbox tomorrow 2
+  run run_list "" "" "" "" "" true
+  [ "$status" -eq 0 ]
+  # yq -P emits each record as a yaml block starting with `- slug:`.
+  [[ "$output" == *"- slug:"* ]] || [[ "$output" == "[]"* ]]
+  [[ "$output" == *"hello"* ]]
+  [[ "$output" == *"world"* ]]
+}
+
+@test "task list --yaml on empty store still emits a valid yaml document" {
+  # No seeds → empty list. yq -P renders as `[]`.
+  run run_list "" "" "" "" "" true
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[]"* ]] || [[ "$output" == *"- slug:"* ]]
+}
+
+@test "task list --jira emits 'not yet implemented' warning to stderr" {
+  seed a "hello" med open inbox today 1
+  # Inject jira=true via direct env tweak — run_list helper doesn't
+  # expose a slot for it, but the CLIFT_FLAGS array assignment in the
+  # bash -c body lets us target it explicitly.
+  FRAMEWORK_DIR="$CLIFT_FRAMEWORK_DIR" \
+  CLI_DIR="$CLIFT_JARVIS_DIR" \
+  run --separate-stderr bash -c '
+    set -euo pipefail
+    declare -A CLIFT_FLAGS=([jira]="true")
+    source "$1"
+  ' _ "$CLIFT_JARVIS_DIR/cmds/task/task.list.sh"
+  [ "$status" -eq 0 ]
+  [[ "$stderr" == *"not yet implemented"* ]]
+  [[ "$stderr" == *"P5"* ]]
+}
+
+@test "task list renders empty/null project the same way as null due" {
+  # Both an empty project string and a null due value should render
+  # consistently so the column doesn't look broken. We pin '—' for both.
+  seed a "no proj" med open "" "" 1
+  run run_list
+  [ "$status" -eq 0 ]
+  # Walk the data row for the seeded task — count occurrences of '—'
+  # in the row to confirm both columns render the placeholder.
+  local row
+  row="$(printf '%s\n' "$output" | grep -F 'no proj' || true)"
+  [ -n "$row" ]
+  # Two placeholder columns minimum (due + project both null/empty).
+  local count
+  count="$(printf '%s\n' "$row" | grep -o -- '—' | wc -l)"
+  [ "$count" -ge 2 ]
 }
