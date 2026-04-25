@@ -84,6 +84,35 @@ tasks:
         - {name: no-edit, type: bool, desc: "Skip opening $EDITOR"}
     cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
 
+  show:
+    desc: "Render a note (glow > bat > cat fallback)"
+    summary: |
+      Resolves slug/title/prefix; no-arg → current note. --raw skips the
+      renderer and dumps the file unchanged.
+
+      Examples:
+        jarvis note show etcd-runbook
+        jarvis note show "Perf Investigation"
+        jarvis note show inbox/audit --raw
+    vars:
+      FLAGS:
+        - {name: raw, type: bool, desc: "Skip glow/bat; cat the file"}
+    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
+
+  edit:
+    desc: "Open a note in $EDITOR"
+    summary: |
+      Resolves slug/title/prefix; no-arg → current note. Re-indexes the
+      note after the editor exits so frontmatter changes land in
+      .index.json immediately.
+
+      Examples:
+        jarvis note edit etcd-runbook
+        jarvis note edit                 # opens current
+    vars:
+      FLAGS: []
+    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
+
   list:
     desc: "List notes grouped by kind"
     summary: |
