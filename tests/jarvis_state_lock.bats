@@ -31,3 +31,19 @@ teardown() { jarvis_common_teardown; }
   run state_with_lock "$LOCK_TARGET" 'exit 7'
   [ "$status" -eq 7 ]
 }
+
+@test "state_with_lock body \`exit\` does not kill the caller script" {
+  # The bats `run` form forks a subshell which masks the bug — exit
+  # inside { ... } would kill the run subshell, not the test process.
+  # Drive a fresh bash that calls the function inline so we observe the
+  # caller's behaviour after the locked block exits non-zero.
+  bash <<EOF >"$JARVIS_HOME/caller.out" 2>&1
+set -uo pipefail
+source "$CLIFT_JARVIS_DIR/lib/state/lock.sh"
+state_with_lock "$LOCK_TARGET" 'exit 2' || rc=\$?
+printf 'after-block rc=%s\n' "\${rc:-0}"
+EOF
+  run cat "$JARVIS_HOME/caller.out"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"after-block rc=2"* ]]
+}

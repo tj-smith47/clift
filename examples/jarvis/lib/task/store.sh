@@ -27,6 +27,13 @@ task_store_exists() {
 # Monotonic per-profile sequence. Persisted at tasks/.seq, flock-guarded.
 # Initialization is performed inside the lock to avoid a TOCTOU race where
 # a late initializer could clobber an already-advanced counter.
+#
+# Seq-gap invariant: the sequence is bumped before the task file is
+# written, so a write failure between bump and persist consumes a number
+# without producing a record. Gaps are invisible to users (seq is an
+# internal ordering key, never displayed); the cap on slug length and
+# atomic-rename writes make the failure window negligible. Revisit if a
+# downstream consumer ever depends on contiguity.
 task_store_next_seq() {
   local dir seq_file
   dir="$(task_store_dir)"

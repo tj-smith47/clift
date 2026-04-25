@@ -11,6 +11,9 @@ setup() {
 teardown() { jarvis_common_teardown; }
 
 # Helper: run task.add.sh with a fake CLIFT_FLAGS/CLIFT_POS_1 env.
+# Values are passed via environment variables, not single-quote
+# interpolation, so descriptions and flag values containing quotes,
+# backticks, or other shell metacharacters land verbatim.
 run_add() {
   local desc="$1"; shift
   local priority="${1:-med}"; shift || true
@@ -19,15 +22,20 @@ run_add() {
   local urgency="${1:-}"; shift || true
   FRAMEWORK_DIR="$CLIFT_FRAMEWORK_DIR" \
   CLI_DIR="$CLIFT_JARVIS_DIR" \
+  CLIFT_RUN_DESC="$desc" \
+  CLIFT_RUN_PRIORITY="$priority" \
+  CLIFT_RUN_DUE="$due" \
+  CLIFT_RUN_PROJECT="$project" \
+  CLIFT_RUN_URGENCY="$urgency" \
   bash -c '
     set -euo pipefail
     declare -A CLIFT_FLAGS=(
-      [priority]="'"$priority"'"
-      [due]="'"$due"'"
-      [project]="'"$project"'"
-      [urgency]="'"$urgency"'"
+      [priority]="$CLIFT_RUN_PRIORITY"
+      [due]="$CLIFT_RUN_DUE"
+      [project]="$CLIFT_RUN_PROJECT"
+      [urgency]="$CLIFT_RUN_URGENCY"
     )
-    export CLIFT_POS_1="'"$desc"'"
+    export CLIFT_POS_1="$CLIFT_RUN_DESC"
     source "$1"
   ' _ "$CLIFT_JARVIS_DIR/cmds/task/task.add.sh"
 }
@@ -118,4 +126,15 @@ run_add() {
   local slug="${lines[-1]}"
   [ "$slug" = "line-one" ]
   [ "$(jq -r '.desc' "$JARVIS_HOME/test/tasks/$slug.json")" = $'Line one\nLine two detail' ]
+}
+
+@test "task add tolerates shell metacharacters in desc (no quoting bugs)" {
+  # Pins the run_add helper's env-var pass-through against a regression
+  # to single-quote interpolation. Apostrophes, backticks, dollar-signs
+  # and pipes must all land verbatim in the persisted record.
+  local desc="bob's \`whoami\` task | \$(rm -rf /)"
+  run run_add "$desc"
+  [ "$status" -eq 0 ]
+  local slug="${lines[-1]}"
+  [ "$(jq -r '.desc' "$JARVIS_HOME/test/tasks/$slug.json")" = "$desc" ]
 }
