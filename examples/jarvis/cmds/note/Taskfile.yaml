@@ -54,3 +54,32 @@ tasks:
       FLAGS:
         - {name: no-edit, type: bool, desc: "Skip opening $EDITOR"}
     cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
+
+  meeting:
+    desc: "Create a meeting note (auto-dated slug)"
+    summary: |
+      Creates meeting/<slug-of-title>-YYYY-MM-DD.md from templates/meeting.md.
+      A title prefixed with "1on1 " (case-insensitive) prefers templates/1on1.md.
+
+      Examples:
+        jarvis note meeting "Design Review"
+        jarvis note meeting "1on1 Alice"
+    vars:
+      FLAGS:
+        - {name: no-edit, type: bool, desc: "Skip opening $EDITOR"}
+    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
+
+  project:
+    desc: "Create a project note under project/<proj>/<slug>.md"
+    summary: |
+      Usage: jarvis note project <proj>/<title>
+
+      Both <proj> and <title> are slugified; templates/project.md is
+      applied if present.
+
+      Example:
+        jarvis note project clift/perf-investigation
+    vars:
+      FLAGS:
+        - {name: no-edit, type: bool, desc: "Skip opening $EDITOR"}
+    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
