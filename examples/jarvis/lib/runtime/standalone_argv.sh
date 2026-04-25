@@ -69,6 +69,28 @@ _jv_assign() {
   fi
 }
 
+# jarvis_standalone_pos_only "$@"
+# Positional-only variant for commands that declare no flags. Mirrors the
+# router contract for CLIFT_POS_* / CLIFT_POS_COUNT and seeds an empty
+# CLIFT_FLAGS so consumers can read `${CLIFT_FLAGS[name]:-}` without
+# having to guard the assoc-array's existence first.
+#
+# Why a separate entry: the main parser refuses an empty flag spec
+# (`return 2` on `_jv_types == 0`), and the spec is mandatory. This
+# entry skips spec validation entirely — there's nothing to validate.
+jarvis_standalone_pos_only() {
+  declare -gA CLIFT_FLAGS 2>/dev/null || true
+  CLIFT_FLAGS=()
+  local pos_count=0
+  while (( $# > 0 )); do
+    pos_count=$((pos_count+1))
+    printf -v "CLIFT_POS_$pos_count" '%s' "$1"
+    export "CLIFT_POS_$pos_count"
+    shift
+  done
+  export CLIFT_POS_COUNT="$pos_count"
+}
+
 jarvis_standalone_argv_parse() {
   local spec="$1"; shift
   [[ -z "$spec" ]] && return 2

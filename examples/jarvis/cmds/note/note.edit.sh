@@ -21,14 +21,15 @@ source "${CLI_DIR}/lib/note/index.sh"
 # shellcheck source=/dev/null
 source "${CLI_DIR}/lib/note/current.sh"
 
-# note edit takes no flags — only a positional. The router populates
-# CLIFT_POS_1; standalone callers (tests / direct invocations) set it via
-# env. Either way, read it directly with no parser hookup.
+# note edit takes no flags — only a positional. Use the positional-only
+# fallback so $@ from a standalone invocation maps to CLIFT_POS_*.
 if ! declare -p CLIFT_FLAGS >/dev/null 2>&1; then
-  declare -A CLIFT_FLAGS=()
+  # shellcheck source=/dev/null
+  source "${CLI_DIR}/lib/runtime/standalone_argv.sh"
+  jarvis_standalone_pos_only "$@"
 fi
 
-q="${CLIFT_POS_1:-${1:-}}"
+q="${CLIFT_POS_1:-}"
 
 if [[ -z "$q" ]]; then
   if ! q="$(note_current_resolve 2>/dev/null)"; then

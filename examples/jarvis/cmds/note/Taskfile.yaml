@@ -84,6 +84,36 @@ tasks:
         - {name: no-edit, type: bool, desc: "Skip opening $EDITOR"}
     cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
 
+  tag:
+    desc: "Mutate frontmatter tags: +add / -remove (set semantics)"
+    summary: |
+      Usage: jarvis note tag <slug> [+tag]... [-tag]...
+
+      All ops are validated up front; combined +/- in one call is fine.
+      Unknown tag names removed are silently no-ops; idempotent across
+      repeat invocations.
+
+      Examples:
+        jarvis note tag etcd-runbook +k3s +infra
+        jarvis note tag inbox/audit +clift -draft
+    vars:
+      FLAGS: []
+    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
+
+  link:
+    desc: "Bi-directionally link two notes"
+    summary: |
+      Usage: jarvis note link <a> <b>
+
+      Appends [[<key-of-b>]] to a's body, [[<key-of-a>]] to b's body.
+      Idempotent; refuses to link a note to itself.
+
+      Examples:
+        jarvis note link etcd-runbook restore-runbook
+    vars:
+      FLAGS: []
+    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
+
   search:
     desc: "Full-text search across notes (rg)"
     summary: |
