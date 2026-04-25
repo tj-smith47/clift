@@ -43,14 +43,17 @@ slug_is_jira_key() {
   [[ "${1:-}" =~ ^[A-Z][A-Z0-9]+-[0-9]+$ ]]
 }
 
-# slug_resolve_collision <base> <tasks-dir>
-# Returns <base> if free, else <base>-2, -3, ... until no matching .json exists.
+# slug_resolve_collision <base> <dir> [<ext>]
+# Returns <base> if free, else <base>-2, -3, ... until no matching <ext>
+# (default "json") exists. Notes pass "md" so they don't collide with the
+# task-store's `.json` convention.
 slug_resolve_collision() {
   local base="$1"
   local dir="$2"
+  local ext="${3:-json}"
   local candidate="$base"
   local n=2
-  while [[ -e "$dir/$candidate.json" ]]; do
+  while [[ -e "$dir/$candidate.$ext" ]]; do
     candidate="${base}-${n}"
     n=$((n + 1))
   done

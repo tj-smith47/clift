@@ -20,3 +20,21 @@ tasks:
         - {name: no-timestamp, type: bool, desc: "Skip the timestamp header on append"}
         - {name: format, type: string, desc: "Strftime format for append header"}
     cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
+
+  new:
+    desc: "Create a new note with a title and optional kind"
+    aliases: [create]
+    summary: |
+      Create a new note. Opens $EDITOR when available; --no-edit skips.
+
+      Examples:
+        jarvis note new "Etcd Restore Runbook" --kind ref
+        jarvis note new "1on1 Alice" --kind meeting --tag alice
+        jarvis note new "Quick capture" --no-edit
+    vars:
+      FLAGS:
+        - {name: kind, type: string, default: inbox, desc: "Note kind",
+           choices: [inbox, meeting, ref, project, daily]}
+        - {name: tag, type: list, desc: "Tag (repeatable)"}
+        - {name: no-edit, type: bool, desc: "Skip opening $EDITOR"}
+    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
