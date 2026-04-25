@@ -80,8 +80,20 @@ task_store_get() {
   state_json_read "$(task_store_path "$1")"
 }
 
+# Slug shape per slug_from_desc: lowercase alnum + internal hyphens, must
+# start and end with alnum. Reject anything outside that — most importantly
+# dot-prefixes (would silently vanish from `*.json` globs in
+# task_store_list) and `..`/`/` traversal.
+_task_store_valid_slug() {
+  [[ "$1" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$ ]]
+}
+
 task_store_put() {
   local slug="$1" payload="$2"
+  if ! _task_store_valid_slug "$slug"; then
+    printf 'task_store_put: invalid slug "%s"\n' "$slug" >&2
+    return 2
+  fi
   state_json_write "$(task_store_path "$slug")" "$payload"
 }
 
@@ -89,12 +101,28 @@ task_store_delete() {
   local slug path
   slug="$1"
   path="$(task_store_path "$slug")"
-  rm -f "$path" "$path.lock" "$path".tmp.*
+  rm -f "$path" "$path.lock"
+  # Tmp sidecars left from an aborted state_json_write/mutate.
+  # Save/restore nullglob so the unquoted glob behaves identically
+  # regardless of caller shell options (matches task_store_list pattern).
+  # Note: this intentionally does NOT touch .seq or .seq.lock — those are
+  # per-profile, persisting across individual task lifetimes.
+  local had_nullglob=0
+  shopt -q nullglob && had_nullglob=1
+  shopt -s nullglob
+  local sidecars=("$path".tmp.*)
+  (( had_nullglob )) || shopt -u nullglob
+  if (( ${#sidecars[@]} > 0 )); then
+    rm -f "${sidecars[@]}"
+  fi
 }
 
 # task_store_list [status]
 # Emits slugs one-per-line in seq order. Filters by status when given.
 # Saves/restores nullglob so callers' shell options are untouched.
+# Skips corrupt records with a stderr warning rather than aborting the
+# whole list — one hand-edited bad file shouldn't lose visibility on the
+# rest of the user's tasks.
 task_store_list() {
   local status="${1:-}"
   local dir
@@ -106,10 +134,22 @@ task_store_list() {
   local files=("$dir"/*.json)
   (( had_nullglob )) || shopt -u nullglob
   (( ${#files[@]} )) || return 0
+
+  local valid=()
+  local f
+  for f in "${files[@]}"; do
+    if jq -e . "$f" >/dev/null 2>&1; then
+      valid+=("$f")
+    else
+      printf 'task_store_list: skipping corrupt record %s\n' "$f" >&2
+    fi
+  done
+  (( ${#valid[@]} )) || return 0
+
   if [[ -n "$status" ]]; then
-    jq -r --arg s "$status" -s 'map(select(.status == $s)) | sort_by(.seq) | .[].slug' "${files[@]}"
+    jq -r --arg s "$status" -s 'map(select(.status == $s)) | sort_by(.seq) | .[].slug' "${valid[@]}"
   else
-    jq -r -s 'sort_by(.seq) | .[].slug' "${files[@]}"
+    jq -r -s 'sort_by(.seq) | .[].slug' "${valid[@]}"
   fi
 }
 

@@ -26,11 +26,19 @@ state_json_write() {
 }
 
 # state_json_read <path>
-# Prints file contents (shared lock); exits 1 if missing.
+# Prints file contents (shared lock); exits 1 if missing, 2 if corrupt.
+# Validating here gives callers a single, file-pointing error message
+# instead of an opaque jq parse error two layers deeper.
 state_json_read() {
   local target="$1"
   [[ -f "$target" ]] || return 1
-  state_with_lock "$target" "cat '$target'"
+  local content
+  content="$(state_with_lock "$target" "cat '$target'")" || return 1
+  if ! jq -e . <<< "$content" >/dev/null 2>&1; then
+    printf 'state_json_read: corrupt JSON in %s\n' "$target" >&2
+    return 2
+  fi
+  printf '%s' "$content"
 }
 
 # state_json_mutate <path> <jq-filter> [--arg NAME VALUE ...]

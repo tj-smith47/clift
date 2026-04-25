@@ -58,6 +58,33 @@ teardown() { jarvis_common_teardown; }
   [ "$(jq -r '.desc' <<< "$output")" = "hello" ]
 }
 
+@test "task_store_put rejects dot-prefixed slugs" {
+  # `*.json` glob in task_store_list excludes dotfiles, so a slug like
+  # `.foo` would silently disappear from list. The store must refuse
+  # anything outside the slug_from_desc shape rather than half-store it.
+  local payload
+  payload="$(task_store_build .foo "x" med "" inbox 1 null)"
+  run task_store_put .foo "$payload"
+  [ "$status" -ne 0 ]
+  [ ! -e "$JARVIS_HOME/test/tasks/.foo.json" ]
+}
+
+@test "task_store_put rejects path-traversal slugs" {
+  local payload
+  payload="$(task_store_build x "x" med "" inbox 1 null)"
+  run task_store_put "../escape" "$payload"
+  [ "$status" -ne 0 ]
+  [ ! -e "$JARVIS_HOME/test/escape.json" ]
+}
+
+@test "task_store_put accepts valid hyphenated slug" {
+  local payload
+  payload="$(task_store_build fix-k3s-2 "x" med "" inbox 1 null)"
+  run task_store_put fix-k3s-2 "$payload"
+  [ "$status" -eq 0 ]
+  [ -f "$JARVIS_HOME/test/tasks/fix-k3s-2.json" ]
+}
+
 @test "task_store_exists reflects file presence" {
   run task_store_exists foo
   [ "$status" -ne 0 ]
@@ -95,6 +122,43 @@ teardown() { jarvis_common_teardown; }
   [ "$status" -eq 0 ]
   [ "${#lines[@]}" -eq 1 ]
   [ "${lines[0]}" = "a" ]
+}
+
+@test "task_store_list skips corrupt records and returns valid ones with stderr warning" {
+  # Hand-edited corruption shouldn't take the whole list down — that loses
+  # visibility on the rest of the user's tasks. Skip-and-warn is the
+  # right balance: user sees the problem, list still works.
+  task_store_put a "$(task_store_build a "a" med "" inbox 1 null)"
+  printf 'not json {{{\n' > "$JARVIS_HOME/test/tasks/broken.json"
+  task_store_put c "$(task_store_build c "c" med "" inbox 2 null)"
+  run --separate-stderr task_store_list
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"a"* ]]
+  [[ "$output" == *"c"* ]]
+  [[ "$output" != *"broken"* ]]
+  [[ "$stderr" == *"broken.json"* ]]
+}
+
+@test "task_store_get fails fast with stderr message on corrupt record" {
+  printf 'not json\n' > "$JARVIS_HOME/test/tasks/wedge.json"
+  run --separate-stderr task_store_get wedge
+  [ "$status" -ne 0 ]
+  [[ "$stderr" == *"wedge.json"* ]]
+}
+
+@test "task_store_delete cleans tmp sidecars even with nullglob set in caller" {
+  # If a caller has nullglob enabled, an unquoted glob still needs to
+  # behave the same — orphaned .tmp.* files left from a crashed
+  # write must be removed.
+  task_store_put foo "$(task_store_build foo "x" med "" inbox 1 null)"
+  : > "$JARVIS_HOME/test/tasks/foo.json.tmp.999.0.0"
+  : > "$JARVIS_HOME/test/tasks/foo.json.lock"
+  shopt -s nullglob
+  task_store_delete foo
+  shopt -u nullglob
+  [ ! -f "$JARVIS_HOME/test/tasks/foo.json" ]
+  [ ! -f "$JARVIS_HOME/test/tasks/foo.json.lock" ]
+  [ ! -f "$JARVIS_HOME/test/tasks/foo.json.tmp.999.0.0" ]
 }
 
 @test "task_store_set_done flips status and sets done_at" {
