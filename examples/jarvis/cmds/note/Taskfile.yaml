@@ -38,3 +38,19 @@ tasks:
         - {name: tag, type: list, desc: "Tag (repeatable)"}
         - {name: no-edit, type: bool, desc: "Skip opening $EDITOR"}
     cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
+
+  daily:
+    desc: "Today's daily note (create or append)"
+    summary: |
+      Resolves to daily/YYYY-MM-DD.md for today. Creates from
+      templates/daily.md when missing. Body argument appends; no body
+      opens $EDITOR (unless --no-edit / non-tty).
+
+      Examples:
+        jarvis note daily                           # open in $EDITOR (or no-op with --no-edit)
+        jarvis note daily "finished the rewrite"    # append
+        jarvis note daily --no-edit                 # ensure today's file exists, no editor
+    vars:
+      FLAGS:
+        - {name: no-edit, type: bool, desc: "Skip opening $EDITOR"}
+    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
