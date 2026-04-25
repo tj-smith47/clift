@@ -117,10 +117,16 @@ _clift_log_format() {
   esac
 }
 
-log_info()    { [[ "${QUIET:-}" == "true" ]] && return 0; _clift_log_format info "$@"; }
+# All log helpers route to stderr. stdout is reserved for command DATA
+# (slugs, lists, JSON, anything a user might pipe). info/success are
+# status messages — diagnostic, not data — and belong on stderr along
+# with warn/error/debug/suggest. Subcommands that emit BOTH a status
+# message and data should keep printf-to-stdout for the data and let
+# log_* go to stderr; they no longer need to redirect log_* explicitly.
+log_info()    { [[ "${QUIET:-}" == "true" ]] && return 0; _clift_log_format info "$@" >&2; }
 log_warn()    { _clift_log_format warn "$@" >&2; }
 log_error()   { _clift_log_format error "$@" >&2; }
-log_success() { [[ "${QUIET:-}" == "true" ]] && return 0; _clift_log_format success "$@"; }
+log_success() { [[ "${QUIET:-}" == "true" ]] && return 0; _clift_log_format success "$@" >&2; }
 log_debug()   { [[ "${VERBOSE:-}" != "true" ]] && return 0; _clift_log_format debug "$@" >&2; }
 log_suggest() { [[ "${QUIET:-}" == "true" ]] && return 0; printf '%b  %s%b\n' "$CLIFT_CLR_DIM" "$*" "$CLIFT_CLR_RESET" >&2; }
 

@@ -192,7 +192,7 @@ else
     1)
       # No current set → quick-capture: mint inbox/<slug-from-body>.
       target="$(_create_in_inbox "$body")"
-      log_success "$target" >&2
+      log_success "$target"
       exit 0
       ;;
     2|*)
@@ -203,4 +203,4 @@ fi
 
 # Append path (used for --on and current-note routing).
 note_store_append "$target" "$body" ${append_flags[@]+"${append_flags[@]}"}
-log_success "$target" >&2
+log_success "$target"

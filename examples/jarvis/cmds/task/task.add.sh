@@ -62,7 +62,7 @@ seq="$(task_store_next_seq)"
 payload="$(task_store_build "$slug" "$desc" "$priority" "$due" "$project" "$seq" null)"
 task_store_put "$slug" "$payload"
 
-# log_success defaults to stdout; redirect so stdout carries only the slug
-# (callers can `slug=$(jarvis task add "…")`).
-log_success "tasks/${slug}.json" >&2
+# Stdout carries only the slug so callers can `slug=$(jarvis task add "…")`.
+# log_success goes to stderr like every other log_*; no redirect needed.
+log_success "tasks/${slug}.json"
 printf '%s\n' "$slug"

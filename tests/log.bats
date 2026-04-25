@@ -3,11 +3,12 @@ bats_require_minimum_version 1.5.0
 
 load test_helper
 
-@test "log_info outputs message to stdout" {
+@test "log_info outputs message to stderr" {
   source "$FRAMEWORK_DIR/lib/log/log.sh"
-  run log_info "hello world"
+  run --separate-stderr log_info "hello world"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"hello world"* ]]
+  [[ "$stderr" == *"hello world"* ]]
+  [ -z "$output" ]
 }
 
 @test "log_warn outputs to stderr" {
@@ -38,11 +39,12 @@ load test_helper
   [ -z "$output" ]
 }
 
-@test "log_success outputs to stdout" {
+@test "log_success outputs to stderr" {
   source "$FRAMEWORK_DIR/lib/log/log.sh"
-  run log_success "done"
+  run --separate-stderr log_success "done"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"done"* ]]
+  [[ "$stderr" == *"done"* ]]
+  [ -z "$output" ]
 }
 
 @test "log_debug is silent without VERBOSE" {
