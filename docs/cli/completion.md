@@ -174,18 +174,22 @@ clift_complete_deploy_pos1() {
 `mycli deploy <TAB>` now offers `prod-east prod-west staging dev`;
 `mycli deploy prod-<TAB>` narrows to `prod-east prod-west`.
 
-**Current support:** `pos1` only.
+**Higher positions** (`pos2`, `pos3`, …) work the same way. The
+generator reads `.clift/index.json` at TAB-press time, walks non-flag
+words longest-prefix against the real task table, and uses the first
+unmatched word as the start of positionals. `mycli deploy prod-east
+<TAB>` resolves `cmd_path` to `deploy` (because `deploy:prod-east` is
+not a real task) and dispatches `pos2`, not `pos1` against a fictional
+task.
 
-Higher positions (`pos2`, `pos3`, …) are a **known limitation**, not a
-supported feature. The bash and zsh completion generators greedily
-colon-join every non-flag word before the cursor into `cmd_path`, which
-collapses the positional counter: for `mycli deploy foo <TAB>`, `cmd_path`
-becomes `deploy:foo` and the dispatcher fires `pos1` (not `pos2`) against
-the non-existent task `deploy:foo`. A correct pos2+ dispatch requires
-cache-aware resolution — reading `.clift/tasks.json` at completion time
-to learn where the real task path ends and where positionals begin. That
-work is tracked as a future enhancement; for now, design completers
-against `pos1` only.
+```bash
+clift_complete_deploy_pos2() {
+  local prefix="${1:-}"
+  for stage in canary stable rollback; do
+    [[ "$stage" == "$prefix"* ]] && printf '%s\n' "$stage"
+  done
+}
+```
 
 ### Interaction with the override system
 

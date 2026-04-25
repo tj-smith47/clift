@@ -29,17 +29,47 @@ _${CLI_NAME}_completions() {
 
   local cur="\${COMP_WORDS[\$COMP_CWORD]}"
 
-  # Build the command path from words 1..(CWORD-1)
+  # Collect non-flag words before the cursor.
+  local _nf_words=()
+  local _i
+  for (( _i=1; _i<COMP_CWORD; _i++ )); do
+    local _w="\${COMP_WORDS[\$_i]}"
+    [[ "\$_w" == -* ]] && continue
+    _nf_words+=("\$_w")
+  done
+
+  # Resolve cmd_path against the real task table (.clift/index.json).
+  # Greedy colon-join collapsed pos2+ to pos1 because every non-flag
+  # word — including a positional value — extended cmd_path past the
+  # real task. Walk longest-prefix instead: track the deepest segment
+  # that is a real leaf (exact key or has a :default sibling) and stop
+  # the moment a candidate is neither a leaf nor a namespace prefix.
+  local _task_keys=""
+  [[ -f "\$index_json" ]] && _task_keys="\$(jq -r '.tasks // {} | keys[]' "\$index_json" 2>/dev/null)"
   local cmd_path=""
-  local i
-  for (( i=1; i<COMP_CWORD; i++ )); do
-    local w="\${COMP_WORDS[\$i]}"
-    [[ "\$w" == -* ]] && continue
-    if [[ -z "\$cmd_path" ]]; then
-      cmd_path="\$w"
+  local _matched_segs=0
+  local _candidate=""
+  local _k
+  for (( _k=0; _k<\${#_nf_words[@]}; _k++ )); do
+    if [[ -z "\$_candidate" ]]; then
+      _candidate="\${_nf_words[\$_k]}"
     else
-      cmd_path="\${cmd_path}:\${w}"
+      _candidate="\${_candidate}:\${_nf_words[\$_k]}"
     fi
+    local _is_leaf="" _is_ns="" _key=""
+    while IFS= read -r _key; do
+      [[ -z "\$_key" ]] && continue
+      if [[ "\$_key" == "\$_candidate" || "\$_key" == "\${_candidate}:default" ]]; then
+        _is_leaf=1
+      elif [[ "\$_key" == "\${_candidate}:"* ]]; then
+        _is_ns=1
+      fi
+    done <<< "\$_task_keys"
+    if [[ -n "\$_is_leaf" ]]; then
+      cmd_path="\$_candidate"
+      _matched_segs=\$(( _k + 1 ))
+    fi
+    [[ -z "\$_is_leaf" && -z "\$_is_ns" ]] && break
   done
 
   # Complete flags — hidden flags are filtered out
@@ -76,33 +106,13 @@ _${CLI_NAME}_completions() {
     fi
   fi
 
-  # Task P1.1: dynamic completer for positional slots. After a task path is
-  # resolved and the current word is not a flag value (prev != --foo) and
-  # not itself a flag, delegate to \`_complete <task> pos<N>\` for the
-  # cursor slot. If undefined or empty, fall through to subcommand
-  # completion so unaffected commands keep working.
-  #
-  # NOTE: this block currently supports pos1 only. cmd_path greedily
-  # colon-joins every non-flag word before the cursor, so the counter
-  #   N = _nf - (colons in cmd_path)
-  # collapses to 1 whenever a prior positional value is also a valid
-  # path-segment token — \`mycli deploy foo <TAB>\` yields cmd_path
-  # \`deploy:foo\` and dispatches pos1 (against a non-existent task),
-  # not pos2. Correct pos2+ dispatch needs cache-aware resolution of
-  # where the real task path ends, which requires reading
-  # .clift/tasks.json at completion time. Tracked as a known limitation
-  # (see docs/cli/completion.md and .claude/known-bugs.md); design
-  # completers against pos1 only until cache-aware dispatch lands.
+  # Task P1.1: dynamic completer for positional slots. cmd_path is the
+  # real leaf task path resolved against .clift/index.json above; the
+  # positional counter is the number of non-flag words AFTER the matched
+  # prefix, plus one for the cursor slot. If undefined or empty, fall
+  # through to subcommand completion so unaffected commands keep working.
   if [[ -n "\$cmd_path" ]] && [[ "\$cur" != -* ]]; then
-    local _nf=0
-    local _j
-    for (( _j=1; _j<COMP_CWORD; _j++ )); do
-      local _w="\${COMP_WORDS[\$_j]}"
-      [[ "\$_w" == -* ]] && continue
-      _nf=\$(( _nf + 1 ))
-    done
-    local _colons="\${cmd_path//[^:]}"
-    local _pos_n=\$(( _nf - \${#_colons} ))
+    local _pos_n=\$(( \${#_nf_words[@]} - _matched_segs + 1 ))
     if (( _pos_n >= 1 )); then
       local _posfn="pos\${_pos_n}"
       local _pdyn
@@ -155,18 +165,45 @@ _${CLI_NAME}() {
   tasks_json="\$cli_dir/.clift/tasks.json"
   index_json="\$cli_dir/.clift/index.json"
 
-  # Build colon-joined command path from words before cursor
-  # zsh words[] is 1-indexed; words[1] is the command name itself, so start at 2
+  # Collect non-flag words before the cursor.
+  # zsh words[] is 1-indexed; words[1] is the command name itself, so start at 2.
+  local -a _nf_words
+  _nf_words=()
+  local _i
+  for (( _i=2; _i<CURRENT; _i++ )); do
+    local _w="\${words[\$_i]}"
+    [[ "\$_w" == -* ]] && continue
+    _nf_words+=("\$_w")
+  done
+
+  # Resolve cmd_path against the real task table — see bash branch above
+  # for the rationale (pos2+ collapses without cache-aware resolution).
+  local _task_keys=""
+  [[ -f "\$index_json" ]] && _task_keys="\$(jq -r '.tasks // {} | keys[]' "\$index_json" 2>/dev/null)"
   local cmd_path=""
-  local i
-  for (( i=2; i<CURRENT; i++ )); do
-    local w="\${words[\$i]}"
-    [[ "\$w" == -* ]] && continue
-    if [[ -z "\$cmd_path" ]]; then
-      cmd_path="\$w"
+  local _matched_segs=0
+  local _candidate=""
+  local _k
+  for (( _k=1; _k<=\${#_nf_words[@]}; _k++ )); do
+    if [[ -z "\$_candidate" ]]; then
+      _candidate="\${_nf_words[\$_k]}"
     else
-      cmd_path="\${cmd_path}:\${w}"
+      _candidate="\${_candidate}:\${_nf_words[\$_k]}"
     fi
+    local _is_leaf="" _is_ns="" _key=""
+    while IFS= read -r _key; do
+      [[ -z "\$_key" ]] && continue
+      if [[ "\$_key" == "\$_candidate" || "\$_key" == "\${_candidate}:default" ]]; then
+        _is_leaf=1
+      elif [[ "\$_key" == "\${_candidate}:"* ]]; then
+        _is_ns=1
+      fi
+    done <<< "\$_task_keys"
+    if [[ -n "\$_is_leaf" ]]; then
+      cmd_path="\$_candidate"
+      _matched_segs=\$_k
+    fi
+    [[ -z "\$_is_leaf" && -z "\$_is_ns" ]] && break
   done
 
   # Complete flags — hidden flags are filtered out
@@ -200,22 +237,12 @@ _${CLI_NAME}() {
     fi
   fi
 
-  # Task P1.1: dynamic completer for positional slots. Supports pos1 only;
-  # pos2+ collapses to pos1 because cmd_path greedily colon-joins every
-  # non-flag word before the cursor (see bash branch above and
-  # docs/cli/completion.md for the full rationale). zsh words[] is
-  # 1-indexed; words[1] is the command name itself so non-flag counting
-  # starts at index 2.
+  # Task P1.1: dynamic completer for positional slots. cmd_path is the
+  # real leaf task path resolved against .clift/index.json above; the
+  # positional counter is the number of non-flag words AFTER the matched
+  # prefix, plus one for the cursor slot.
   if [[ -n "\$cmd_path" ]] && [[ "\${words[\$CURRENT]}" != -* ]]; then
-    local _nf=0
-    local _j
-    for (( _j=2; _j<CURRENT; _j++ )); do
-      local _w="\${words[\$_j]}"
-      [[ "\$_w" == -* ]] && continue
-      _nf=\$(( _nf + 1 ))
-    done
-    local _colons="\${cmd_path//[^:]}"
-    local _pos_n=\$(( _nf - \${#_colons} ))
+    local _pos_n=\$(( \${#_nf_words[@]} - _matched_segs + 1 ))
     if (( _pos_n >= 1 )); then
       local _posfn="pos\${_pos_n}"
       local -a _pdyn
