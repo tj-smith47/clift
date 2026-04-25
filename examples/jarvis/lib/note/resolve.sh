@@ -50,6 +50,10 @@ _note_fs_keys() {
 }
 
 # Uses ASCII-only case folding (jq ascii_downcase). Non-ASCII titles must match byte-for-byte.
+# Archive rows are filtered out so a title match honors the same
+# archived-hidden contract as the bare-slug tier (and `note list`'s
+# default). Archived notes remain reachable via explicit "archive/<slug>"
+# in tier 1.
 _note_title_match() {
   local idx q mode
   idx="$(note_index_file)"
@@ -59,12 +63,18 @@ _note_title_match() {
   if [[ "$mode" == "exact" ]]; then
     jq -r --arg q "$q" '
       ($q | ascii_downcase) as $lowq
-      | to_entries[] | select((.value.title // "") | ascii_downcase == $lowq) | .key
+      | to_entries[]
+      | select((.value.archived // false) | not)
+      | select((.value.title // "") | ascii_downcase == $lowq)
+      | .key
     ' "$idx" 2>/dev/null
   else
     jq -r --arg q "$q" '
       ($q | ascii_downcase) as $lowq
-      | to_entries[] | select((.value.title // "") | ascii_downcase | startswith($lowq)) | .key
+      | to_entries[]
+      | select((.value.archived // false) | not)
+      | select((.value.title // "") | ascii_downcase | startswith($lowq))
+      | .key
     ' "$idx" 2>/dev/null
   fi
 }
@@ -98,9 +108,16 @@ note_resolve() {
     fi
   fi
 
-  # Build full key list (index + fs fallback)
+  # Build full key list (index + fs fallback). Drop archive/* entries so
+  # archived notes are hidden by default — matches `note list`'s
+  # archived-default-hidden contract and `_note_fs_keys`' own filter.
+  # An explicit "archive/<slug>" still resolves via tier 1 above (literal
+  # file check), so callers can reach archived notes when they ask by the
+  # archived key directly.
   local keys=()
-  mapfile -t keys < <({ _note_index_keys; _note_fs_keys; } | sort -u)
+  mapfile -t keys < <({ _note_index_keys; _note_fs_keys; } \
+    | sort -u \
+    | grep -v '^archive/' || true)
 
   # 2. Unique bare slug across kinds
   local matches=() k slug

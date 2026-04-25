@@ -84,6 +84,21 @@ tasks:
         - {name: no-edit, type: bool, desc: "Skip opening $EDITOR"}
     cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
 
+  archive:
+    desc: "Archive a note (move to archive/<slug>.md)"
+    summary: |
+      Hard-moves the note to archive/<slug>.md, stamps frontmatter
+      (kind=archive, archived=true, original_kind=<old>) and updates the
+      index. Collision suffix -2, -3, ... when the slug already exists in
+      archive/.
+
+      Examples:
+        jarvis note archive etcd-runbook
+        jarvis note archive inbox/audit
+    vars:
+      FLAGS: []
+    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
+
   tag:
     desc: "Mutate frontmatter tags: +add / -remove (set semantics)"
     summary: |
