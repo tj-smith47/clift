@@ -94,3 +94,16 @@ teardown() { jarvis_common_teardown; }
   wait "${pids[@]}"
   [ "$(jq -r '.n' "$f")" = "10" ]
 }
+
+@test "state_json_mutate --arg passes shell metacharacters through verbatim" {
+  # The --arg vararg threads user values into jq as bindings (\$NAME) so
+  # callers don't have to embed untrusted strings into the filter text.
+  # Pin that command-substitution markers, backticks, pipes, dollar
+  # signs and quotes all land as literal characters in the persisted
+  # field — i.e. nothing is interpolated by the shell or by jq's parser.
+  local f="$JARVIS_HOME/test/tasks/meta.json"
+  state_json_write "$f" '{"desc": "old"}'
+  local payload='$(whoami) `id` | "quoted" '"'"'apostrophe'"'"' & background'
+  state_json_mutate "$f" '.desc = $val' --arg val "$payload"
+  [ "$(jq -r '.desc' "$f")" = "$payload" ]
+}
