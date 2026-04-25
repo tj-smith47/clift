@@ -38,3 +38,34 @@ teardown() { jarvis_common_teardown; }
   [ "$status" -eq 0 ]
   [ "$output" = "$JARVIS_HOME/test" ]
 }
+
+@test "doctor --rebuild-index regenerates .index.json from files on disk" {
+  source "$CLIFT_JARVIS_DIR/lib/state/profile.sh"
+  source "$CLIFT_JARVIS_DIR/lib/state/lock.sh"
+  source "$CLIFT_JARVIS_DIR/lib/state/json.sh"
+  source "$CLIFT_JARVIS_DIR/lib/frontmatter.sh"
+  source "$CLIFT_JARVIS_DIR/lib/note/resolve.sh"
+  source "$CLIFT_JARVIS_DIR/lib/note/index.sh"
+  source "$CLIFT_JARVIS_DIR/lib/note/store.sh"
+  state_ensure_tree
+  note_store_new inbox a "A" >/dev/null
+  note_store_new ref b "B" >/dev/null
+  rm -f "$(note_index_file)"
+
+  run bash -c 'declare -A CLIFT_FLAGS=([rebuild-index]=true); source "$1"' _ "$CLIFT_JARVIS_DIR/cmds/doctor/doctor.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"2 notes"* ]]
+  [ -f "$(note_index_file)" ]
+  run jq -r 'keys | sort | join(",")' "$(note_index_file)"
+  [ "$output" = "inbox/a,ref/b" ]
+}
+
+@test "doctor --rebuild-index on an empty notes tree reports 0 notes" {
+  source "$CLIFT_JARVIS_DIR/lib/state/profile.sh"
+  source "$CLIFT_JARVIS_DIR/lib/note/resolve.sh"
+  state_ensure_tree
+
+  run bash -c 'declare -A CLIFT_FLAGS=([rebuild-index]=true); source "$1"' _ "$CLIFT_JARVIS_DIR/cmds/doctor/doctor.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"0 notes"* ]]
+}

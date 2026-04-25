@@ -16,11 +16,31 @@ if ! declare -p CLIFT_FLAGS >/dev/null 2>&1; then
 fi
 
 path_flag="${CLIFT_FLAGS[path]:-}"
+rebuild_flag="${CLIFT_FLAGS[rebuild-index]:-}"
 
 state_dir="$(state_profile_dir)"
 
 if [[ "$path_flag" == "true" ]]; then
   printf '%s\n' "$state_dir"
+  exit 0
+fi
+
+if [[ "$rebuild_flag" == "true" ]]; then
+  # shellcheck source=/dev/null
+  source "${CLI_DIR}/lib/state/lock.sh"
+  # shellcheck source=/dev/null
+  source "${CLI_DIR}/lib/state/json.sh"
+  # shellcheck source=/dev/null
+  source "${CLI_DIR}/lib/frontmatter.sh"
+  # shellcheck source=/dev/null
+  source "${CLI_DIR}/lib/note/resolve.sh"
+  # shellcheck source=/dev/null
+  source "${CLI_DIR}/lib/note/index.sh"
+
+  state_ensure_tree
+  note_index_rebuild
+  count="$(jq -r 'keys | length' "$(note_index_file)" 2>/dev/null || printf '0')"
+  log_success "rebuilt note index: $count notes"
   exit 0
 fi
 
