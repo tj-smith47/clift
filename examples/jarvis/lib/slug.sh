@@ -35,8 +35,12 @@ slug_from_desc() {
 
 # slug_is_jira_key "<s>"
 # True for ABC-123 style keys. Bypasses generated-slug pipeline.
+# Project key must be 2+ chars: first uppercase letter, then uppercase
+# letters or digits. Real Atlassian keys are never single-letter; the
+# `^[A-Z]+-[0-9]+$` form accepted `A-1` and would mis-route a normal
+# slug like `a-1` after upper-casing.
 slug_is_jira_key() {
-  [[ "${1:-}" =~ ^[A-Z]+-[0-9]+$ ]]
+  [[ "${1:-}" =~ ^[A-Z][A-Z0-9]+-[0-9]+$ ]]
 }
 
 # slug_resolve_collision <base> <tasks-dir>

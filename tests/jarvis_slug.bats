@@ -70,6 +70,21 @@ teardown() { jarvis_common_teardown; }
   [ "$status" -ne 0 ]
 }
 
+@test "slug_is_jira_key rejects 1-letter project key (A-1)" {
+  # Real Atlassian project keys are 2+ characters; the prior regex
+  # `^[A-Z]+-[0-9]+$` accepted single-letter prefixes like A-1, which
+  # would mis-route a slug like a slug `A-1` (legal as a normal slug)
+  # into the Jira passthrough branch.
+  run slug_is_jira_key "A-1"
+  [ "$status" -ne 0 ]
+}
+
+@test "slug_is_jira_key accepts 2+ letter project key with digit suffix" {
+  # JR1-123 is a real shape (project keys allow digits in positions 2+).
+  run slug_is_jira_key "JR1-123"
+  [ "$status" -eq 0 ]
+}
+
 @test "slug_resolve_collision returns base when unused" {
   run slug_resolve_collision "fix-k3s" "$TASKS_DIR"
   [ "$status" -eq 0 ]
@@ -115,10 +130,13 @@ teardown() { jarvis_common_teardown; }
 @test "slug_resolve_prefix fails with exit 1 and lists candidates on ambiguous" {
   : > "$TASKS_DIR/fix-a.json"
   : > "$TASKS_DIR/fix-b.json"
-  run slug_resolve_prefix "fix" "$TASKS_DIR"
+  run --separate-stderr slug_resolve_prefix "fix" "$TASKS_DIR"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"fix-a"* ]] || [[ "$stderr" == *"fix-a"* ]]
-  [[ "$output" == *"fix-b"* ]] || [[ "$stderr" == *"fix-b"* ]]
+  # Candidates must land on stderr (the user-facing diagnostic stream),
+  # not stdout — stdout is reserved for the resolved slug on success.
+  [[ "$stderr" == *"fix-a"* ]]
+  [[ "$stderr" == *"fix-b"* ]]
+  [ -z "$output" ]
 }
 
 @test "slug_resolve_prefix emits candidates alphabetically on ambiguous" {
