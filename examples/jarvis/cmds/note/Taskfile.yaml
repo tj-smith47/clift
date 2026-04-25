@@ -83,3 +83,29 @@ tasks:
       FLAGS:
         - {name: no-edit, type: bool, desc: "Skip opening $EDITOR"}
     cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
+
+  list:
+    desc: "List notes grouped by kind"
+    summary: |
+      Reads the note index, applies filters, groups by kind. Default limit
+      is 50 rows; override with --limit. --json / --yaml emit a flat array
+      instead of the grouped table (mutually exclusive).
+
+      Examples:
+        jarvis note list
+        jarvis note list --tag k3s --tag perf
+        jarvis note list --kind ref --json
+        jarvis note list --since 2026-04-01 --archived
+    vars:
+      FLAGS:
+        - {name: kind, type: string, desc: "Filter by kind",
+           choices: [inbox, meeting, ref, project, daily, archive]}
+        - {name: tag, type: list, desc: "Filter by tag (repeatable; OR semantics)"}
+        - {name: since, type: string, desc: "Filter updated_at >= ISO timestamp"}
+        - {name: archived, type: bool, desc: "Include archived notes"}
+        - {name: limit, type: string, default: "50", desc: "Max rows"}
+        - {name: json, type: bool, desc: "Emit JSON array",
+           group: output, exclusive: true}
+        - {name: yaml, type: bool, desc: "Emit YAML array",
+           group: output, exclusive: true}
+    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
