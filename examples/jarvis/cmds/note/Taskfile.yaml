@@ -84,6 +84,24 @@ tasks:
         - {name: no-edit, type: bool, desc: "Skip opening $EDITOR"}
     cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
 
+  search:
+    desc: "Full-text search across notes (rg)"
+    summary: |
+      Smart-case literal by default; --regex switches to regex. --kind /
+      --tag post-filter results against .index.json.
+
+      Examples:
+        jarvis note search flock
+        jarvis note search '^todo' --regex
+        jarvis note search migration --kind project --tag k3s
+    vars:
+      FLAGS:
+        - {name: regex, type: bool, desc: "Treat query as regex (still smart-case)"}
+        - {name: kind, type: string, desc: "Filter results by kind",
+           choices: [inbox, meeting, ref, project, daily, archive]}
+        - {name: tag, type: list, desc: "Filter results by tag (repeatable; OR)"}
+    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
+
   show:
     desc: "Render a note (glow > bat > cat fallback)"
     summary: |
