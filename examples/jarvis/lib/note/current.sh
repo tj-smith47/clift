@@ -50,7 +50,10 @@ note_current_resolve() {
   [[ -z "$line" ]] && return 1
   case "$line" in
     kind=daily)
-      today="$(date +%F)"
+      # Honor JARVIS_TODAY for tests + cron determinism — same contract
+      # as note.daily.sh so the two never disagree on which file is
+      # "today".
+      today="${JARVIS_TODAY:-$(date +%F)}"
       printf 'daily/%s\n' "$today"
       return 0
       ;;

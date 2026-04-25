@@ -84,6 +84,24 @@ tasks:
         - {name: no-edit, type: bool, desc: "Skip opening $EDITOR"}
     cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
 
+  current:
+    desc: "Show / set / clear the current note"
+    summary: |
+      Sets a default target for `jarvis note <body>` quick-capture so
+      subsequent appends route to the current note instead of inbox.
+      Reserved keyword 'daily' stores kind=daily and auto-rotates per
+      day. No-arg shows the current resolved selection.
+
+      Examples:
+        jarvis note current "Perf Investigation"
+        jarvis note current daily
+        jarvis note current
+        jarvis note current --clear
+    vars:
+      FLAGS:
+        - {name: clear, type: bool, desc: "Unset the current note"}
+    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
+
   archive:
     desc: "Archive a note (move to archive/<slug>.md)"
     summary: |
