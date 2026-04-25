@@ -69,3 +69,46 @@ teardown() { jarvis_common_teardown; }
   [ "$status" -eq 0 ]
   [[ "$output" == *"0 notes"* ]]
 }
+
+# ---- focus.log orphan-row check ----------------------------------------
+
+@test "doctor: focus.log line shows 'no log yet' before any sessions" {
+  mkdir -p "$JARVIS_HOME/test"
+  printf '1\n' > "$JARVIS_HOME/test/state.version"
+  run bash "$CLIFT_JARVIS_DIR/cmds/doctor/doctor.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"focus.log"* ]]
+  [[ "$output" == *"no log yet"* ]]
+}
+
+@test "doctor: focus.log clean when all starts have ends" {
+  mkdir -p "$JARVIS_HOME/test"
+  printf '1\n' > "$JARVIS_HOME/test/state.version"
+  source "$CLIFT_JARVIS_DIR/lib/state/profile.sh"
+  source "$CLIFT_JARVIS_DIR/lib/state/lock.sh"
+  source "$CLIFT_JARVIS_DIR/lib/state/ndjson.sh"
+  source "$CLIFT_JARVIS_DIR/lib/focus/log.sh"
+  focus_log_append start "1s" "demo"
+  focus_log_append end   ""   "demo"
+
+  run bash "$CLIFT_JARVIS_DIR/cmds/doctor/doctor.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"0 orphan rows"* ]]
+}
+
+@test "doctor: focus.log warns on orphan starts (SIGKILL / power loss)" {
+  mkdir -p "$JARVIS_HOME/test"
+  printf '1\n' > "$JARVIS_HOME/test/state.version"
+  source "$CLIFT_JARVIS_DIR/lib/state/profile.sh"
+  source "$CLIFT_JARVIS_DIR/lib/state/lock.sh"
+  source "$CLIFT_JARVIS_DIR/lib/state/ndjson.sh"
+  source "$CLIFT_JARVIS_DIR/lib/focus/log.sh"
+  focus_log_append start "25m" "killed-a"
+  focus_log_append start "25m" "killed-b"
+  focus_log_append start "1s"  "completed"
+  focus_log_append end   ""    "completed"
+
+  run bash "$CLIFT_JARVIS_DIR/cmds/doctor/doctor.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"2 orphan rows"* ]]
+}

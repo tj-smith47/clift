@@ -70,3 +70,26 @@ for bin in jq dasel rg jira glow; do
     printf '\u2717 %-13s %-20s %s\n' "$bin" "missing" "install $bin"
   fi
 done
+
+# focus.log orphan check \u2014 surfaces SIGKILL / power-loss cases where a
+# `start` row landed but the EXIT trap never got to write its `end`.
+# Sources are loaded lazily here so the dependency only kicks in when the
+# log exists (avoids cost on a freshly-bootstrapped profile).
+focus_log="$state_dir/focus.log"
+if [[ -f "$focus_log" ]]; then
+  # shellcheck source=/dev/null
+  source "${CLI_DIR}/lib/state/lock.sh"
+  # shellcheck source=/dev/null
+  source "${CLI_DIR}/lib/state/ndjson.sh"
+  # shellcheck source=/dev/null
+  source "${CLI_DIR}/lib/focus/log.sh"
+  orphan_count="$(focus_orphan_starts | grep -c . || true)"
+  if (( orphan_count == 0 )); then
+    printf '\u2713 %-13s %-20s %s\n' "focus.log" "0 orphan rows" "clean"
+  else
+    printf '\u26a0 %-13s %-20s %s\n' "focus.log" "$orphan_count orphan rows" \
+      "SIGKILL or power loss left starts unmatched (cleanup TBD)"
+  fi
+else
+  printf '\u2713 %-13s %-20s %s\n' "focus.log" "no log yet" "no focus sessions recorded"
+fi
