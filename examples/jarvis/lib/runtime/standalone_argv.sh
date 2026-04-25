@@ -143,7 +143,16 @@ jarvis_standalone_argv_parse() {
           shift
         else
           _jv_assign "$name" "${2:-}"
-          shift 2
+          # `shift 2` with $#=1 returns 1; under the caller's set -e
+          # that aborts the script for what is otherwise a benign
+          # missing-value (e.g. an unknown trailing --flag tolerated as
+          # a string slot). Guard against the end-of-args case
+          # explicitly so a wrong-argv shape never panics.
+          if (( $# >= 2 )); then
+            shift 2
+          else
+            shift
+          fi
         fi
         ;;
       *)
