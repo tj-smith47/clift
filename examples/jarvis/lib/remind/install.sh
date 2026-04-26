@@ -118,6 +118,10 @@ _remind_systemd_timer_path() {
   printf '%s/jarvis-tick.timer\n' "$(_remind_systemd_unit_dir)"
 }
 
+_remind_systemd_installed() {
+  [[ -f "$(_remind_systemd_service_path)" && -f "$(_remind_systemd_timer_path)" ]]
+}
+
 _remind_systemd_service_body() {
   cat <<'UNIT'
 [Unit]

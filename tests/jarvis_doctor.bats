@@ -2,8 +2,48 @@
 bats_require_minimum_version 1.5.0
 
 load jarvis_helper
-setup() { jarvis_common_setup; }
+load jarvis_shim_helper
+
+setup() {
+  jarvis_common_setup
+  export TEST_DIR
+}
 teardown() { jarvis_common_teardown; }
+
+# Seed a reminder JSON with given slug + status. Bypasses cmds/remind/remind.sh
+# so we can test counts without invoking the time-aware create path.
+_seed_reminder() {
+  local slug="$1" status="$2"
+  local dir="$JARVIS_HOME/test/reminders"
+  mkdir -p "$dir"
+  jq -nc \
+    --arg slug "$slug" \
+    --arg status "$status" \
+    '{slug:$slug, message:"x", profile:"test",
+      trigger_at:"2026-04-26T15:00:00Z", via:["local"],
+      status:$status, repeat:"", anchor_at:"", until:"",
+      count_remaining:null, created_at:"2026-04-26T14:00:00Z",
+      fire_count:0, last_fired_at:""}' > "$dir/$slug.json"
+}
+
+# Append a delivery row to the NDJSON log. Used for delivered/failed counts.
+_seed_delivery() {
+  local ok="$1" channel="${2:-local}" slug="${3:-x-1}"
+  local log="$JARVIS_HOME/test/reminders.delivery.log"
+  mkdir -p "$(dirname "$log")"
+  jq -nc \
+    --arg ch "$channel" --argjson ok "$ok" --arg slug "$slug" \
+    '{ts:"2026-04-26T15:00:00Z", channel:$ch, ok:$ok,
+      message:"hello", slug:$slug}' >> "$log"
+}
+
+_seed_heartbeat() {
+  local ts="$1"
+  local log="$JARVIS_HOME/test/reminders.delivery.log"
+  mkdir -p "$(dirname "$log")"
+  jq -nc --arg ts "$ts" '{ts:$ts, kind:"tick.heartbeat", slug:"_heartbeat"}' \
+    >> "$log"
+}
 
 @test "debug command directory no longer exists" {
   [ ! -d "$CLIFT_JARVIS_DIR/cmds/debug" ]
@@ -94,6 +134,125 @@ teardown() { jarvis_common_teardown; }
   run bash "$CLIFT_JARVIS_DIR/cmds/doctor/doctor.sh"
   [ "$status" -eq 0 ]
   [[ "$output" == *"0 orphan rows"* ]]
+}
+
+# ---- T16: reminders rollup + scheduler check --------------------------
+
+@test "doctor: reminders section appears with all-zero counts on empty profile" {
+  mkdir -p "$JARVIS_HOME/test"
+  printf '1\n' > "$JARVIS_HOME/test/state.version"
+  run bash "$CLIFT_JARVIS_DIR/cmds/doctor/doctor.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"reminders"* ]]
+  [[ "$output" == *"pending"* ]]
+  [[ "$output" == *"delivered"* ]]
+  [[ "$output" == *"scheduler"* ]]
+}
+
+@test "doctor: pending + active counts reflect seeded reminders" {
+  mkdir -p "$JARVIS_HOME/test"
+  printf '1\n' > "$JARVIS_HOME/test/state.version"
+  _seed_reminder a pending
+  _seed_reminder b pending
+  _seed_reminder c active
+  run bash "$CLIFT_JARVIS_DIR/cmds/doctor/doctor.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" =~ pending[[:space:]]+2 ]]
+  [[ "$output" =~ active[[:space:]]+1 ]]
+}
+
+@test "doctor: delivered + failed counts come from NDJSON" {
+  mkdir -p "$JARVIS_HOME/test"
+  printf '1\n' > "$JARVIS_HOME/test/state.version"
+  _seed_delivery true  local a
+  _seed_delivery true  local b
+  _seed_delivery true  local c
+  _seed_delivery false local d
+  run bash "$CLIFT_JARVIS_DIR/cmds/doctor/doctor.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" =~ delivered[[:space:]]+3 ]]
+  [[ "$output" =~ failed[[:space:]]+1 ]]
+}
+
+@test "doctor: scheduler reports NOT installed when no cron line" {
+  mkdir -p "$JARVIS_HOME/test"
+  printf '1\n' > "$JARVIS_HOME/test/state.version"
+  shim_setup
+  shim_install crontab 'exit 1'  # no crontab for user
+  run bash "$CLIFT_JARVIS_DIR/cmds/doctor/doctor.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"NOT installed"* ]]
+}
+
+@test "doctor: scheduler reports cron installed + recent tick" {
+  mkdir -p "$JARVIS_HOME/test"
+  printf '1\n' > "$JARVIS_HOME/test/state.version"
+  shim_setup
+  shim_install crontab '
+fake="$TEST_DIR/fake.crontab"
+case "${1:-}" in
+  -l) cat "$fake" 2>/dev/null || exit 1 ;;
+  *)  cat > "$fake" ;;
+esac
+'
+  printf '%s\n' '* * * * * jarvis remind tick >/dev/null 2>&1' \
+    > "$TEST_DIR/fake.crontab"
+
+  # Heartbeat 30s before fake-now
+  export JARVIS_FAKE_NOW="2026-04-26T15:00:00Z"
+  _seed_heartbeat "2026-04-26T14:59:30Z"
+
+  run bash "$CLIFT_JARVIS_DIR/cmds/doctor/doctor.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"installed"* ]]
+  [[ "$output" != *"NOT installed"* ]]
+  [[ "$output" != *"stale"* ]]
+}
+
+@test "doctor: scheduler stale warning when heartbeat > 5min ago" {
+  mkdir -p "$JARVIS_HOME/test"
+  printf '1\n' > "$JARVIS_HOME/test/state.version"
+  shim_setup
+  shim_install crontab '
+fake="$TEST_DIR/fake.crontab"
+case "${1:-}" in
+  -l) cat "$fake" 2>/dev/null || exit 1 ;;
+  *)  cat > "$fake" ;;
+esac
+'
+  printf '%s\n' '* * * * * jarvis remind tick >/dev/null 2>&1' \
+    > "$TEST_DIR/fake.crontab"
+
+  # Heartbeat 10 minutes before fake-now
+  export JARVIS_FAKE_NOW="2026-04-26T15:10:00Z"
+  _seed_heartbeat "2026-04-26T15:00:00Z"
+
+  run bash "$CLIFT_JARVIS_DIR/cmds/doctor/doctor.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"stale"* ]]
+}
+
+@test "doctor: systemd backend installed reports installed" {
+  mkdir -p "$JARVIS_HOME/test"
+  printf '1\n' > "$JARVIS_HOME/test/state.version"
+  cat > "$JARVIS_HOME/test/config.toml" <<EOF
+[scheduler]
+backend = "systemd"
+EOF
+  mkdir -p "$HOME/.config/systemd/user"
+  printf '[Unit]\nDescription=jarvis remind tick\n' \
+    > "$HOME/.config/systemd/user/jarvis-tick.service"
+  printf '[Timer]\nOnCalendar=*:0/1\n' \
+    > "$HOME/.config/systemd/user/jarvis-tick.timer"
+
+  export JARVIS_FAKE_NOW="2026-04-26T15:00:00Z"
+  _seed_heartbeat "2026-04-26T14:59:30Z"
+
+  run bash "$CLIFT_JARVIS_DIR/cmds/doctor/doctor.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"systemd"* ]]
+  [[ "$output" == *"installed"* ]]
+  [[ "$output" != *"NOT installed"* ]]
 }
 
 @test "doctor: focus.log warns on orphan starts (SIGKILL / power loss)" {
