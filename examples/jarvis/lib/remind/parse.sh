@@ -14,18 +14,32 @@ fi
 _JARVIS_REMIND_PARSE_LOADED=1
 
 # _remind_now_epoch — UTC seconds-since-epoch; honors JARVIS_FAKE_NOW.
+# Returns 2 + named error if JARVIS_FAKE_NOW is set but unparseable, so callers
+# never see empty stdout silently flowing into arithmetic.
 _remind_now_epoch() {
+  local out
   if [[ -n "${JARVIS_FAKE_NOW:-}" ]]; then
-    date -u -d "$JARVIS_FAKE_NOW" +%s 2>/dev/null \
-      || date -u -j -f "%Y-%m-%dT%H:%M:%SZ" "$JARVIS_FAKE_NOW" +%s
+    out="$(date -u -d "$JARVIS_FAKE_NOW" +%s 2>/dev/null)" \
+      || out="$(date -u -j -f "%Y-%m-%dT%H:%M:%SZ" "$JARVIS_FAKE_NOW" +%s 2>/dev/null)"
+    if [[ -z "$out" ]]; then
+      printf '_remind_now_epoch: cannot parse JARVIS_FAKE_NOW=%q\n' "$JARVIS_FAKE_NOW" >&2
+      return 2
+    fi
   else
-    date -u +%s
+    out="$(date -u +%s)"
   fi
+  printf '%s\n' "$out"
 }
 
 _remind_epoch_to_iso() {
-  date -u -d "@$1" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
-    || date -u -j -f %s "$1" +%Y-%m-%dT%H:%M:%SZ
+  local out
+  out="$(date -u -d "@$1" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)" \
+    || out="$(date -u -j -f %s "$1" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)"
+  if [[ -z "$out" ]]; then
+    printf '_remind_epoch_to_iso: cannot convert epoch %q\n' "$1" >&2
+    return 2
+  fi
+  printf '%s\n' "$out"
 }
 
 # remind_parse_in <duration>
