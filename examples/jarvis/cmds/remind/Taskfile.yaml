@@ -71,6 +71,42 @@ tasks:
       HIDDEN: true
     cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
 
+  install:
+    desc: "Install the reminder scheduler (cron or systemd)"
+    summary: |
+      Install a recurring scheduler that runs `jarvis remind tick` every
+      minute. Defaults to cron; use `--backend systemd` for a systemd
+      user-timer instead. Backend resolves: --backend arg > `[scheduler]
+      backend` in config.toml > "cron".
+
+      Idempotent — installing twice is a no-op. Use `jarvis remind
+      uninstall` to remove.
+
+      Examples:
+        jarvis remind install
+        jarvis remind install --backend systemd
+    vars:
+      FLAGS:
+        - {name: backend, type: string,
+           desc: "Override backend: cron | systemd"}
+    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
+
+  uninstall:
+    desc: "Uninstall the reminder scheduler"
+    summary: |
+      Remove the scheduler installed by `jarvis remind install`. Backend
+      resolution mirrors install. Idempotent — exits 0 if nothing to
+      remove.
+
+      Examples:
+        jarvis remind uninstall
+        jarvis remind uninstall --backend systemd
+    vars:
+      FLAGS:
+        - {name: backend, type: string,
+           desc: "Override backend: cron | systemd"}
+    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
+
   list:
     desc: "List scheduled reminders"
     summary: |
