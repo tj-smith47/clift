@@ -45,3 +45,46 @@ teardown() { jarvis_common_teardown; }
   [ "$status" -eq 0 ]
   [ "$output" = "none" ]
 }
+
+@test "config_get with explicit profile reads that profile's config" {
+  mkdir -p "$JARVIS_HOME/work"
+  cat > "$JARVIS_HOME/work/config.toml" <<'EOF'
+[notify.gotify]
+url = "https://gotify.work.example"
+EOF
+  run config_get notify.gotify.url "" work
+  [ "$status" -eq 0 ]
+  [ "$output" = "https://gotify.work.example" ]
+}
+
+@test "config_get with explicit profile does not mutate \$JARVIS_PROFILE" {
+  mkdir -p "$JARVIS_HOME/other"
+  cat > "$JARVIS_HOME/other/config.toml" <<'EOF'
+key = "other-val"
+EOF
+  local before="$JARVIS_PROFILE"
+  config_get key "" other >/dev/null
+  [ "$JARVIS_PROFILE" = "$before" ]
+}
+
+@test "config_get with explicit profile honors profile-specific defaults" {
+  # Reading a key from a profile that doesn't exist falls to default,
+  # without touching the current profile's config.
+  run config_get notify.default "fallback" nonexistent-profile
+  [ "$status" -eq 0 ]
+  [ "$output" = "fallback" ]
+}
+
+@test "config_get two profiles return distinct values in same shell" {
+  mkdir -p "$JARVIS_HOME/work" "$JARVIS_HOME/home"
+  cat > "$JARVIS_HOME/work/config.toml" <<'EOF'
+who = "work"
+EOF
+  cat > "$JARVIS_HOME/home/config.toml" <<'EOF'
+who = "home"
+EOF
+  run config_get who "" work
+  [ "$output" = "work" ]
+  run config_get who "" home
+  [ "$output" = "home" ]
+}

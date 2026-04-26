@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # TOML config loader for jarvis. Requires `dasel` on PATH.
-# Usage: config_get <dotted.key> <default-value>
+# Usage:
+#   config_get <dotted.key> <default-value>            # uses $JARVIS_PROFILE
+#   config_get <dotted.key> <default-value> <profile>  # explicit profile,
+#                                                        no env mutation
 
 # shellcheck disable=SC2317
 if [[ -n "${_JARVIS_STATE_CONFIG_LOADED:-}" ]]; then
@@ -11,8 +14,17 @@ _JARVIS_STATE_CONFIG_LOADED=1
 config_get() {
   local key="$1"
   local default="$2"
+  local profile="${3:-}"
   local cfg
-  cfg="$(state_profile_dir)/config.toml"
+
+  if [[ -n "$profile" ]]; then
+    # Explicit profile: derive cfg path directly without touching $JARVIS_PROFILE
+    # (callers can resolve any profile's config without disturbing global state).
+    local home="${JARVIS_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/jarvis}"
+    cfg="$home/$profile/config.toml"
+  else
+    cfg="$(state_profile_dir)/config.toml"
+  fi
 
   if [[ ! -f "$cfg" ]]; then
     printf '%s\n' "$default"
