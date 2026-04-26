@@ -56,6 +56,21 @@ tasks:
         jarvis remind cancel ping-2026-04-26-1410
     cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
 
+  tick:
+    desc: "Fire any due reminders (called by the scheduler)"
+    summary: |
+      Scan every profile under $JARVIS_HOME, dispatch any reminders whose
+      trigger_at <= now, advance recurring schedules, and append a
+      heartbeat row to the per-profile delivery log so `doctor` can detect
+      a silent scheduler. Per-profile flock prevents concurrent ticks from
+      double-firing.
+
+      Hidden from `--help` because end-users don't run it directly — cron or
+      systemd does. Run manually only when debugging the scheduler.
+    vars:
+      HIDDEN: true
+    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
+
   list:
     desc: "List scheduled reminders"
     summary: |
