@@ -2,28 +2,65 @@ version: '3'
 
 vars:
   FLAGS:
-    - {name: in, type: string, desc: "Delay (e.g. 10m, 1h, 2d)",
+    - {name: in, type: string, desc: "Delay (e.g. 10s, 5m, 2h, 1d)",
        pattern: "^[0-9]+[smhd]$", group: when, exclusive: true}
-    - {name: at, type: string, desc: "Absolute time (HH:MM 24h)",
-       pattern: "^[0-2][0-9]:[0-5][0-9]$", group: when, exclusive: true}
-    - {name: via, type: string, default: push, desc: "Delivery channel",
-       choices: [slack, email, push, sms]}
+    - {name: at, type: string, desc: "Absolute time (HH:MM 24h or 'YYYY-MM-DD HH:MM')"}
+    - {name: repeat, type: string, desc: "Recurring cadence: daily | weekly | weekdays | weekends | <day-list> | <duration>"}
+    - {name: until, type: string, desc: "Stop recurring after this date (YYYY-MM-DD)",
+       pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"}
+    - {name: count, type: string, desc: "Stop after N fires",
+       pattern: "^[0-9]+$"}
+    - {name: via, type: string, default: "local",
+       desc: "Comma-separated channels (local,gotify,slack)"}
 
 tasks:
   default:
     desc: "Schedule a reminder"
     summary: |
-      Schedule a reminder. Provide exactly one of --in or --at.
+      Schedule a one-shot or recurring reminder. Provide --in or --at for a
+      one-shot. Add --repeat (with --at HH:MM for anchored cadences) for
+      recurring. Default channel is local desktop notification (osascript on
+      macOS, notify-send on Linux). Add --via gotify,slack to fan out (each
+      channel needs its own [notify.<channel>] block in config.toml).
 
       Examples:
         jarvis remind "stand up" --in 10m
         jarvis remind "1:1 with sam" --at 13:30 --via slack
+        jarvis remind "deploy check" --at "2026-04-27 09:00"
+        jarvis remind "standup" --repeat daily    --at 09:00
+        jarvis remind "review"  --repeat fri      --at 17:00
+        jarvis remind "drink water" --repeat 2h
+        jarvis remind "1:1 sam" --repeat mon,wed --at 14:00 --until 2026-12-31
+        jarvis remind "ship reminder" --repeat daily --at 09:00 --count 5
     vars:
       FLAGS:
-        - {name: in, type: string, desc: "Delay (e.g. 10m, 1h, 2d)",
+        - {name: in, type: string, desc: "Delay (e.g. 10s, 5m, 2h, 1d)",
            pattern: "^[0-9]+[smhd]$", group: when, exclusive: true}
-        - {name: at, type: string, desc: "Absolute time (HH:MM 24h)",
-           pattern: "^[0-2][0-9]:[0-5][0-9]$", group: when, exclusive: true}
-        - {name: via, type: string, default: push, desc: "Delivery channel",
-           choices: [slack, email, push, sms]}
+        - {name: at, type: string, desc: "Absolute time (HH:MM 24h or 'YYYY-MM-DD HH:MM')"}
+        - {name: repeat, type: string, desc: "Recurring cadence: daily | weekly | weekdays | weekends | <day-list> | <duration>"}
+        - {name: until, type: string, desc: "Stop recurring after this date (YYYY-MM-DD)",
+           pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"}
+        - {name: count, type: string, desc: "Stop after N fires",
+           pattern: "^[0-9]+$"}
+        - {name: via, type: string, default: "local",
+           desc: "Comma-separated channels (local,gotify,slack)"}
+    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
+
+  list:
+    desc: "List scheduled reminders"
+    summary: |
+      Show pending + active reminders for the current profile (or all
+      profiles with --all-profiles). Sorted by next trigger.
+
+      Examples:
+        jarvis remind list
+        jarvis remind list --all-profiles
+        jarvis remind list --json
+    vars:
+      FLAGS:
+        - {name: all-profiles, type: bool, desc: "Include reminders from every profile"}
+        - {name: json, type: bool, desc: "Emit JSON",
+           group: output, exclusive: true}
+        - {name: yaml, type: bool, desc: "Emit YAML",
+           group: output, exclusive: true}
     cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
