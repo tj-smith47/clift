@@ -46,6 +46,16 @@ tasks:
            desc: "Comma-separated channels (local,gotify,slack)"}
     cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
 
+  cancel:
+    desc: "Cancel a scheduled reminder by slug"
+    summary: |
+      Remove a reminder file from the current profile. Use `jarvis remind
+      list` to see available slugs.
+
+      Examples:
+        jarvis remind cancel ping-2026-04-26-1410
+    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
+
   list:
     desc: "List scheduled reminders"
     summary: |
