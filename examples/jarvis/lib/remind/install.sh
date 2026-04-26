@@ -104,14 +104,98 @@ _remind_uninstall_cron() {
   log_success "cron: removed jarvis remind tick"
 }
 
-# ---------- systemd (T15) ----------
+# ---------- systemd ----------
+
+_remind_systemd_unit_dir() {
+  printf '%s/.config/systemd/user\n' "$HOME"
+}
+
+_remind_systemd_service_path() {
+  printf '%s/jarvis-tick.service\n' "$(_remind_systemd_unit_dir)"
+}
+
+_remind_systemd_timer_path() {
+  printf '%s/jarvis-tick.timer\n' "$(_remind_systemd_unit_dir)"
+}
+
+_remind_systemd_service_body() {
+  cat <<'UNIT'
+[Unit]
+Description=jarvis remind tick
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/jarvis remind tick
+UNIT
+}
+
+_remind_systemd_timer_body() {
+  cat <<'UNIT'
+[Unit]
+Description=jarvis remind tick (every minute)
+
+[Timer]
+OnCalendar=*:0/1
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+UNIT
+}
+
+# Write file only if content differs from desired. Returns 0 if rewritten,
+# 1 if already correct (so the caller can skip daemon-reload on no-op).
+_remind_write_if_changed() {
+  local target="$1" desired="$2"
+  if [[ -f "$target" ]]; then
+    local current
+    current="$(<"$target")"
+    if [[ "$current" == "$desired" ]]; then
+      return 1
+    fi
+  fi
+  mkdir -p "$(dirname "$target")"
+  local tmp="${target}.tmp.$$"
+  printf '%s' "$desired" > "$tmp"
+  mv "$tmp" "$target"
+  return 0
+}
 
 _remind_install_systemd() {
-  printf 'systemd backend not yet implemented\n' >&2
-  return 1
+  local svc timer
+  svc="$(_remind_systemd_service_path)"
+  timer="$(_remind_systemd_timer_path)"
+
+  local svc_body timer_body
+  svc_body="$(_remind_systemd_service_body)"
+  timer_body="$(_remind_systemd_timer_body)"
+
+  local changed=0
+  _remind_write_if_changed "$svc"   "$svc_body"   && changed=1
+  _remind_write_if_changed "$timer" "$timer_body" && changed=1
+
+  if (( changed == 0 )); then
+    log_info "systemd: already installed"
+    return 0
+  fi
+
+  systemctl --user daemon-reload
+  systemctl --user enable --now jarvis-tick.timer
+  log_success "systemd: installed jarvis-tick.timer (every minute)"
 }
 
 _remind_uninstall_systemd() {
-  printf 'systemd backend not yet implemented\n' >&2
-  return 1
+  local svc timer
+  svc="$(_remind_systemd_service_path)"
+  timer="$(_remind_systemd_timer_path)"
+
+  if [[ ! -f "$svc" && ! -f "$timer" ]]; then
+    log_info "systemd: nothing to uninstall"
+    return 0
+  fi
+
+  systemctl --user disable --now jarvis-tick.timer || true
+  rm -f "$svc" "$timer"
+  systemctl --user daemon-reload || true
+  log_success "systemd: removed jarvis-tick.timer"
 }

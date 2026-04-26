@@ -121,3 +121,72 @@ EOF
   [[ "$output" == *"backend"* ]]
   [[ "$output" == *"cron"* ]]
 }
+
+# ---------- systemd backend (T15) ----------
+
+@test "install (systemd) writes service + timer files and runs systemctl" {
+  shim_install systemctl 'echo "systemctl: $*" >> "$0.log"; exit 0'
+  run _install --backend systemd
+  [ "$status" -eq 0 ]
+  [ -f "$HOME/.config/systemd/user/jarvis-tick.service" ]
+  [ -f "$HOME/.config/systemd/user/jarvis-tick.timer" ]
+  log="$(shim_log_path systemctl)"
+  [ -f "$log" ]
+  grep -F -- '--user daemon-reload' "$log"
+  grep -F -- '--user enable --now jarvis-tick.timer' "$log"
+}
+
+@test "install (systemd) is idempotent — second run does not rewrite unchanged files" {
+  shim_install systemctl 'echo "systemctl: $*" >> "$0.log"; exit 0'
+  run _install --backend systemd
+  [ "$status" -eq 0 ]
+  svc="$HOME/.config/systemd/user/jarvis-tick.service"
+  before_mtime="$(stat -c %Y "$svc" 2>/dev/null || stat -f %m "$svc")"
+  sleep 1
+  run _install --backend systemd
+  [ "$status" -eq 0 ]
+  after_mtime="$(stat -c %Y "$svc" 2>/dev/null || stat -f %m "$svc")"
+  [ "$before_mtime" = "$after_mtime" ]
+}
+
+@test "install (systemd) rewrites file when content changed" {
+  shim_install systemctl 'echo "systemctl: $*" >> "$0.log"; exit 0'
+  run _install --backend systemd
+  [ "$status" -eq 0 ]
+  svc="$HOME/.config/systemd/user/jarvis-tick.service"
+  printf '%s\n' 'tampered' > "$svc"
+  run _install --backend systemd
+  [ "$status" -eq 0 ]
+  ! grep -F 'tampered' "$svc"
+  grep -F 'jarvis remind tick' "$svc"
+}
+
+@test "uninstall (systemd) disables timer and removes both files" {
+  shim_install systemctl 'echo "systemctl: $*" >> "$0.log"; exit 0'
+  run _install --backend systemd
+  [ "$status" -eq 0 ]
+  run _uninstall --backend systemd
+  [ "$status" -eq 0 ]
+  [ ! -f "$HOME/.config/systemd/user/jarvis-tick.service" ]
+  [ ! -f "$HOME/.config/systemd/user/jarvis-tick.timer" ]
+  log="$(shim_log_path systemctl)"
+  grep -F -- '--user disable --now jarvis-tick.timer' "$log"
+}
+
+@test "uninstall (systemd) on clean state is a no-op exit 0" {
+  shim_install systemctl 'echo "systemctl: $*" >> "$0.log"; exit 0'
+  run _uninstall --backend systemd
+  [ "$status" -eq 0 ]
+}
+
+@test "config [scheduler].backend = systemd routes default install" {
+  shim_install systemctl 'echo "systemctl: $*" >> "$0.log"; exit 0'
+  cat > "$JARVIS_HOME/test/config.toml" <<EOF
+[scheduler]
+backend = "systemd"
+EOF
+  run _install
+  [ "$status" -eq 0 ]
+  [ -f "$HOME/.config/systemd/user/jarvis-tick.timer" ]
+  [ ! -f "$TEST_DIR/fake.crontab" ]
+}
