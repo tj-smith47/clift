@@ -60,7 +60,7 @@ cache_put() {
   local profile="$1" key="$2" content="$3"
   local f tmp
   f="$(_cache_path "$profile" "$key")"
-  tmp="${f}.tmp.$$"
+  tmp="${f}.tmp.$$.${RANDOM}"
   mkdir -p "$(dirname "$f")"
   printf '%s' "$content" > "$tmp"
   mv -f "$tmp" "$f"
