@@ -131,13 +131,13 @@ if [[ -d "$profile_dir/reminders" ]]; then
 fi
 
 # ------------------------------------------------------------- jira
-# Two-call pattern is intentional: the presence probe suppresses stderr
-# (jira-not-installed is a normal state, not a doctor-worthy diagnostic),
-# but the actual fetch lets jira's own stderr bubble through so auth/
-# network failures surface. Mirrors gh.sh convention.
+# Single fetch — was double-called for stderr suppression; collapsed to one
+# round-trip. `command -v` short-circuits when jira isn't installed (normal
+# state); the fetch itself silences stderr because status is hot-path UX
+# (auth/network failures surface in `jarvis doctor`, not the dashboard).
 jira_count=0
-if jira_in_flight "$profile" >/dev/null 2>&1; then
-  jira_count="$(jira_in_flight "$profile" | grep -c . || true)"
+if command -v jira >/dev/null 2>&1; then
+  jira_count="$(jira_in_flight "$profile" 2>/dev/null | grep -c . || true)"
 fi
 
 # ------------------------------------------------------------- render

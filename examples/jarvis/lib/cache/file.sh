@@ -12,8 +12,6 @@
 # JARVIS_FAKE_NOW (UTC ISO, e.g. 2026-04-27T12:00:00Z) overrides "now"
 # for deterministic test runs. Unset -> date +%s is the source of truth.
 
-set -euo pipefail
-
 # shellcheck disable=SC2317
 if [[ -n "${_JARVIS_CACHE_FILE_LOADED:-}" ]]; then
   return 0 2>/dev/null || exit 0
