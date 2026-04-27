@@ -2,21 +2,24 @@ version: '3'
 
 vars:
   FLAGS:
-    - {name: json, type: bool, desc: "Emit JSON", group: output, exclusive: true}
-    - {name: yaml, type: bool, desc: "Emit YAML", group: output, exclusive: true}
+    - {name: json, short: j, type: bool, desc: "Emit machine-readable JSON", group: output, exclusive: true}
+    - {name: yaml, short: y, type: bool, desc: "Emit YAML",                   group: output, exclusive: true}
 
 tasks:
   default:
-    desc: "Dashboard — tasks, reminders, focus streak"
+    desc: "Status dashboard — tasks, reminders, focus, jira"
     summary: |
-      Quick view of everything jarvis is tracking for you.
+      Real-data dashboard. The --json shape is the frozen contract
+      (see tests/golden/status.json).
+
+      Profile is selected via the persistent --profile flag.
 
       Examples:
         jarvis status
         jarvis status --json
-        jarvis status --yaml
+        jarvis status --profile work
     vars:
       FLAGS:
-        - {name: json, type: bool, desc: "Emit JSON", group: output, exclusive: true}
-        - {name: yaml, type: bool, desc: "Emit YAML", group: output, exclusive: true}
+        - {name: json, short: j, type: bool, desc: "Emit machine-readable JSON", group: output, exclusive: true}
+        - {name: yaml, short: y, type: bool, desc: "Emit YAML",                   group: output, exclusive: true}
     cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
