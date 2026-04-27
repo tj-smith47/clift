@@ -31,16 +31,8 @@ _jira_me() {
   jira me 2>/dev/null
 }
 
-jira_in_flight() {
-  local profile="${1:-${JARVIS_PROFILE:-default}}"
-  command -v jira >/dev/null 2>&1 || return 1
-  local me out
-  me="$(_jira_me)" || return 1
-  if ! out="$(jira issue list -a"$me" -s"In Progress" --plain --columns key,summary,status)"; then
-    return 1
-  fi
-  local base
-  base="$(_jira_base_url "$profile")"
+_jira_emit_ndjson() {
+  local out="$1" base="$2"
   printf '%s\n' "$out" | awk -F'\t' -v base="$base" '
     NR > 1 && NF >= 3 {
       k=$1; s=$2; st=$3
@@ -50,6 +42,33 @@ jira_in_flight() {
       printf "{\"key\":\"%s\",\"summary\":\"%s\",\"status\":\"%s\",\"url\":\"%s/browse/%s\"}\n",
              k, s, st, base, k
     }'
+}
+
+jira_in_flight() {
+  local profile="${1:-${JARVIS_PROFILE:-default}}"
+  command -v jira >/dev/null 2>&1 || return 1
+  local me out
+  me="$(_jira_me)" || return 1
+  if ! out="$(jira issue list -a"$me" -s"In Progress" --plain --columns key,summary,status)"; then
+    return 1
+  fi
+  _jira_emit_ndjson "$out" "$(_jira_base_url "$profile")"
+}
+
+# Open + in-progress issues assigned to current user. Wider than jira_in_flight
+# (which is brief/standup's "what am I actively working on right now"); this
+# returns everything not yet started or in flight, suitable for merging into
+# `task list`.
+jira_my_open_issues() {
+  local profile="${1:-${JARVIS_PROFILE:-default}}"
+  command -v jira >/dev/null 2>&1 || return 1
+  local me out
+  me="$(_jira_me)" || return 1
+  if ! out="$(jira issue list -a"$me" -s"To Do" -s"In Progress" \
+                --plain --columns key,summary,status)"; then
+    return 1
+  fi
+  _jira_emit_ndjson "$out" "$(_jira_base_url "$profile")"
 }
 
 jira_my_comments_since() {

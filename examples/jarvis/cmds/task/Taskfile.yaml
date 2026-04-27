@@ -35,8 +35,7 @@ tasks:
            choices: [low, med, high]}
         - {name: project, type: string, desc: "Filter by project"}
         - {name: due, type: string, desc: "Filter by due (today|tomorrow|YYYY-MM-DD)"}
-        - {name: jira, type: bool, desc: "Include Jira-assigned tasks",
-           hidden: true}
+        - {name: jira, type: bool, desc: "Merge Jira-assigned issues (To Do + In Progress)"}
         - {name: json, type: bool, desc: "Emit JSON array",
            group: output, exclusive: true}
         - {name: yaml, type: bool, desc: "Emit YAML array",

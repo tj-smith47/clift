@@ -2,9 +2,11 @@
 bats_require_minimum_version 1.5.0
 
 load jarvis_helper
+load jarvis_shim_helper
 
 setup() {
   jarvis_common_setup
+  shim_setup
   mkdir -p "$JARVIS_HOME/test/tasks"
   printf '1\n' > "$JARVIS_HOME/test/state.version"
 }
@@ -174,21 +176,99 @@ run_list() {
   [[ "$output" == *"[]"* ]] || [[ "$output" == *"- slug:"* ]]
 }
 
-@test "task list --jira emits 'not yet implemented' warning to stderr" {
-  seed a "hello" med open inbox today 1
-  # Inject jira=true via direct env tweak — run_list helper doesn't
-  # expose a slot for it, but the CLIFT_FLAGS array assignment in the
-  # bash -c body lets us target it explicitly.
+_run_list_with_jira() {
+  # Direct invocation with --jira=true; lets us drive the merge path while
+  # still picking up the rest of the script's CLIFT_FLAGS contract.
+  local json="${1:-}"
+  local project="${2:-}"
   FRAMEWORK_DIR="$CLIFT_FRAMEWORK_DIR" \
   CLI_DIR="$CLIFT_JARVIS_DIR" \
-  run --separate-stderr bash -c '
+  bash -c '
     set -euo pipefail
-    declare -A CLIFT_FLAGS=([jira]="true")
+    declare -A CLIFT_FLAGS=(
+      [all]=""
+      [priority]=""
+      [project]="'"$project"'"
+      [due]=""
+      [json]="'"$json"'"
+      [yaml]=""
+      [jira]="true"
+    )
     source "$1"
   ' _ "$CLIFT_JARVIS_DIR/cmds/task/task.list.sh"
+}
+
+@test "task list --jira merges open jira issues with local tasks" {
+  seed local-thing "ship the thing" high open release "" 1
+  shim_install jira '
+    case "$1" in
+      me) printf "shimuser\n" ;;
+      issue)
+        # `jira issue list -ashimuser -s"To Do" -s"In Progress" --plain ...`
+        printf "key\tsummary\tstatus\n"
+        printf "FOO-101\tdo a thing\tTo Do\n"
+        printf "FOO-202\tdo another thing\tIn Progress\n"
+        ;;
+    esac'
+  cat > "$JARVIS_HOME/test/config.toml" <<EOF
+[jira]
+base_url = "https://jira.example.com"
+EOF
+  run _run_list_with_jira
   [ "$status" -eq 0 ]
-  [[ "$stderr" == *"not yet implemented"* ]]
-  [[ "$stderr" == *"P5"* ]]
+  [[ "$output" == *"local-thing"* ]]
+  [[ "$output" == *"FOO-101"* ]]
+  [[ "$output" == *"FOO-202"* ]]
+  [[ "$output" == *"do a thing"* ]]
+}
+
+@test "task list --jira --json projects jira issues with source=jira" {
+  seed local-thing "ship the thing" high open release "" 1
+  shim_install jira '
+    case "$1" in
+      me) printf "shimuser\n" ;;
+      issue) printf "key\tsummary\tstatus\nFOO-7\twrite docs\tIn Progress\n" ;;
+    esac'
+  cat > "$JARVIS_HOME/test/config.toml" <<EOF
+[jira]
+base_url = "https://jira.example.com"
+EOF
+  run _run_list_with_jira true
+  [ "$status" -eq 0 ]
+  [ "$(jq -r 'length' <<< "$output")" = "2" ]
+  # Local task has no source field; jira record carries source=jira.
+  [ "$(jq -r '[.[] | select(.source=="jira")] | length' <<< "$output")" = "1" ]
+  [ "$(jq -r '[.[] | select(.source=="jira")][0].slug' <<< "$output")" = "FOO-7" ]
+  [ "$(jq -r '[.[] | select(.source=="jira")][0].url' <<< "$output")" = "https://jira.example.com/browse/FOO-7" ]
+  [ "$(jq -r '[.[] | select(.source=="jira")][0].project' <<< "$output")" = "jira" ]
+}
+
+@test "task list --jira --project jira filters to jira-only" {
+  seed local-thing "ship the thing" high open release "" 1
+  shim_install jira '
+    case "$1" in
+      me) printf "shimuser\n" ;;
+      issue) printf "key\tsummary\tstatus\nFOO-7\twrite docs\tIn Progress\n" ;;
+    esac'
+  cat > "$JARVIS_HOME/test/config.toml" <<EOF
+[jira]
+base_url = "https://jira.example.com"
+EOF
+  run _run_list_with_jira true jira
+  [ "$status" -eq 0 ]
+  [ "$(jq -r 'length' <<< "$output")" = "1" ]
+  [ "$(jq -r '.[0].slug' <<< "$output")" = "FOO-7" ]
+}
+
+@test "task list --jira is silent when jira CLI is missing" {
+  seed local-thing "ship the thing" high open release "" 1
+  # No shim_install jira → jira not on PATH inside the test sandbox.
+  run --separate-stderr _run_list_with_jira
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"local-thing"* ]]
+  [[ "$output" != *"FOO-"* ]]
+  # No "not yet implemented" or panic on stderr.
+  [[ "$stderr" != *"not yet implemented"* ]]
 }
 
 @test "task list renders empty/null project the same way as null due" {

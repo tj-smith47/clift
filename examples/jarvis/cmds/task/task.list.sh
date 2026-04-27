@@ -14,6 +14,8 @@ source "${CLI_DIR}/lib/state/lock.sh"
 source "${CLI_DIR}/lib/state/json.sh"
 # shellcheck source=/dev/null
 source "${CLI_DIR}/lib/task/store.sh"
+# shellcheck source=/dev/null
+source "${CLI_DIR}/lib/state/config.sh"
 
 if ! declare -p CLIFT_FLAGS >/dev/null 2>&1; then
   declare -A CLIFT_FLAGS=()
@@ -27,8 +29,31 @@ want_json="${CLIFT_FLAGS[json]:-}"
 want_yaml="${CLIFT_FLAGS[yaml]:-}"
 want_jira="${CLIFT_FLAGS[jira]:-}"
 
+# Pull jira-assigned issues (open + in-progress) and project them onto the
+# task record shape so the merged list filters/renders identically.
+# Synthetic fields: slug=<KEY>, project="jira", priority="med", due=null,
+# status="open", source="jira", url=<browse-link>, seq=10^9 + index so jira
+# rows sort after local tasks. Missing/unconfigured jira is silent — caller
+# expectation is "include if available."
+jira_records='[]'
 if [[ "$want_jira" == "true" ]]; then
-  printf 'task list --jira: not yet implemented; coming in P5\n' >&2
+  # shellcheck source=/dev/null
+  source "${CLI_DIR}/lib/integrations/jira.sh"
+  if jira_out="$(jira_my_open_issues 2>/dev/null)" && [[ -n "$jira_out" ]]; then
+    jira_records="$(printf '%s\n' "$jira_out" | jq -s '
+      to_entries | map(
+        .value as $row | {
+          slug:     $row.key,
+          desc:     $row.summary,
+          priority: "med",
+          due:      null,
+          project:  "jira",
+          status:   "open",
+          source:   "jira",
+          url:      $row.url,
+          seq:      (1000000000 + .key)
+        })')"
+  fi
 fi
 
 tasks_dir="$(task_store_dir)"
@@ -59,24 +84,31 @@ files=("${valid_files[@]+"${valid_files[@]}"}")
 # Filter values are passed via --arg to avoid injection (projects / due
 # values with quotes would otherwise break the filter string).
 # Empty-string args get selected-out by a guard in the filter itself.
+# Jira-projected records are concatenated before filtering so the same
+# predicates apply uniformly (e.g. --project jira filters to jira rows).
 if (( ${#files[@]} == 0 )); then
-  records='[]'
+  local_records='[]'
 else
-  records="$(jq -s \
-    --arg all "$all" \
-    --arg pri "$pri" \
-    --arg project "$project" \
-    --arg due "$due" \
-    '
-      map(
+  local_records="$(jq -s '.' "${files[@]}")"
+fi
+
+records="$(jq -n \
+  --argjson local "$local_records" \
+  --argjson jira "$jira_records" \
+  --arg all "$all" \
+  --arg pri "$pri" \
+  --arg project "$project" \
+  --arg due "$due" \
+  '
+    ($local + $jira)
+    | map(
         select($all == "true" or .status == "open")
         | select($pri == "" or .priority == $pri)
         | select($project == "" or .project == $project)
         | select($due == "" or .due == $due)
       )
-      | sort_by(.seq)
-    ' "${files[@]}")"
-fi
+    | sort_by(.seq)
+  ')"
 
 count="$(jq 'length' <<< "$records")"
 
