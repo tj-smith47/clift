@@ -182,6 +182,49 @@ _doctor_render_reminders() {
 
 _doctor_render_reminders "$state_dir"
 
+# --- Integrations rollup (P5 T14) ---
+# Config + cache-mtime driven; no network calls. Calendar provider name comes
+# from [calendar] provider in config.toml (defaults to "none" = not configured).
+# Cache freshness is derived from the mtime of cache/calendar.json — providers
+# write that file on successful sync. gh / jira / gcalcli are presence + (for
+# gh) auth-status probes. Provider fns themselves are NOT invoked here so we
+# don't trigger real-time API calls during a health check.
+profile="${JARVIS_PROFILE:-default}"
+printf '\n  \033[1mIntegrations\033[0m\n'
+
+cal_provider="$(config_get calendar.provider none "$profile")"
+if [[ "$cal_provider" == "none" ]]; then
+  printf '    calendar       not configured\n'
+else
+  cal_cache="$state_dir/cache/calendar.json"
+  if [[ -f "$cal_cache" ]]; then
+    cal_mtime="$(stat -c %Y "$cal_cache" 2>/dev/null || stat -f %m "$cal_cache" 2>/dev/null || printf '0')"
+    cal_age=$(( $(date +%s) - cal_mtime ))
+    printf '    calendar       %s  (cache %ds ago)\n' "$cal_provider" "$cal_age"
+  else
+    printf '    calendar       %s  (no cache yet)\n' "$cal_provider"
+  fi
+fi
+
+if command -v gh >/dev/null 2>&1; then
+  if gh auth status >/dev/null 2>&1; then
+    printf '    gh             ok\n'
+  else
+    printf '    gh             auth required\n'
+  fi
+else
+  printf '    gh             missing\n'
+fi
+
+for tool in jira gcalcli; do
+  if command -v "$tool" >/dev/null 2>&1; then
+    printf '    %-14s ok\n' "$tool"
+  else
+    printf '    %-14s missing\n' "$tool"
+  fi
+done
+printf '\n'
+
 # focus.log orphan check \u2014 surfaces SIGKILL / power-loss cases where a
 # `start` row landed but the EXIT trap never got to write its `end`.
 # Sources are loaded lazily here so the dependency only kicks in when the

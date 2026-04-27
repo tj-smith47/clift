@@ -255,6 +255,38 @@ EOF
   [[ "$output" != *"NOT installed"* ]]
 }
 
+# ---- T14: integrations rollup (calendar / gh / jira / gcalcli) -------
+
+@test "doctor shows integrations rollup" {
+  mkdir -p "$JARVIS_HOME/test"
+  printf '1\n' > "$JARVIS_HOME/test/state.version"
+  shim_setup
+  shim_install gh 'case "$1 $2" in "auth status") exit 0;; *) exit 0;; esac'
+  shim_install jira 'exit 0'
+  cat > "$JARVIS_HOME/test/config.toml" <<EOF
+[calendar]
+provider = "ics"
+EOF
+  run bash "${CLIFT_JARVIS_DIR}/cmds/doctor/doctor.sh" --profile test
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Integrations"* ]]
+  [[ "$output" == *"calendar"* ]]
+  [[ "$output" == *"ics"* ]]
+  [[ "$output" == *"gh"* ]]
+  [[ "$output" == *"ok"* ]]
+  [[ "$output" == *"jira"* ]]
+  [[ "$output" == *"gcalcli"* ]]
+  [[ "$output" == *"missing"* ]]   # gcalcli has no shim
+}
+
+@test "doctor shows calendar 'not configured' on default" {
+  mkdir -p "$JARVIS_HOME/test"
+  printf '1\n' > "$JARVIS_HOME/test/state.version"
+  run bash "${CLIFT_JARVIS_DIR}/cmds/doctor/doctor.sh" --profile test
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"not configured"* ]]
+}
+
 @test "doctor: focus.log warns on orphan starts (SIGKILL / power loss)" {
   mkdir -p "$JARVIS_HOME/test"
   printf '1\n' > "$JARVIS_HOME/test/state.version"
