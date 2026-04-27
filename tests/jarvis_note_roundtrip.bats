@@ -42,8 +42,8 @@ run_script() {
   [ -f "$(note_path daily/2026-04-19)" ]
 
   # 3. Daily, exists + body → append.
-  run_script note.daily.sh "finished P0 state layer, moving to P1" --no-edit
-  grep -q 'finished P0 state layer' "$(note_path daily/2026-04-19)"
+  run_script note.daily.sh "finished the state layer, moving to task crud" --no-edit
+  grep -q 'finished the state layer' "$(note_path daily/2026-04-19)"
 
   # 4. New ref note.
   run_script note.new.sh "Etcd Restore Runbook" --kind ref --no-edit

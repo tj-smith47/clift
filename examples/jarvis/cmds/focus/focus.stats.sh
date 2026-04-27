@@ -56,9 +56,9 @@ if [[ "$want_yaml" == "true" ]]; then
   exit 0
 fi
 
-# Default human output. Plain printf — gum stays for live/spinner surfaces
-# only (Decision 3 in the P3 plan); static layout uses aligned printf to
-# keep dependencies minimal and output predictable in non-tty pipes.
+# Default human output. Plain printf — gum is reserved for live/spinner
+# surfaces; static layout uses aligned printf to keep dependencies minimal
+# and output predictable in non-tty pipes.
 if (( sessions_today == 0 )); then
   printf 'no focus sessions yet today\n'
   exit 0

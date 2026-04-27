@@ -67,7 +67,6 @@ else
   printf '%-15s %-20s %s\n' "state schema" "uninitialized" "run any jarvis command once to initialize"
 fi
 
-# Integration checks (expand per-phase; P0 stubs only the presence probe pattern)
 # Per-binary version probe — some tools (dasel) expose version via subcommand, not --flag.
 probe_version() {
   case "$1" in
@@ -196,7 +195,7 @@ _doctor_render_reminders() {
 
 _doctor_render_reminders "$state_dir"
 
-# --- Integrations rollup (P5 T14) ---
+# --- Integrations rollup ---
 # Config + cache-mtime driven; no network calls. Calendar provider name comes
 # from [calendar] provider in config.toml (defaults to "none" = not configured).
 # Cache freshness is derived from the mtime of cache/calendar.json — providers
@@ -239,7 +238,7 @@ for tool in jira gcalcli; do
 done
 printf '\n'
 
-# --- Live integration probes (P6 T2) ---
+# --- Live integration probes ---
 # Opt-in via --integrations-live. Bypasses the calendar cache, invokes provider
 # fns directly, and lets upstream stderr through so misconfigured ICS URLs,
 # gh auth failures, and jira backend errors are visible to the human.

@@ -43,7 +43,7 @@ _seed_pair() {
 
 @test "focus_stats_today_minutes sums elapsed across today's sessions" {
   _seed_pair "reviews"   -3600 -3000   # 10 min ago for 10 min
-  _seed_pair "P3 design" -1800 -300    # 30 min ago for 25 min
+  _seed_pair "design review" -1800 -300    # 30 min ago for 25 min
   _seed_pair "1on1"      -120  -60     # 2 min ago for 1 min
 
   run focus_stats_today_minutes

@@ -36,7 +36,7 @@ run_stats()  {
     bash "$CLIFT_JARVIS_DIR/cmds/focus/focus.stats.sh" "$@"
 }
 
-@test "P3 round-trip: complete + interrupt + coffee + stats" {
+@test "focus round-trip: complete + interrupt + coffee + stats" {
   # 1. Complete a 1s focus session.
   run run_focus 1s --on demo --silent
   [ "$status" -eq 0 ]

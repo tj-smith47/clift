@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # YAML frontmatter parse/emit/mutate/merge for jarvis notes.
-# Reuses dasel (P0 dep) for YAML<->JSON. Body operations stay in pure bash.
+# Reuses dasel (project-wide dep) for YAML<->JSON. Body operations stay in pure bash.
 #
 # Library — intentionally does NOT set `set -euo pipefail`; options are
 # inherited from the caller (matches lib/slug.sh, lib/state/*.sh convention).

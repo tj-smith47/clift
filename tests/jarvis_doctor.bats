@@ -287,7 +287,7 @@ EOF
   [[ "$output" == *"not configured"* ]]
 }
 
-# ---- P6 T2: --integrations-live (live probes that surface upstream errors) ---
+# ---- --integrations-live (live probes that surface upstream errors) ---
 
 @test "doctor --integrations-live shows Live probes section" {
   mkdir -p "$JARVIS_HOME/test"

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Status dashboard. Aggregates real counts across P1 (tasks), P3 (focus.log),
-# P4 (reminders), and T7 (jira) and renders pretty / YAML / JSON.
+# Status dashboard. Aggregates real counts across tasks, focus.log,
+# reminders, and jira, and renders pretty / YAML / JSON.
 #
 # The --json shape is the frozen contract — see tests/golden/status.json.
 # Reminder math: scheduled = pending|active count. next_in_minutes is the

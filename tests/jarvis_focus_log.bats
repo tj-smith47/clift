@@ -24,12 +24,12 @@ teardown() { jarvis_common_teardown; }
 # ---- focus_log_append (start) -------------------------------------------
 
 @test "focus_log_append start writes one row with topic + duration" {
-  focus_log_append start "25m" "P3 design"
+  focus_log_append start "25m" "design review"
   [ -f "$LOG" ]
   run jq -c '.' "$LOG"
   [ "$(echo "$output" | jq -r '.event')"    = "start" ]
   [ "$(echo "$output" | jq -r '.duration')" = "25m" ]
-  [ "$(echo "$output" | jq -r '.topic')"    = "P3 design" ]
+  [ "$(echo "$output" | jq -r '.topic')"    = "design review" ]
   [[ "$(echo "$output" | jq -r '.ts')" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T ]]
 }
 

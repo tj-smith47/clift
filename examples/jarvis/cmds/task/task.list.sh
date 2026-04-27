@@ -157,7 +157,7 @@ while IFS=$'\t' read -r slug desc priority due_s project_s; do
   [[ -z "$slug" ]] && continue
   # Render null/empty as the same "—" placeholder for both due and
   # project so the column doesn't look broken (asymmetric blank vs "—"
-  # was a P1.5 review finding).
+  # looks like a render bug to readers).
   [[ "$due_s" == "null" || -z "$due_s" ]] && due_s="—"
   [[ "$project_s" == "null" || -z "$project_s" ]] && project_s="—"
   if _use_color; then

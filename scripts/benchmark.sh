@@ -10,8 +10,7 @@
 # Per-stage numbers come from invoking each stage in isolation, NOT from
 # inline instrumentation of the hot path. Runtime checkpoints in
 # wrapper/router/prelude/exec would cost forks even when unused and fight
-# the "minimize forks on the hot path" convention. See
-# .claude/plans/2026-04-14-cobra-parity-and-overrides.md Task 6.4.
+# the "minimize forks on the hot path" convention.
 #
 # Note: requires GNU date (`date +%s%N` nanosecond resolution). On macOS
 # the stock BSD `date` returns `%N` literally (e.g. `1731023456N`), which

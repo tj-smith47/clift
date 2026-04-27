@@ -106,7 +106,7 @@ _${CLI_NAME}_completions() {
     fi
   fi
 
-  # Task P1.1: dynamic completer for positional slots. cmd_path is the
+  # Dynamic completer for positional slots. cmd_path is the
   # real leaf task path resolved against .clift/index.json above; the
   # positional counter is the number of non-flag words AFTER the matched
   # prefix, plus one for the cursor slot. If undefined or empty, fall
@@ -237,7 +237,7 @@ _${CLI_NAME}() {
     fi
   fi
 
-  # Task P1.1: dynamic completer for positional slots. cmd_path is the
+  # Dynamic completer for positional slots. cmd_path is the
   # real leaf task path resolved against .clift/index.json above; the
   # positional counter is the number of non-flag words AFTER the matched
   # prefix, plus one for the cursor slot.

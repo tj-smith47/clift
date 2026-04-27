@@ -19,7 +19,7 @@
 #     name for readability ([calendar] provider = "outlook-ics" reads better
 #     than `ics` for a Microsoft feed).
 #   - Only the explicit `URL:` field is consulted; extracting meeting URLs
-#     from SUMMARY/LOCATION/DESCRIPTION is T5's job (lib/calendar/meeting_url.sh).
+#     from SUMMARY/LOCATION/DESCRIPTION lives in lib/calendar/meeting_url.sh.
 
 # shellcheck disable=SC2317
 if [[ -n "${_JARVIS_CALENDAR_ICS_LOADED:-}" ]]; then
