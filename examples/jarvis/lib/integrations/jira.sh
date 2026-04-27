@@ -22,6 +22,12 @@ _jira_base_url() {
 
 _jira_me() {
   command -v jira >/dev/null 2>&1 || return 1
+  # `jira me` prints the auth-required hint to stderr on a fresh machine —
+  # callers (jira_in_flight, jira_my_comments_since) treat exit 1 as "not
+  # configured" and skip the section, so the auth hint becomes redundant
+  # noise. doctor --integrations-live invokes jira_in_flight directly and
+  # routes through this same path; the auth error there is visible because
+  # jira's nonzero exit propagates and the live-probe handler reports it.
   jira me 2>/dev/null
 }
 
@@ -56,6 +62,11 @@ jira_my_comments_since() {
   local key out
   while IFS= read -r key; do
     [[ -z "$key" ]] && continue
+    # 2>/dev/null is intentional: a multi-key sweep over in-flight issues
+    # routinely hits 404s when an issue was just transitioned/deleted; the
+    # noise on stderr drowns real signals. `|| continue` swallows the row
+    # quietly. Other integrations (gh, deploys) don't loop, so they don't
+    # need this guard.
     out="$(jira issue comment list "$key" --plain --columns id,author,created,body 2>/dev/null)" || continue
     printf '%s\n' "$out" | awk -F'\t' -v me="$me" -v since="$since" -v key="$key" '
       NR > 1 && NF >= 4 && $2 == me && $3 >= since {

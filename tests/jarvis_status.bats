@@ -12,7 +12,7 @@ setup() {
 }
 teardown() { jarvis_common_teardown; }
 
-@test "status --json matches golden fixture byte-for-byte" {
+@test "status --json matches golden fixture (canonical key order)" {
   run bash "${CLIFT_JARVIS_DIR}/cmds/status/status.sh" --json --profile test
   [ "$status" -eq 0 ]
   diff <(printf '%s\n' "$output" | jq -S .) \
