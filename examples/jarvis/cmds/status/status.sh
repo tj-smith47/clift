@@ -26,6 +26,12 @@ source "${CLI_DIR}/lib/state/profile.sh"
 source "${CLI_DIR}/lib/state/config.sh"
 # shellcheck source=/dev/null
 source "${CLI_DIR}/lib/integrations/jira.sh"
+# shellcheck source=/dev/null
+source "${CLI_DIR}/lib/state/lock.sh"
+# shellcheck source=/dev/null
+source "${CLI_DIR}/lib/state/ndjson.sh"
+# shellcheck source=/dev/null
+source "${CLI_DIR}/lib/focus/log.sh"
 
 # Flag resolution: prefer pre-populated CLIFT_FLAGS; otherwise parse argv
 # ourselves via the shared standalone helper so direct-invocation tests get
@@ -77,19 +83,17 @@ if [[ -d "$profile_dir/tasks" ]]; then
 fi
 
 # ------------------------------------------------------------- focus
-# Production focus.log uses {event}, fixtures/spec contract uses {kind} —
-# accept either via `.event // .kind`. `.minutes` is fixture-only metadata
-# (production logs duration on the start row); fall back to 0.
+# Minutes-today goes through focus_stats_today_minutes (paired start/end
+# with elapsed_seconds), which honors JARVIS_FAKE_NOW via _focus_today_local.
+# Streak counts unique calendar days with at least one end-event.
 focus_streak=0
 focus_minutes_today=0
 focus_log="$profile_dir/focus.log"
 if [[ -f "$focus_log" ]]; then
-  focus_minutes_today="$(jq -s --arg d "$today_date" '
-    [.[] | select(((.event // .kind) == "end") and ((.ts // "") | startswith($d)))]
-    | map(.minutes // 0) | add // 0' "$focus_log")"
+  focus_minutes_today="$(focus_stats_today_minutes)"
 
   focus_streak="$(jq -rs --arg today "$today_date" '
-    [.[] | select((.event // .kind) == "end") | (.ts // "")[:10]
+    [.[] | select(.event == "end") | (.ts // "")[:10]
          | select(length == 10)] | unique | sort | reverse as $days
     | reduce range(0; ($days | length)) as $i (0;
         if ($days[$i] | strptime("%Y-%m-%d") | mktime) ==

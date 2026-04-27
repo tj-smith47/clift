@@ -77,6 +77,22 @@ _seed_pair() {
   [ "$output" = "5" ]
 }
 
+@test "focus_stats_today_minutes honors JARVIS_FAKE_NOW" {
+  # Seed a pair on a fixed UTC date.
+  ndjson_append "$LOG" '{"ts":"2026-05-01T10:00:00Z","event":"start","duration":"75m","topic":"focus"}'
+  ndjson_append "$LOG" '{"ts":"2026-05-01T11:15:00Z","event":"end","topic":"focus"}'
+  # And a pair on a different day.
+  ndjson_append "$LOG" '{"ts":"2026-04-30T10:00:00Z","event":"start","duration":"30m","topic":"focus"}'
+  ndjson_append "$LOG" '{"ts":"2026-04-30T10:30:00Z","event":"end","topic":"focus"}'
+
+  JARVIS_FAKE_NOW="2026-05-01T15:00:00Z" run focus_stats_today_minutes
+  [ "$status" -eq 0 ]
+  [ "$output" = "75" ]
+
+  JARVIS_FAKE_NOW="2026-04-30T15:00:00Z" run focus_stats_today_minutes
+  [ "$output" = "30" ]
+}
+
 # ---- focus_stats_sessions_today -----------------------------------------
 
 @test "focus_stats_sessions_today returns 0 on empty log" {

@@ -131,10 +131,16 @@ focus_orphan_starts() {
   jq -c -s "$_focus_orphan_filter" <<< "$content"
 }
 
-# Local-day boundary used by today-scoped stats. Honors $TZ via jq's
-# strftime (which respects the process environment).
+# Local-day boundary used by today-scoped stats. Honors $TZ via the date
+# command's process environment AND $JARVIS_FAKE_NOW (UTC ISO-8601) for
+# deterministic tests + dashboards under fake-clock.
 _focus_today_local() {
-  date +%Y-%m-%d
+  if [[ -n "${JARVIS_FAKE_NOW:-}" ]]; then
+    date -d "$JARVIS_FAKE_NOW" +%Y-%m-%d 2>/dev/null \
+      || date -u -j -f "%Y-%m-%dT%H:%M:%SZ" "$JARVIS_FAKE_NOW" +%Y-%m-%d
+  else
+    date +%Y-%m-%d
+  fi
 }
 
 # Sum elapsed_seconds for paired sessions whose start_ts is today (local
