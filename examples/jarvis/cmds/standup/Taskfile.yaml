@@ -2,19 +2,28 @@ version: '3'
 
 vars:
   FLAGS:
-    - {name: since, type: string, default: "yesterday", desc: "Commit window"}
+    - {name: since,     short: S, type: string, default: "1d", desc: "Window (e.g. 1d, 6h)"}
+    - {name: repo,      short: r, type: string, default: "",   desc: "Single repo path (default cwd)"}
+    - {name: all-repos,           type: bool,                  desc: "Use [standup] repos from config"}
+    - {name: join,                type: bool,                  desc: "Open the next standup meeting (T13)"}
+    - {name: meeting,             type: string, default: "",   desc: "Explicit meeting URL (T13)"}
 
 tasks:
   default:
-    desc: "Generate standup notes from commits"
+    desc: "Standup draft — yesterday + today + blockers"
     summary: |
-      Rough draft of a standup message assembled from your recent
-      commit activity.
+      Generates a standup draft from git log, jira comments, open tasks,
+      and notes tagged 'blocker'.
 
       Examples:
         jarvis standup
-        jarvis standup --since "2 days ago"
+        jarvis standup --since 6h --repo /opt/repos/cfgd
+        jarvis standup --all-repos
     vars:
       FLAGS:
-        - {name: since, type: string, default: "yesterday", desc: "Commit window"}
+        - {name: since,     short: S, type: string, default: "1d"}
+        - {name: repo,      short: r, type: string, default: ""}
+        - {name: all-repos,           type: bool}
+        - {name: join,                type: bool}
+        - {name: meeting,             type: string, default: ""}
     cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
