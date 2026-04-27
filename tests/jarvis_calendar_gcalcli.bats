@@ -37,9 +37,17 @@ EOF
 exit 0'
   run calendar_gcalcli_events "2026-05-01T00:00:00Z" "2026-05-02T00:00:00Z" test
   [ "$status" -eq 0 ]
-  [ "$(printf '%s\n' "$output" | wc -l)" -ge 1 ]
+  [ "$(printf '%s\n' "$output" | wc -l)" -eq 2 ]
   printf '%s\n' "$output" | head -1 | jq -e '.start == "2026-05-01T10:00:00" and .title == "standup"' > /dev/null
   printf '%s\n' "$output" | sed -n 2p | jq -e '.url == "https://zoom.us/j/123"' > /dev/null
+}
+
+@test "gcalcli TSV with quoted title -> valid NDJSON (escapes \" and \\)" {
+  shim_install gcalcli 'printf "2026-05-01\t10:00\t2026-05-01\t10:30\thttps://example/meet\tSam'\''s \"1:1\" review with C:\\\\share\n"; exit 0'
+  run calendar_gcalcli_events "2026-05-01T00:00:00Z" "2026-05-02T00:00:00Z" test
+  [ "$status" -eq 0 ]
+  # Must be valid JSON (jq -e fails on parse error).
+  printf '%s\n' "$output" | jq -e '.title == "Sam'\''s \"1:1\" review with C:\\share"' > /dev/null
 }
 
 @test "gcalcli nonzero exit -> exit 1" {

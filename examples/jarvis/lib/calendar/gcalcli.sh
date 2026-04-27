@@ -18,20 +18,29 @@ _JARVIS_CALENDAR_GCALCLI_LOADED=1
 
 calendar_gcalcli_events() {
   local since="$1" until="$2"
+  local _profile="${3:-}"  # accepted by registry contract; unused (gcalcli reads ~/.gcalclirc)
   if ! command -v gcalcli >/dev/null 2>&1; then
     return 1
   fi
   local tsv
-  if ! tsv="$(gcalcli agenda --tsv "$since" "$until" 2>/dev/null)"; then
+  # Don't suppress gcalcli's stderr — its diagnostic ("auth error", "network …")
+  # is what `jarvis doctor` and direct invocation surface. Dispatcher already
+  # silences for brief/standup.
+  if ! tsv="$(gcalcli agenda --tsv "$since" "$until")"; then
     printf 'gcalcli: agenda call failed\n' >&2
     return 1
   fi
   [[ -z "$tsv" ]] && return 0
-  # Columns: start_date \t start_time \t end_date \t end_time \t link \t title
+  # Columns: start_date \t start_time \t end_date \t end_time \t link \t title.
+  # Tabs inside titles/URLs are unhandled — gcalcli is assumed to sanitize.
+  # Escape order matters: backslash first, then double-quote.
   printf '%s\n' "$tsv" \
     | awk -F'\t' 'NF >= 6 {
+        t = $6; u = $5
+        gsub(/\\/, "\\\\", t); gsub(/"/, "\\\"", t)
+        gsub(/\\/, "\\\\", u); gsub(/"/, "\\\"", u)
         printf "{\"start\":\"%sT%s:00\",\"end\":\"%sT%s:00\",\"title\":\"%s\",\"url\":\"%s\"}\n", \
-               $1, $2, $3, $4, $6, $5
+               $1, $2, $3, $4, t, u
       }'
 }
 
