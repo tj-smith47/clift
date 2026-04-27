@@ -14,7 +14,9 @@
 #   * --all-repos pulls `[standup] repos = [...]` from the profile config
 #     via `dasel -i toml -o json` (config_get can't carry array shape).
 #
-# T12 accepts --join / --meeting as no-ops; T13 wires them.
+# --join scans calendar [now, now+15min) for a /standup/i event and opens
+# its URL via open|xdg-open (stdout fallback). --meeting URL bypasses the
+# calendar lookup. Both fall through to the normal summary render.
 #
 # Invocation modes:
 #   * via clift router → CLIFT_FLAGS pre-populated
@@ -50,11 +52,8 @@ repo="${CLIFT_FLAGS[repo]:-}"
 all_repos="${CLIFT_FLAGS[all-repos]:-}"
 profile="${CLIFT_FLAGS[profile]:-${JARVIS_PROFILE:-default}}"
 [[ -z "$profile" ]] && profile="${JARVIS_PROFILE:-default}"
-# T13 will consume these; T12 just acknowledges them so users can wire
-# scripts now without breakage when --join lands.
-_join="${CLIFT_FLAGS[join]:-}"
-_meeting="${CLIFT_FLAGS[meeting]:-}"
-: "${_join:=}" "${_meeting:=}"
+join="${CLIFT_FLAGS[join]:-}"
+meeting_url="${CLIFT_FLAGS[meeting]:-}"
 
 # Honor --profile by exporting JARVIS_PROFILE before sourcing libs that read it.
 JARVIS_PROFILE="$profile"
@@ -66,6 +65,21 @@ source "${CLI_DIR}/lib/state/profile.sh"
 source "${CLI_DIR}/lib/state/config.sh"
 # shellcheck source=/dev/null
 source "${CLI_DIR}/lib/integrations/jira.sh"
+# Calendar stack (only needed by --join, but cheap and keeps a single source
+# block — providers register at source-time, so order matters: provider.sh
+# defines calendar_register; backends register themselves on source).
+# shellcheck source=/dev/null
+source "${CLI_DIR}/lib/cache/file.sh"
+# shellcheck source=/dev/null
+source "${CLI_DIR}/lib/calendar/provider.sh"
+# shellcheck source=/dev/null
+source "${CLI_DIR}/lib/calendar/none.sh"
+# shellcheck source=/dev/null
+source "${CLI_DIR}/lib/calendar/ics.sh"
+# shellcheck source=/dev/null
+source "${CLI_DIR}/lib/calendar/gcalcli.sh"
+# shellcheck source=/dev/null
+source "${CLI_DIR}/lib/calendar/meeting_url.sh"
 
 profile_dir="$(state_profile_dir)"
 
@@ -177,6 +191,53 @@ if [[ -f "$profile_dir/notes/index.json" ]]; then
              and ((.updated_at // "") >= $s))
     | "- " + (.title // (.path // "(untitled)"))
   ' "$profile_dir/notes/index.json" 2>/dev/null || true)"
+fi
+
+# ----------------------------------------------------------- --join / --meeting
+# Runs before the render block so the meeting opens first, then the standup
+# summary follows. URL precedence:
+#   1. --meeting URL (explicit) — skip calendar lookup entirely.
+#   2. calendar event titled /standup/i within [now, now+15min):
+#      a. event's `.url` field
+#      b. fallback: meeting_url_extract on the event title.
+# Open via `open`, fall back to `xdg-open`, fall back to printing the URL.
+_standup_open_url() {
+  local url="$1"
+  if command -v open >/dev/null 2>&1; then
+    open "$url"
+    return
+  fi
+  if command -v xdg-open >/dev/null 2>&1; then
+    xdg-open "$url"
+    return
+  fi
+  printf '%s\n' "$url"
+}
+
+if [[ "${join:-}" == "true" || -n "${meeting_url:-}" ]]; then
+  url="${meeting_url:-}"
+  if [[ -z "$url" ]]; then
+    horizon_epoch=$(( now_epoch + 15*60 ))
+    horizon_iso="$(date -u -d "@$horizon_epoch" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
+                   || date -u -j -f %s "$horizon_epoch" +%Y-%m-%dT%H:%M:%SZ)"
+    events="$(calendar_events "$now_iso" "$horizon_iso" "$profile" 2>/dev/null || true)"
+    if [[ -n "$events" ]]; then
+      target="$(printf '%s\n' "$events" | jq -rc 'select(.title | test("standup"; "i"))' | head -1)"
+      if [[ -n "$target" ]]; then
+        url="$(printf '%s' "$target" | jq -r '.url // ""')"
+        if [[ -z "$url" ]]; then
+          url="$(printf '%s' "$target" | jq -r '.title' | meeting_url_extract || true)"
+        fi
+      fi
+    fi
+  fi
+  if [[ -n "$url" ]]; then
+    _standup_open_url "$url"
+  else
+    printf 'standup: no standup event in the next 15 min (set --meeting URL to bypass)\n'
+  fi
+  printf '\n'
+  # Fall through to the normal summary render below.
 fi
 
 # ----------------------------------------------------------- render
