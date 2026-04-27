@@ -66,6 +66,84 @@ teardown() {
   printf '%s\n' "$output" | jq -e '.title == "past event"' > /dev/null
 }
 
+@test "URL with parameters (URL;VALUE=URI:) parsed correctly" {
+  cat > "$JARVIS_HOME/test/cal.ics" <<'EOF'
+BEGIN:VCALENDAR
+BEGIN:VEVENT
+DTSTART:20260501T100000Z
+DTEND:20260501T103000Z
+SUMMARY:meeting
+URL;VALUE=URI:https://example.com/meet
+END:VEVENT
+END:VCALENDAR
+EOF
+  printf '[calendar]\nprovider = "ics"\n[calendar.ics]\nsource = "%s"\n' \
+    "$JARVIS_HOME/test/cal.ics" > "$JARVIS_HOME/test/config.toml"
+  run calendar_ics_events "2026-05-01T00:00:00Z" "2026-05-02T00:00:00Z" test
+  [ "$status" -eq 0 ]
+  printf '%s\n' "$output" | jq -e '.url == "https://example.com/meet"' > /dev/null
+}
+
+@test "URLISH: prefix does not match /^URL/" {
+  cat > "$JARVIS_HOME/test/cal.ics" <<'EOF'
+BEGIN:VCALENDAR
+BEGIN:VEVENT
+DTSTART:20260501T100000Z
+DTEND:20260501T103000Z
+SUMMARY:meeting
+URLISH:not-the-url
+URL:https://real.example/meet
+END:VEVENT
+END:VCALENDAR
+EOF
+  printf '[calendar]\nprovider = "ics"\n[calendar.ics]\nsource = "%s"\n' \
+    "$JARVIS_HOME/test/cal.ics" > "$JARVIS_HOME/test/config.toml"
+  run calendar_ics_events "2026-05-01T00:00:00Z" "2026-05-02T00:00:00Z" test
+  [ "$status" -eq 0 ]
+  printf '%s\n' "$output" | jq -e '.url == "https://real.example/meet"' > /dev/null
+}
+
+@test "TZID local-time DTSTART skipped with stderr warning" {
+  cat > "$JARVIS_HOME/test/cal.ics" <<'EOF'
+BEGIN:VCALENDAR
+BEGIN:VEVENT
+DTSTART;TZID=America/New_York:20260501T100000
+DTEND;TZID=America/New_York:20260501T103000
+SUMMARY:local time event
+URL:https://example/meet
+END:VEVENT
+BEGIN:VEVENT
+DTSTART:20260501T140000Z
+DTEND:20260501T143000Z
+SUMMARY:utc event
+URL:https://example/utc
+END:VEVENT
+END:VCALENDAR
+EOF
+  printf '[calendar]\nprovider = "ics"\n[calendar.ics]\nsource = "%s"\n' \
+    "$JARVIS_HOME/test/cal.ics" > "$JARVIS_HOME/test/config.toml"
+  run --separate-stderr calendar_ics_events "2026-05-01T00:00:00Z" "2026-05-02T00:00:00Z" test
+  [ "$status" -eq 0 ]
+  # Only UTC event emitted on stdout
+  [ "$(printf '%s\n' "$output" | wc -l)" -eq 1 ]
+  printf '%s\n' "$output" | jq -e '.title == "utc event"' > /dev/null
+  [[ "$stderr" == *"non-UTC DTSTART"* ]]
+}
+
+@test "folded SUMMARY line is unfolded (RFC 5545)" {
+  # RFC 5545 §3.1: lines >75 octets are folded with CRLF + (SP|HTAB).
+  # Continuation char is dropped; if a space is wanted at the join, the
+  # original line keeps its trailing space (here "title " + "that..."),
+  # so the unfolded result preserves the natural word boundary.
+  printf 'BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nDTSTART:20260501T100000Z\r\nDTEND:20260501T103000Z\r\nSUMMARY:long title \r\n that continues here\r\nURL:https://example/meet\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n' \
+    > "$JARVIS_HOME/test/cal.ics"
+  printf '[calendar]\nprovider = "ics"\n[calendar.ics]\nsource = "%s"\n' \
+    "$JARVIS_HOME/test/cal.ics" > "$JARVIS_HOME/test/config.toml"
+  run calendar_ics_events "2026-05-01T00:00:00Z" "2026-05-02T00:00:00Z" test
+  [ "$status" -eq 0 ]
+  printf '%s\n' "$output" | jq -e '.title == "long title that continues here"' > /dev/null
+}
+
 @test "ics title with quotes is JSON-escaped" {
   cat > "$JARVIS_HOME/test/cal.ics" <<'EOF'
 BEGIN:VCALENDAR
