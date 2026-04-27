@@ -53,7 +53,9 @@ cache_get() {
   if (( now - mtime >= ttl )); then
     return 1
   fi
-  printf '%s' "$(<"$f")"
+  # Use cat (not $(<f)) — command substitution strips trailing newline,
+  # which would cause miss-vs-hit byte drift on multi-line NDJSON.
+  cat "$f"
 }
 
 cache_put() {

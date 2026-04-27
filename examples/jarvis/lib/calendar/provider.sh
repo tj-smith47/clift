@@ -40,6 +40,10 @@ calendar_providers() {
   printf '%s\n' "${!_CALENDAR_PROVIDERS[@]}" | sort
 }
 
+# Cache writes use temp+mv (atomic). Concurrent misses may double-fetch;
+# tolerated because cache_put is idempotent and TTL is coarse (300s).
+# Provider stderr is suppressed here — brief/standup are user-facing surfaces;
+# `jarvis doctor` invokes providers directly to surface diagnostics.
 calendar_events() {
   local since="$1" until="$2" profile="${3:-${JARVIS_PROFILE:-default}}"
   local provider fn cached out
@@ -49,7 +53,7 @@ calendar_events() {
   fi
   fn="${_CALENDAR_PROVIDERS[$provider]:-}"
   if [[ -z "$fn" ]]; then
-    printf 'calendar: unknown provider %q (configured under [calendar] provider)\n' "$provider" >&2
+    printf "calendar: unknown provider '%s' (configured under [calendar] provider)\n" "$provider" >&2
     return 0
   fi
   if cached="$(cache_get "$profile" calendar 300 2>/dev/null)"; then

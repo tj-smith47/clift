@@ -42,6 +42,18 @@ teardown() { jarvis_common_teardown; }
   [ "$status" -eq 1 ]
 }
 
+@test "cache round-trip preserves trailing newline (NDJSON)" {
+  # Multi-line NDJSON ending in \n must come back identical.
+  printf -v ndjson '{"a":1}\n{"b":2}\n'
+  cache_put test ndjson "$ndjson"
+  run cache_get test ndjson 300
+  [ "$status" -eq 0 ]
+  [ "$output" = '{"a":1}
+{"b":2}' ]   # bats strips ONE trailing \n into $output; raw bytes verified below
+  raw="$(wc -c < "$JARVIS_HOME/test/cache/ndjson.json")"
+  [ "$raw" -eq 16 ]
+}
+
 @test "JARVIS_FAKE_NOW shifts TTL evaluation" {
   cache_put test calendar '{"events":[]}'
   # mtime ~ real now; fake-now 600s in future -> past TTL
