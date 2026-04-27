@@ -64,6 +64,55 @@ teardown() {
   diff <(printf '%s\n' "$output") "${BATS_TEST_DIRNAME}/fixtures/brief-short.txt"
 }
 
+@test "brief --short pluralizes counts (0 / 1 / N)" {
+  # Drop the gh shim to get 0 PRs; clear deploys log to get 0 deploys.
+  rm -f "$SHIM_DIR/gh"
+  rm -f "$JARVIS_HOME/test/deploys.log"
+  run bash "${CLIFT_JARVIS_DIR}/cmds/brief/brief.sh" --short --profile test
+  [ "$status" -eq 0 ]
+  # Zero is plural ("0 PRs", "0 deploys") — matches goreleaser-style English.
+  [[ "$output" == *"0 PRs"* ]]
+  [[ "$output" == *"0 deploys"* ]]
+
+  # Re-shim gh to emit 1 PR.
+  shim_install gh 'cat <<EOF2
+[{"number":1,"title":"a","url":"u","headRepository":{"name":"r","owner":{"login":"o"}}}]
+EOF2'
+  printf '2026-05-01T08:00:00Z\tweb\tv1\tok\n' > "$JARVIS_HOME/test/deploys.log"
+  run bash "${CLIFT_JARVIS_DIR}/cmds/brief/brief.sh" --short --profile test
+  [[ "$output" == *"1 PR "* ]]
+  [[ "$output" == *"1 deploy "* ]]
+}
+
+@test "brief --short omits oncall when no [oncall] config" {
+  # Strip the [oncall] section by overwriting config.toml without it.
+  cat > "$JARVIS_HOME/test/config.toml" <<EOF
+[calendar]
+provider = "ics"
+[calendar.ics]
+source = "$JARVIS_HOME/test/cal.ics"
+EOF
+  run bash "${CLIFT_JARVIS_DIR}/cmds/brief/brief.sh" --short --profile test
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"oncall"* ]]
+}
+
+@test "brief --short shows primary only when no secondary" {
+  cat > "$JARVIS_HOME/test/config.toml" <<EOF
+[oncall]
+primary = "alex"
+
+[calendar]
+provider = "ics"
+[calendar.ics]
+source = "$JARVIS_HOME/test/cal.ics"
+EOF
+  run bash "${CLIFT_JARVIS_DIR}/cmds/brief/brief.sh" --short --profile test
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"oncall: alex"* ]]
+  [[ "$output" != *" / "* ]]
+}
+
 @test "brief --skip-calendar hides Calendar but keeps others" {
   run bash "${CLIFT_JARVIS_DIR}/cmds/brief/brief.sh" --skip-calendar --profile test
   [ "$status" -eq 0 ]

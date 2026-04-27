@@ -97,16 +97,22 @@ _count() {
 if [[ "$short" == "true" ]]; then
   pr_count="$(_count "$prs")"
   dep_count="$(_count "$deploys")"
-  primary=""
+  pr_label="PRs"; (( pr_count == 1 )) && pr_label="PR"
+  dep_label="deploys"; (( dep_count == 1 )) && dep_label="deploy"
+  primary=""; secondary=""
   if [[ -n "$oncall" ]]; then
     primary="$(printf '%s\n' "$oncall" | jq -r 'select(.role == "primary") | .who' 2>/dev/null | head -n1)"
+    secondary="$(printf '%s\n' "$oncall" | jq -r 'select(.role == "secondary") | .who' 2>/dev/null | head -n1)"
   fi
-  if [[ -n "$primary" ]]; then
-    printf 'brief (%s): %d PRs \xc2\xb7 %d deploys today \xc2\xb7 oncall: %s\n' \
-      "$profile" "$pr_count" "$dep_count" "$primary"
+  if [[ -n "$primary" && -n "$secondary" ]]; then
+    printf 'brief (%s): %d %s \xc2\xb7 %d %s today \xc2\xb7 oncall: %s / %s\n' \
+      "$profile" "$pr_count" "$pr_label" "$dep_count" "$dep_label" "$primary" "$secondary"
+  elif [[ -n "$primary" ]]; then
+    printf 'brief (%s): %d %s \xc2\xb7 %d %s today \xc2\xb7 oncall: %s\n' \
+      "$profile" "$pr_count" "$pr_label" "$dep_count" "$dep_label" "$primary"
   else
-    printf 'brief (%s): %d PRs \xc2\xb7 %d deploys today\n' \
-      "$profile" "$pr_count" "$dep_count"
+    printf 'brief (%s): %d %s \xc2\xb7 %d %s today\n' \
+      "$profile" "$pr_count" "$pr_label" "$dep_count" "$dep_label"
   fi
   exit 0
 fi
