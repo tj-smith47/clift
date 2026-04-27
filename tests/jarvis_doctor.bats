@@ -287,6 +287,59 @@ EOF
   [[ "$output" == *"not configured"* ]]
 }
 
+# ---- P6 T2: --integrations-live (live probes that surface upstream errors) ---
+
+@test "doctor --integrations-live shows Live probes section" {
+  mkdir -p "$JARVIS_HOME/test"
+  printf '1\n' > "$JARVIS_HOME/test/state.version"
+  shim_setup
+  shim_install gh 'case "$1 $2" in "auth status") exit 0;; *) printf "[]\n";; esac'
+  shim_install jira '
+    case "$1" in
+      me) printf "shimuser\n" ;;
+      issue) printf "key\tsummary\tstatus\nFOO-1\tdo a thing\tIn Progress\n" ;;
+      *) exit 0 ;;
+    esac'
+  run bash "${CLIFT_JARVIS_DIR}/cmds/doctor/doctor.sh" --profile test --integrations-live
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Live probes"* ]]
+  [[ "$output" == *"gh"* ]]
+  [[ "$output" == *"jira"* ]]
+  # jira shim returned 1 in-flight row.
+  [[ "$output" == *"1 in flight"* ]]
+}
+
+@test "doctor --integrations-live: calendar=ics with bad source surfaces probe failure" {
+  mkdir -p "$JARVIS_HOME/test"
+  printf '1\n' > "$JARVIS_HOME/test/state.version"
+  shim_setup
+  # curl exits 22 (HTTP error). The provider is invoked directly so its
+  # stderr reaches the user — assert via run --separate-stderr.
+  shim_install curl 'printf "curl: (22) HTTP error\n" >&2; exit 22'
+  cat > "$JARVIS_HOME/test/config.toml" <<EOF
+[calendar]
+provider = "ics"
+[calendar.ics]
+source = "https://nope.example.com/cal.ics"
+EOF
+  run --separate-stderr bash "${CLIFT_JARVIS_DIR}/cmds/doctor/doctor.sh" \
+    --profile test --integrations-live
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Live probes"* ]]
+  [[ "$output" == *"calendar"* ]]
+  [[ "$output" == *"ics"* ]]
+  # The curl stderr should bubble through to the user.
+  [[ "$stderr" == *"HTTP error"* ]] || [[ "$output" == *"probe exited"* ]]
+}
+
+@test "doctor (default, no --integrations-live) does NOT show Live probes" {
+  mkdir -p "$JARVIS_HOME/test"
+  printf '1\n' > "$JARVIS_HOME/test/state.version"
+  run bash "${CLIFT_JARVIS_DIR}/cmds/doctor/doctor.sh" --profile test
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"Live probes"* ]]
+}
+
 @test "doctor: focus.log warns on orphan starts (SIGKILL / power loss)" {
   mkdir -p "$JARVIS_HOME/test"
   printf '1\n' > "$JARVIS_HOME/test/state.version"

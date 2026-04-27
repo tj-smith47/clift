@@ -5,6 +5,7 @@ vars:
     - {name: migrate, type: bool, desc: "Run pending state-file migrations"}
     - {name: path, type: bool, desc: "Print resolved state dir and exit"}
     - {name: rebuild-index, type: bool, desc: "Regenerate notes/.index.json from files"}
+    - {name: integrations-live, type: bool, desc: "Probe calendar/gh/jira live (bypasses cache; surfaces upstream errors)"}
 
 tasks:
   default:

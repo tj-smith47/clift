@@ -10,13 +10,27 @@ source "${FRAMEWORK_DIR}/lib/log/log.sh"
 # shellcheck source=/dev/null
 source "${CLI_DIR}/lib/state/profile.sh"
 
-# CLIFT_FLAGS may not be declared when invoked standalone.
+# Flag resolution: prefer pre-populated CLIFT_FLAGS (router pipeline);
+# otherwise parse argv ourselves so direct-invocation tests get identical
+# semantics. --profile is honored by exporting JARVIS_PROFILE.
 if ! declare -p CLIFT_FLAGS >/dev/null 2>&1; then
-  declare -A CLIFT_FLAGS=()
+  # shellcheck source=/dev/null
+  source "${CLI_DIR}/lib/runtime/standalone_argv.sh"
+  jarvis_standalone_argv_parse \
+    '[{"name":"migrate","type":"bool"},
+      {"name":"path","type":"bool"},
+      {"name":"rebuild-index","type":"bool"},
+      {"name":"integrations-live","type":"bool"},
+      {"name":"profile","type":"string"}]' \
+    "$@"
+  if [[ -n "${CLIFT_FLAGS[profile]:-}" ]]; then
+    export JARVIS_PROFILE="${CLIFT_FLAGS[profile]}"
+  fi
 fi
 
 path_flag="${CLIFT_FLAGS[path]:-}"
 rebuild_flag="${CLIFT_FLAGS[rebuild-index]:-}"
+live_flag="${CLIFT_FLAGS[integrations-live]:-}"
 
 state_dir="$(state_profile_dir)"
 
@@ -224,6 +238,89 @@ for tool in jira gcalcli; do
   fi
 done
 printf '\n'
+
+# --- Live integration probes (P6 T2) ---
+# Opt-in via --integrations-live. Bypasses the calendar cache, invokes provider
+# fns directly, and lets upstream stderr through so misconfigured ICS URLs,
+# gh auth failures, and jira backend errors are visible to the human.
+# Default doctor stays static (no network).
+if [[ "$live_flag" == "true" ]]; then
+  printf '\n  \033[1mLive probes\033[0m\n'
+
+  # Calendar \u2014 invoke the registered provider directly (skip the cache layer
+  # and the dispatcher's stderr mute). Today's [00:00, +1d) window.
+  cal_provider="$(config_get calendar.provider none "$profile")"
+  if [[ "$cal_provider" == "none" ]]; then
+    printf '    calendar       not configured\n'
+  else
+    # shellcheck source=/dev/null
+    source "${CLI_DIR}/lib/cache/file.sh"
+    # shellcheck source=/dev/null
+    source "${CLI_DIR}/lib/calendar/provider.sh"
+    # shellcheck source=/dev/null
+    source "${CLI_DIR}/lib/calendar/none.sh"
+    # shellcheck source=/dev/null
+    source "${CLI_DIR}/lib/calendar/gcalcli.sh"
+    # shellcheck source=/dev/null
+    source "${CLI_DIR}/lib/calendar/ics.sh"
+
+    now_iso="${JARVIS_FAKE_NOW:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
+    today_date="${now_iso%T*}"
+    day_start="${today_date}T00:00:00Z"
+    day_end="$(date -u -d "$today_date +1 day" +%Y-%m-%dT00:00:00Z 2>/dev/null \
+            || date -u -j -v+1d -f "%Y-%m-%d" "$today_date" +%Y-%m-%dT00:00:00Z)"
+
+    fn="calendar_${cal_provider}_events"
+    if ! declare -F "$fn" >/dev/null; then
+      printf '    calendar       %s  unknown provider (no registered fn)\n' "$cal_provider"
+    else
+      cal_rc=0
+      cal_out="$("$fn" "$day_start" "$day_end" "$profile")" || cal_rc=$?
+      cal_count=0
+      [[ -n "$cal_out" ]] && cal_count="$(printf '%s\n' "$cal_out" | grep -c .)"
+      if (( cal_rc == 0 )); then
+        printf '    calendar       %s  %d events today\n' "$cal_provider" "$cal_count"
+      else
+        printf '    calendar       %s  probe exited %d (see stderr above)\n' "$cal_provider" "$cal_rc"
+      fi
+    fi
+  fi
+
+  # gh \u2014 invoke directly so its stderr (auth required, network) reaches the user.
+  if command -v gh >/dev/null 2>&1; then
+    # shellcheck source=/dev/null
+    source "${CLI_DIR}/lib/integrations/gh.sh"
+    gh_rc=0
+    gh_out="$(gh_prs_review_requested "$profile")" || gh_rc=$?
+    gh_count=0
+    [[ -n "$gh_out" ]] && gh_count="$(printf '%s\n' "$gh_out" | grep -c .)"
+    if (( gh_rc == 0 )); then
+      printf '    gh             %d PRs awaiting review\n' "$gh_count"
+    else
+      printf '    gh             probe exited %d (see stderr above)\n' "$gh_rc"
+    fi
+  else
+    printf '    gh             missing\n'
+  fi
+
+  # jira \u2014 same.
+  if command -v jira >/dev/null 2>&1; then
+    # shellcheck source=/dev/null
+    source "${CLI_DIR}/lib/integrations/jira.sh"
+    jr_rc=0
+    jr_out="$(jira_in_flight "$profile")" || jr_rc=$?
+    jr_count=0
+    [[ -n "$jr_out" ]] && jr_count="$(printf '%s\n' "$jr_out" | grep -c .)"
+    if (( jr_rc == 0 )); then
+      printf '    jira           %d in flight\n' "$jr_count"
+    else
+      printf '    jira           probe exited %d (see stderr above)\n' "$jr_rc"
+    fi
+  else
+    printf '    jira           missing\n'
+  fi
+  printf '\n'
+fi
 
 # focus.log orphan check \u2014 surfaces SIGKILL / power-loss cases where a
 # `start` row landed but the EXIT trap never got to write its `end`.
