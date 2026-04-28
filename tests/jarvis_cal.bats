@@ -15,14 +15,16 @@ GOLDEN_DIR=
 INPUTS_DIR=
 
 setup() {
-  jarvis_common_setup
-  JARVIS_DIR="$(cd "$CLIFT_JARVIS_DIR" && pwd)"
+  # Resolve paths and (if needed) build the binary BEFORE HOME redirect —
+  # cargo/rustup rely on $HOME/.rustup which jarvis_common_setup hides.
+  JARVIS_DIR="$(cd "${BATS_TEST_DIRNAME}/../examples/jarvis" && pwd)"
   CAL="$JARVIS_DIR/bin/jarvis-cal"
   GOLDEN_DIR="$JARVIS_DIR/tests/fixtures/ndjson-parity/golden"
   INPUTS_DIR="$JARVIS_DIR/tests/fixtures/ndjson-parity/inputs"
   if [[ ! -x "$CAL" ]]; then
     bash "$JARVIS_DIR/scripts/build_cal.sh"
   fi
+  jarvis_common_setup
 }
 
 teardown() {

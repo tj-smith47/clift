@@ -12,12 +12,12 @@ WHEN=
 FAKE_NOW="2026-04-28T12:00:00Z"   # Tuesday
 
 setup() {
-  jarvis_common_setup
-  JARVIS_DIR="$(cd "$CLIFT_JARVIS_DIR" && pwd)"
+  JARVIS_DIR="$(cd "${BATS_TEST_DIRNAME}/../examples/jarvis" && pwd)"
   WHEN="$JARVIS_DIR/bin/jarvis-when"
   if [[ ! -x "$WHEN" ]]; then
     bash "$JARVIS_DIR/scripts/build_when.sh"
   fi
+  jarvis_common_setup
   export JARVIS_FAKE_NOW="$FAKE_NOW"
 }
 

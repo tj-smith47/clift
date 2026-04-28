@@ -11,14 +11,15 @@ INPUTS_DIR=
 HOME_DIR=
 
 setup() {
-  jarvis_common_setup
-  JARVIS_DIR="$(cd "$CLIFT_JARVIS_DIR" && pwd)"
+  # Pre-build BEFORE HOME redirect so go can find its toolchain.
+  JARVIS_DIR="$(cd "${BATS_TEST_DIRNAME}/../examples/jarvis" && pwd)"
   STATE="$JARVIS_DIR/bin/jarvis-state"
   GOLDEN_DIR="$JARVIS_DIR/tests/fixtures/ndjson-parity/golden"
   INPUTS_DIR="$JARVIS_DIR/tests/fixtures/ndjson-parity/inputs"
   if [[ ! -x "$STATE" ]]; then
     bash "$JARVIS_DIR/scripts/build_state.sh"
   fi
+  jarvis_common_setup
   HOME_DIR="$BATS_TEST_TMPDIR/jarvis-home"
   mkdir -p "$HOME_DIR/test"
   export JARVIS_HOME="$HOME_DIR" JARVIS_PROFILE=test

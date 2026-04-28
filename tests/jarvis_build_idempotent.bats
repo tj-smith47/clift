@@ -18,8 +18,10 @@ JARVIS_DIR=
 TASK=
 
 setup() {
+  # Pre-resolve JARVIS_DIR via BATS_TEST_DIRNAME (no HOME dependency).
+  JARVIS_DIR="$(cd "${BATS_TEST_DIRNAME}/../examples/jarvis" && pwd)"
+  REAL_HOME="$HOME"        # save before jarvis_common_setup redirects
   jarvis_common_setup
-  JARVIS_DIR="$(cd "$CLIFT_JARVIS_DIR" && pwd)"
   TASK="$(command -v task)"
 }
 
@@ -32,8 +34,11 @@ teardown() {
 }
 
 _run_build() {
+  # Run with the REAL home so cargo/rustup/go can find their toolchains.
+  # The redirected jarvis_common_setup HOME is restored after `run` returns.
   run bash -c "
     cd '$JARVIS_DIR'
+    export HOME='$REAL_HOME'
     export FRAMEWORK_DIR='$CLIFT_FRAMEWORK_DIR'
     export CLI_DIR='$JARVIS_DIR'
     export CLI_NAME=jarvis
