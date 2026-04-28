@@ -1,7 +1,8 @@
 bats_require_minimum_version 1.5.0
 
 # shellcheck disable=SC2034
-JARVIS_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
+FRAMEWORK_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
+JARVIS_DIR="${FRAMEWORK_DIR}/examples/jarvis"
 INPUTS_DIR="$JARVIS_DIR/tests/fixtures/ndjson-parity/inputs"
 GOLDEN_DIR="$JARVIS_DIR/tests/fixtures/ndjson-parity/golden"
 ORACLE="$JARVIS_DIR/scripts/build_ndjson_golden.py"
