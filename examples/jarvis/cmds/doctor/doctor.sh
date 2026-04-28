@@ -21,6 +21,7 @@ if ! declare -p CLIFT_FLAGS >/dev/null 2>&1; then
       {"name":"path","type":"bool"},
       {"name":"rebuild-index","type":"bool"},
       {"name":"integrations-live","type":"bool"},
+      {"name":"reap-focus-orphans","type":"bool"},
       {"name":"profile","type":"string"}]' \
     "$@"
   if [[ -n "${CLIFT_FLAGS[profile]:-}" ]]; then
@@ -31,6 +32,7 @@ fi
 path_flag="${CLIFT_FLAGS[path]:-}"
 rebuild_flag="${CLIFT_FLAGS[rebuild-index]:-}"
 live_flag="${CLIFT_FLAGS[integrations-live]:-}"
+reap_flag="${CLIFT_FLAGS[reap-focus-orphans]:-}"
 
 state_dir="$(state_profile_dir)"
 
@@ -55,6 +57,46 @@ if [[ "$rebuild_flag" == "true" ]]; then
   note_index_rebuild
   count="$(jq -r 'keys | length' "$(note_index_file)" 2>/dev/null || printf '0')"
   log_success "rebuilt note index: $count notes"
+  exit 0
+fi
+
+# --reap-focus-orphans (P3-design from .claude/known-bugs.md)
+# Walks focus_orphan_starts() output, appends a synthesized `end` row for
+# each — start_ts + 1s, topic preserved. SIGKILL / power-loss recovery.
+# Idempotent: a second run finds zero orphans (because the first run
+# matched them all).
+if [[ "$reap_flag" == "true" ]]; then
+  focus_log="$state_dir/focus.log"
+  if [[ ! -f "$focus_log" ]]; then
+    log_info "no focus.log to reap"
+    exit 0
+  fi
+  # shellcheck source=/dev/null
+  source "${CLI_DIR}/lib/state/lock.sh"
+  # shellcheck source=/dev/null
+  source "${CLI_DIR}/lib/state/ndjson.sh"
+  # shellcheck source=/dev/null
+  source "${CLI_DIR}/lib/focus/log.sh"
+  # shellcheck source=/dev/null
+  source "${CLI_DIR}/lib/native/clock.sh"
+
+  reaped=0
+  while IFS= read -r orphan; do
+    [[ -z "$orphan" ]] && continue
+    start_ts="$(jq -r '.ts' <<< "$orphan")"
+    topic="$(jq -r '.topic // empty' <<< "$orphan")"
+    start_e="$(native_resolve_to_epoch "$start_ts")" || continue
+    end_e=$(( start_e + 1 ))
+    end_ts="$(native_epoch_to_iso "$end_e")"
+    end_row="$(jq -nc \
+      --arg ts "$end_ts" \
+      --arg topic "$topic" \
+      '{ts: $ts, event: "end",
+        topic: (if $topic == "" then null else $topic end)}')"
+    ndjson_append "$focus_log" "$end_row"
+    reaped=$((reaped + 1))
+  done < <(focus_orphan_starts)
+  log_success "reaped $reaped orphan focus starts"
   exit 0
 fi
 

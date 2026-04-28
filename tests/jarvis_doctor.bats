@@ -449,3 +449,41 @@ EOF
   [ "$status" -eq 0 ]
   [[ "$output" == *"2 orphan rows"* ]]
 }
+
+# ---- doctor --reap-focus-orphans (P3-design from .claude/known-bugs.md) ---
+
+@test "doctor --reap-focus-orphans: synthesizes end rows for every orphan" {
+  mkdir -p "$JARVIS_HOME/test"
+  printf '1\n' > "$JARVIS_HOME/test/state.version"
+  source "$CLIFT_JARVIS_DIR/lib/state/profile.sh"
+  source "$CLIFT_JARVIS_DIR/lib/state/lock.sh"
+  source "$CLIFT_JARVIS_DIR/lib/state/ndjson.sh"
+  source "$CLIFT_JARVIS_DIR/lib/focus/log.sh"
+  focus_log_append start "25m" "killed-a"
+  focus_log_append start "25m" "killed-b"
+  focus_log_append start "30m" ""           # null-topic orphan
+
+  run bash "$CLIFT_JARVIS_DIR/cmds/doctor/doctor.sh" --reap-focus-orphans
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"reaped 3 orphan focus starts"* ]]
+
+  # Verify each start now has a matching end (zero orphans afterward).
+  run bash "$CLIFT_JARVIS_DIR/cmds/doctor/doctor.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"0 orphan rows"* ]]
+}
+
+@test "doctor --reap-focus-orphans: no-op (idempotent) on a clean log" {
+  mkdir -p "$JARVIS_HOME/test"
+  printf '1\n' > "$JARVIS_HOME/test/state.version"
+  source "$CLIFT_JARVIS_DIR/lib/state/profile.sh"
+  source "$CLIFT_JARVIS_DIR/lib/state/lock.sh"
+  source "$CLIFT_JARVIS_DIR/lib/state/ndjson.sh"
+  source "$CLIFT_JARVIS_DIR/lib/focus/log.sh"
+  focus_log_append start "25m" "complete"
+  focus_log_append end   ""    "complete"
+
+  run bash "$CLIFT_JARVIS_DIR/cmds/doctor/doctor.sh" --reap-focus-orphans
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"reaped 0 orphan"* ]]
+}
