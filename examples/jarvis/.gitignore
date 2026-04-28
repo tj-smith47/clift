@@ -7,3 +7,6 @@
 # Python bytecode caches (jarvis-when is a single-file script; runs uncached).
 __pycache__/
 *.pyc
+
+# Rust cargo build artifacts.
+/jarvis-cal/target/
