@@ -1,17 +1,26 @@
 #!/usr/bin/env bash
-# build_when.sh — Builds jarvis-when into bin/jarvis-when.
+# build_when.sh — Stages jarvis-when as an executable script in bin/.
 #
-# Wave A placeholder: writes a stub binary that prints "1" (protocol version).
-# Wave B replaces the body with a Python zipapp build via
-# jarvis-when/scripts/build_zipapp.sh.
+# jarvis-when is single-file pure-stdlib Python (no pip install, no zipapp).
+# Build = copy + chmod. Source lives at jarvis-when/src/jarvis_when.py.
 #
-# Must be invoked from the jarvis CLI root (examples/jarvis/).
+# Must be invoked from the jarvis CLI root (examples/jarvis/) so the
+# Taskfile's relative paths resolve correctly.
 
 set -euo pipefail
 
 JARVIS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SRC="$JARVIS_DIR/jarvis-when/src/jarvis_when.py"
+DEST="$JARVIS_DIR/bin/jarvis-when"
+
+if [[ ! -f "$SRC" ]]; then
+  printf 'build_when: missing source %s\n' "$SRC" >&2
+  exit 1
+fi
 
 mkdir -p "$JARVIS_DIR/bin"
-
-printf '#!/bin/sh\necho 1\n' > "$JARVIS_DIR/bin/jarvis-when"
-chmod +x "$JARVIS_DIR/bin/jarvis-when"
+# Copy via temp + mv so a partial copy never appears under DEST.
+tmp="$DEST.tmp.$$"
+cp "$SRC" "$tmp"
+chmod +x "$tmp"
+mv "$tmp" "$DEST"

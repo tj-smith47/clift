@@ -1,8 +1,0 @@
-[build-system]
-requires = ["setuptools"]
-build-backend = "setuptools.backends.legacy:build"
-
-[project]
-name = "jarvis-when"
-version = "0.1.0"
-# Placeholder — Wave B replaces this with the real implementation.

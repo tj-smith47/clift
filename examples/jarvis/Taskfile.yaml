@@ -87,11 +87,9 @@ tasks:
     cmd: ./scripts/build_cal.sh
 
   build:when:
-    desc: "Build jarvis-when Python zipapp"
+    desc: "Build jarvis-when (single-file pure-stdlib Python)"
     sources:
-      - jarvis-when/src/**/*.py
-      - jarvis-when/pyproject.toml
-      - jarvis-when/vendor/**
+      - jarvis-when/src/jarvis_when.py
     generates:
       - bin/jarvis-when
     method: checksum
