@@ -1,0 +1,5 @@
+# Build artifacts from `task build` — native helper binaries land here.
+/bin/
+
+# go-task checksum cache for build:* idempotency.
+/.task/

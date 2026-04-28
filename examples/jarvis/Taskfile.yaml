@@ -58,3 +58,41 @@ tasks:
   default:
     cmd:
       task: _help:list
+
+  build:
+    desc: "Build all native helpers (idempotent — checksums skip unchanged)"
+    run: once
+    deps: [build:state, build:cal, build:when]
+
+  build:state:
+    desc: "Build jarvis-state Go binary"
+    sources:
+      - jarvis-state/**/*.go
+      - jarvis-state/go.mod
+      - jarvis-state/go.sum
+    generates:
+      - bin/jarvis-state
+    method: checksum
+    cmd: ./scripts/build_state.sh
+
+  build:cal:
+    desc: "Build jarvis-cal Rust binary"
+    sources:
+      - jarvis-cal/src/**/*.rs
+      - jarvis-cal/Cargo.toml
+      - jarvis-cal/Cargo.lock
+    generates:
+      - bin/jarvis-cal
+    method: checksum
+    cmd: ./scripts/build_cal.sh
+
+  build:when:
+    desc: "Build jarvis-when Python zipapp"
+    sources:
+      - jarvis-when/src/**/*.py
+      - jarvis-when/pyproject.toml
+      - jarvis-when/vendor/**
+    generates:
+      - bin/jarvis-when
+    method: checksum
+    cmd: ./scripts/build_when.sh

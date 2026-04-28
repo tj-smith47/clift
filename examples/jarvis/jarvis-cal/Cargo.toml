@@ -1,0 +1,9 @@
+[package]
+name = "jarvis-cal"
+version = "0.1.0"
+edition = "2021"
+
+# Placeholder — Wave B replaces this with the real implementation.
+[[bin]]
+name = "jarvis-cal"
+path = "src/main.rs"
