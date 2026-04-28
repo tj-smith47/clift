@@ -67,3 +67,36 @@ teardown() { jarvis_common_teardown; }
   run cache_get test calendar 300
   [ "$status" -eq 1 ]
 }
+
+@test "cache_get sets _CACHE_GET_REASON for each failure mode (T1-W3)" {
+  unset _CACHE_GET_REASON
+  cache_get test missing-key 300 || true
+  [ "$_CACHE_GET_REASON" = "missing" ]
+  cache_put test foo '{"a":1}'
+  unset _CACHE_GET_REASON
+  cache_get test foo 0 || true
+  [ "$_CACHE_GET_REASON" = "ttl_zero" ]
+  touch -d "@$(($(date +%s) - 600))" "$JARVIS_HOME/test/cache/foo.json"
+  unset _CACHE_GET_REASON
+  cache_get test foo 300 || true
+  [ "$_CACHE_GET_REASON" = "stale" ]
+}
+
+@test "cache_put surfaces stderr on mkdir failure (T1-W2)" {
+  # Point JARVIS_HOME at a regular file so `mkdir -p` cannot create the
+  # cache subdirectory under it. Works even when the test runs as root
+  # (chmod 0500 doesn't gate root, but a file-instead-of-directory does).
+  blocker="$BATS_TEST_TMPDIR/blocker"
+  : > "$blocker"   # regular file
+  JARVIS_HOME="$blocker" run cache_put test foo '{}'
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"mkdir"* ]]
+  [[ "$output" == *"failed"* ]]
+}
+
+@test "cache_put_file: byte-exact NDJSON with trailing newline survives round-trip" {
+  src="$BATS_TEST_TMPDIR/ndjson.txt"
+  printf '{"a":1}\n{"b":2}\n' > "$src"
+  cache_put_file test ndj "$src"
+  cmp "$src" "$JARVIS_HOME/test/cache/ndj.json"
+}

@@ -44,9 +44,12 @@ calendar_providers() {
 # tolerated because cache_put is idempotent and TTL is coarse (300s).
 # Provider stderr is suppressed here — brief/standup are user-facing surfaces;
 # `jarvis doctor` invokes providers directly to surface diagnostics.
+#
+# Capture flow uses temp files instead of `out=$(...)` so trailing newlines
+# survive the round-trip (drains T2-W2 from .claude/known-bugs.md).
 calendar_events() {
   local since="$1" until="$2" profile="${3:-${JARVIS_PROFILE:-default}}"
-  local provider fn cached out
+  local provider fn
   provider="$(config_get calendar.provider none "$profile")"
   if [[ "$provider" == "none" ]]; then
     return 0
@@ -56,13 +59,20 @@ calendar_events() {
     printf "calendar: unknown provider '%s' (configured under [calendar] provider)\n" "$provider" >&2
     return 0
   fi
-  if cached="$(cache_get "$profile" calendar 300 2>/dev/null)"; then
-    printf '%s' "$cached"
+  # Cache hit -> stream the cached bytes through cat (preserves trailing
+  # newline that command substitution would strip).
+  if cache_get "$profile" calendar 300 2>/dev/null; then
     return 0
   fi
-  if ! out="$("$fn" "$since" "$until" "$profile" 2>/dev/null)"; then
+  # Cache miss -> capture provider stdout in a temp file (NOT a shell var)
+  # so the bytes round-trip into the cache and back out unchanged.
+  local tmp_provider
+  tmp_provider="$(mktemp)" || return 0
+  if ! "$fn" "$since" "$until" "$profile" >"$tmp_provider" 2>/dev/null; then
+    rm -f "$tmp_provider"
     return 0
   fi
-  cache_put "$profile" calendar "$out"
-  printf '%s' "$out"
+  cache_put_file "$profile" calendar "$tmp_provider"
+  cat "$tmp_provider"
+  rm -f "$tmp_provider"
 }
