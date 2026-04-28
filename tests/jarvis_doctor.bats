@@ -340,6 +340,99 @@ EOF
   [[ "$output" != *"Live probes"* ]]
 }
 
+# ---- Enablement reasons (one-line "why disabled" per integration) -----
+
+@test "doctor: calendar reason explains missing config.toml" {
+  mkdir -p "$JARVIS_HOME/test"
+  printf '1\n' > "$JARVIS_HOME/test/state.version"
+  run bash "${CLIFT_JARVIS_DIR}/cmds/doctor/doctor.sh" --profile test
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"calendar"* ]]
+  [[ "$output" == *"not configured"* ]]
+  [[ "$output" == *"no config.toml"* ]]
+}
+
+@test "doctor: calendar reason explains missing [calendar] provider key" {
+  mkdir -p "$JARVIS_HOME/test"
+  printf '1\n' > "$JARVIS_HOME/test/state.version"
+  printf '[other]\nkey = "x"\n' > "$JARVIS_HOME/test/config.toml"
+  run bash "${CLIFT_JARVIS_DIR}/cmds/doctor/doctor.sh" --profile test
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"calendar"* ]]
+  [[ "$output" == *"not configured"* ]]
+  [[ "$output" == *"set [calendar] provider"* ]]
+}
+
+@test "doctor: calendar reason marks explicit provider='none' as disabled" {
+  mkdir -p "$JARVIS_HOME/test"
+  printf '1\n' > "$JARVIS_HOME/test/state.version"
+  cat > "$JARVIS_HOME/test/config.toml" <<EOF
+[calendar]
+provider = "none"
+EOF
+  run bash "${CLIFT_JARVIS_DIR}/cmds/doctor/doctor.sh" --profile test
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"calendar"* ]]
+  [[ "$output" == *"disabled"* ]]
+  [[ "$output" == *"provider = 'none'"* ]]
+}
+
+@test "doctor: calendar reason flags unknown provider with the registered list" {
+  mkdir -p "$JARVIS_HOME/test"
+  printf '1\n' > "$JARVIS_HOME/test/state.version"
+  cat > "$JARVIS_HOME/test/config.toml" <<EOF
+[calendar]
+provider = "bogus"
+EOF
+  run bash "${CLIFT_JARVIS_DIR}/cmds/doctor/doctor.sh" --profile test
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"calendar"* ]]
+  [[ "$output" == *"unknown provider"* ]]
+  [[ "$output" == *"bogus"* ]]
+  [[ "$output" == *"gcalcli"* ]]   # registered list mentions gcalcli + ics
+  [[ "$output" == *"ics"* ]]
+}
+
+@test "doctor: gh missing reason points at install hint" {
+  mkdir -p "$JARVIS_HOME/test"
+  printf '1\n' > "$JARVIS_HOME/test/state.version"
+  shim_setup
+  # Mask system gh by restricting PATH to SHIM_DIR + the minimum needed for
+  # bash + jq + dasel to resolve. SHIM_DIR has no gh, so command -v gh fails.
+  PATH="$SHIM_DIR:/usr/local/bin:/usr/bin:/bin" \
+    run bash "${CLIFT_JARVIS_DIR}/cmds/doctor/doctor.sh" --profile test
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"gh"* ]]
+  [[ "$output" == *"missing"* ]]
+  [[ "$output" == *"install"* ]]
+}
+
+@test "doctor: gh auth-required reason points at gh auth login" {
+  mkdir -p "$JARVIS_HOME/test"
+  printf '1\n' > "$JARVIS_HOME/test/state.version"
+  shim_setup
+  shim_install gh 'case "$1 $2" in "auth status") exit 1;; *) exit 0;; esac'
+  run bash "${CLIFT_JARVIS_DIR}/cmds/doctor/doctor.sh" --profile test
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"gh"* ]]
+  [[ "$output" == *"auth required"* ]]
+  [[ "$output" == *"gh auth login"* ]]
+}
+
+@test "doctor: jira+gcalcli missing reasons point at install hints" {
+  mkdir -p "$JARVIS_HOME/test"
+  printf '1\n' > "$JARVIS_HOME/test/state.version"
+  shim_setup
+  shim_install gh 'exit 0'
+  # No jira / gcalcli shims.
+  run bash "${CLIFT_JARVIS_DIR}/cmds/doctor/doctor.sh" --profile test
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"jira"* ]]
+  [[ "$output" == *"gcalcli"* ]]
+  [[ "$output" == *"missing"* ]]
+  [[ "$output" == *"install"* ]]
+}
+
 @test "doctor: focus.log warns on orphan starts (SIGKILL / power loss)" {
   mkdir -p "$JARVIS_HOME/test"
   printf '1\n' > "$JARVIS_HOME/test/state.version"

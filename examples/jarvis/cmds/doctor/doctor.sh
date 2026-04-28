@@ -197,25 +197,64 @@ _doctor_render_reminders "$state_dir"
 
 # --- Integrations rollup ---
 # Config + cache-mtime driven; no network calls. Calendar provider name comes
-# from [calendar] provider in config.toml (defaults to "none" = not configured).
-# Cache freshness is derived from the mtime of cache/calendar.json — providers
-# write that file on successful sync. gh / jira / gcalcli are presence + (for
-# gh) auth-status probes. Provider fns themselves are NOT invoked here so we
-# don't trigger real-time API calls during a health check.
+# from [calendar] provider in config.toml. Cache freshness is derived from the
+# mtime of cache/calendar.json — providers write that file on successful sync.
+# gh / jira / gcalcli are presence + (for gh) auth-status probes. Provider fns
+# themselves are NOT invoked here so we don't trigger real-time API calls
+# during a health check.
+#
+# Each disabled / failing integration carries a parenthesised one-line "reason"
+# so the user knows *why* it's off without hunting through config.toml.
+# Calendar disambiguates four cases: no config.toml, [calendar] provider key
+# absent, provider = 'none' (explicit), and an unrecognised provider name.
 profile="${JARVIS_PROFILE:-default}"
 printf '\n  \033[1mIntegrations\033[0m\n'
 
-cal_provider="$(config_get calendar.provider none "$profile")"
-if [[ "$cal_provider" == "none" ]]; then
-  printf '    calendar       not configured\n'
+# Source calendar provider stack at registration-only cost so we can list
+# the recognised provider names when the configured one is unknown. None of
+# these libs perform I/O at source-time; they only call calendar_register.
+# shellcheck source=/dev/null
+source "${CLI_DIR}/lib/calendar/provider.sh"
+# shellcheck source=/dev/null
+source "${CLI_DIR}/lib/calendar/none.sh"
+# shellcheck source=/dev/null
+source "${CLI_DIR}/lib/calendar/gcalcli.sh"
+# shellcheck source=/dev/null
+source "${CLI_DIR}/lib/calendar/ics.sh"
+
+# _doctor_calendar_raw — dasel probe that distinguishes "key absent" from
+# "key explicitly set to 'none'". config_get collapses both to "none", which
+# is fine for the dispatcher but loses the signal we need here.
+_doctor_calendar_raw() {
+  local cfg="$1"
+  [[ -f "$cfg" ]] || return 1
+  command -v dasel >/dev/null 2>&1 || return 1
+  local raw
+  raw="$(dasel -i toml calendar.provider < "$cfg" 2>/dev/null || true)"
+  raw="${raw#\'}"; raw="${raw%\'}"
+  printf '%s' "$raw"
+}
+
+cfg="$state_dir/config.toml"
+cal_raw="$(_doctor_calendar_raw "$cfg" || true)"
+if [[ ! -f "$cfg" ]]; then
+  printf "    calendar       not configured  (no config.toml at %s)\n" "$cfg"
+elif [[ -z "$cal_raw" ]]; then
+  printf "    calendar       not configured  (set [calendar] provider in %s)\n" "$cfg"
+elif [[ "$cal_raw" == "none" ]]; then
+  printf "    calendar       disabled  (provider = 'none' in %s)\n" "$cfg"
+elif ! declare -F "calendar_${cal_raw}_events" >/dev/null 2>&1 \
+   && [[ -z "${_CALENDAR_PROVIDERS[$cal_raw]:-}" ]]; then
+  registered="$(calendar_providers | paste -sd, - 2>/dev/null || true)"
+  printf "    calendar       %s  unknown provider (registered: %s)\n" "$cal_raw" "$registered"
 else
   cal_cache="$state_dir/cache/calendar.json"
   if [[ -f "$cal_cache" ]]; then
     cal_mtime="$(stat -c %Y "$cal_cache" 2>/dev/null || stat -f %m "$cal_cache" 2>/dev/null || printf '0')"
     cal_age=$(( $(date +%s) - cal_mtime ))
-    printf '    calendar       %s  (cache %ds ago)\n' "$cal_provider" "$cal_age"
+    printf "    calendar       %s  (cache %ds ago)\n" "$cal_raw" "$cal_age"
   else
-    printf '    calendar       %s  (no cache yet)\n' "$cal_provider"
+    printf "    calendar       %s  (no cache yet)\n" "$cal_raw"
   fi
 fi
 
@@ -223,19 +262,23 @@ if command -v gh >/dev/null 2>&1; then
   if gh auth status >/dev/null 2>&1; then
     printf '    gh             ok\n'
   else
-    printf '    gh             auth required\n'
+    printf '    gh             auth required  (run `gh auth login`)\n'
   fi
 else
-  printf '    gh             missing\n'
+  printf '    gh             missing  (install: https://cli.github.com)\n'
 fi
 
-for tool in jira gcalcli; do
-  if command -v "$tool" >/dev/null 2>&1; then
-    printf '    %-14s ok\n' "$tool"
-  else
-    printf '    %-14s missing\n' "$tool"
-  fi
-done
+if command -v jira >/dev/null 2>&1; then
+  printf '    jira           ok\n'
+else
+  printf '    jira           missing  (install: https://github.com/ankitpokhrel/jira-cli)\n'
+fi
+
+if command -v gcalcli >/dev/null 2>&1; then
+  printf '    gcalcli        ok\n'
+else
+  printf '    gcalcli        missing  (install: pipx install gcalcli)\n'
+fi
 printf '\n'
 
 # --- Live integration probes ---
