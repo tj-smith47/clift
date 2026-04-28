@@ -11,7 +11,7 @@ setup() {
   shim_setup
   for f in state/profile state/lock state/json state/ndjson state/config \
            remind/parse remind/schedule remind/schema \
-           notify/registry notify/local notify/gotify notify/slack \
+           notify/registry notify/local notify/gotify notify/slack notify/email \
            notify/dispatch remind/tick; do
     # shellcheck source=/dev/null
     source "${CLIFT_JARVIS_DIR}/lib/$f.sh"
