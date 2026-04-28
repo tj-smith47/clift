@@ -56,6 +56,22 @@ tasks:
         jarvis remind cancel ping-2026-04-26-1410
     cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
 
+  dryrun:
+    desc: "Fire a scheduled reminder right now (channel-config debugging)"
+    summary: |
+      Look up the reminder by slug and dispatch its channels (via, message)
+      immediately — bypassing the trigger_at + scheduler. Useful when wiring
+      up gotify/slack/email and you want to confirm the channel works
+      without waiting for the next tick.
+
+      Does NOT advance the reminder's schedule, NOT update fire_count,
+      NOT mark it delivered. The on-disk reminder is unchanged.
+
+      Examples:
+        jarvis remind dryrun standup
+        jarvis remind dryrun --profile work morning-coffee
+    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"
+
   tick:
     desc: "Fire any due reminders (called by the scheduler)"
     summary: |
