@@ -226,7 +226,18 @@ if [[ "${join:-}" == "true" || -n "${meeting_url:-}" ]]; then
       if [[ -n "$target" ]]; then
         url="$(printf '%s' "$target" | jq -r '.url // ""')"
         if [[ -z "$url" ]]; then
-          url="$(printf '%s' "$target" | jq -r '.title' | meeting_url_extract || true)"
+          # Prefer cron-meet-cal's extractor when installed (handles structured
+          # event payloads, broader URL patterns); fall back to the internal
+          # Zoom/Meet/Teams regex otherwise. Subcommand contract:
+          #   cron-meet-cal extract-url < event-text  -> URL on stdout (exit 0)
+          #                                           or empty + nonzero (no match).
+          if command -v cron-meet-cal >/dev/null 2>&1; then
+            url="$(printf '%s' "$target" | jq -r '.title' \
+                    | cron-meet-cal extract-url 2>/dev/null || true)"
+          fi
+          if [[ -z "$url" ]]; then
+            url="$(printf '%s' "$target" | jq -r '.title' | meeting_url_extract || true)"
+          fi
         fi
       fi
     fi

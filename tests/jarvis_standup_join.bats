@@ -64,3 +64,66 @@ teardown() { jarvis_common_teardown; }
   [ "$status" -eq 0 ]
   [[ "$output" == *"https://zoom.us/j/777"* ]]
 }
+
+# ---- cron-meet-cal helper integration (URL extraction fallback) -------
+# Spec: when cron-meet-cal is on PATH, prefer it for meeting-URL extraction
+# over the internal regex. Only kicks in when the event has no .url field
+# (i.e. the URL is embedded in the title/summary). Subcommand convention:
+#   `cron-meet-cal extract-url` reads event text on stdin, writes URL on
+#   stdout, exits 0 (found) / 1 (none). Empty / non-zero -> fall through to
+#   meeting_url_extract.
+
+# Helper: write a no-URL standup event ICS that the test can re-point [calendar.ics] source at.
+_write_nourl_fixture() {
+  cat > "$JARVIS_HOME/test/cal-nourl.ics" <<'EOF'
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//jarvis test//EN
+BEGIN:VEVENT
+UID:standup-nourl-2026-05-01@test
+DTSTART:20260501T100000Z
+DTEND:20260501T103000Z
+SUMMARY:standup join https://zoom.us/j/9876543
+END:VEVENT
+END:VCALENDAR
+EOF
+  # Re-point the source. dasel can rewrite the value but sed-replace is fine
+  # since we control the fixture shape.
+  cp "$JARVIS_HOME/test/config.toml" "$JARVIS_HOME/test/config.toml.tmp"
+  sed "s|/cal\\.ics|/cal-nourl.ics|" \
+    "$JARVIS_HOME/test/config.toml.tmp" > "$JARVIS_HOME/test/config.toml"
+  rm -f "$JARVIS_HOME/test/config.toml.tmp"
+}
+
+@test "standup --join uses cron-meet-cal extractor when present" {
+  _write_nourl_fixture
+  shim_install cron-meet-cal '
+    case "$1" in
+      extract-url) printf "https://meet.example.com/from-cron-meet-cal\n"; exit 0 ;;
+      *) exit 1 ;;
+    esac'
+  run bash "${CLIFT_JARVIS_DIR}/cmds/standup/standup.sh" --join --profile test
+  [ "$status" -eq 0 ]
+  [ -f "$(shim_log_path open)" ]
+  grep -q "https://meet.example.com/from-cron-meet-cal" "$(shim_log_path open)"
+}
+
+@test "standup --join falls back to meeting_url_extract when cron-meet-cal absent" {
+  _write_nourl_fixture
+  # No cron-meet-cal shim — command -v fails; internal regex must catch the
+  # zoom URL embedded in the SUMMARY.
+  run bash "${CLIFT_JARVIS_DIR}/cmds/standup/standup.sh" --join --profile test
+  [ "$status" -eq 0 ]
+  [ -f "$(shim_log_path open)" ]
+  grep -q "https://zoom.us/j/9876543" "$(shim_log_path open)"
+}
+
+@test "standup --join falls back when cron-meet-cal exits 1 (URL not found)" {
+  _write_nourl_fixture
+  shim_install cron-meet-cal 'exit 1'
+  run bash "${CLIFT_JARVIS_DIR}/cmds/standup/standup.sh" --join --profile test
+  [ "$status" -eq 0 ]
+  [ -f "$(shim_log_path open)" ]
+  # Internal regex still catches the zoom URL in the title.
+  grep -q "https://zoom.us/j/9876543" "$(shim_log_path open)"
+}
