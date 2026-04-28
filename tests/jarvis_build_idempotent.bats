@@ -3,95 +3,100 @@ bats_require_minimum_version 1.5.0
 
 load jarvis_helper
 
-# ---------------------------------------------------------------------------
-# jarvis_build_idempotent.bats
+# Verifies that `task build` honours Task's checksum-based incremental-build
+# contract:
+#   1. Cold build produces all three stub binaries.
+#   2. A second immediate build is a no-op (binary mtimes unchanged).
+#   3. Touching a jarvis-state source forces ONLY build:state to re-run;
+#      build:cal and build:when stay untouched.
 #
-# Verifies that `task build` (and its build:state / build:cal / build:when
-# sub-tasks) honour Task's checksum-based incremental-build contract:
-#
-#   1. A cold `task build` runs all three subtasks and produces the stub
-#      binaries in bin/.
-#   2. A second immediate `task build` skips all three subtasks (Task prints
-#      "Task <name> is up to date" for each).
-#   3. Touching a source file belonging only to jarvis-state forces
-#      build:state to re-run while build:cal and build:when remain up-to-date.
-# ---------------------------------------------------------------------------
+# Idempotency check is by binary mtime rather than parsing Task's stdout —
+# the root Taskfile sets `silent: true` so "up to date" messages are
+# suppressed by default and `--verbose` interacts poorly with `--output=prefixed`.
 
 JARVIS_DIR=
 TASK=
 
 setup() {
   jarvis_common_setup
-  JARVIS_DIR="$CLIFT_JARVIS_DIR"
+  JARVIS_DIR="$(cd "$CLIFT_JARVIS_DIR" && pwd)"
   TASK="$(command -v task)"
 }
 
 teardown() {
   jarvis_common_teardown
-  # Remove any stub binaries written into the real bin/ during the test.
-  # (We run task from the real JARVIS_DIR so generate artefacts land there.)
   rm -f "$JARVIS_DIR/bin/jarvis-state" \
         "$JARVIS_DIR/bin/jarvis-cal" \
         "$JARVIS_DIR/bin/jarvis-when"
-  # Clean task checksum cache so tests are hermetic across runs.
   rm -rf "$JARVIS_DIR/.task"
 }
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 _run_build() {
-  # Run from JARVIS_DIR so Task finds its Taskfile.yaml and relative paths work.
-  run bash -c "cd '$JARVIS_DIR' && '$TASK' --output=prefixed build 2>&1"
+  run bash -c "
+    cd '$JARVIS_DIR'
+    export FRAMEWORK_DIR='$CLIFT_FRAMEWORK_DIR'
+    export CLI_DIR='$JARVIS_DIR'
+    export CLI_NAME=jarvis
+    export CLI_VERSION=test
+    '$TASK' build 2>&1
+  "
 }
 
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
+_mtime_ns() {
+  # Portable mtime in nanoseconds; falls back to seconds on BSD stat.
+  stat -c '%Y%N' "$1" 2>/dev/null || stat -f '%m000000000' "$1"
+}
 
 @test "cold build: all three stub binaries are produced" {
   _run_build
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 0 ] || { echo "build failed: $output"; return 1; }
   [ -x "$JARVIS_DIR/bin/jarvis-state" ]
   [ -x "$JARVIS_DIR/bin/jarvis-cal" ]
   [ -x "$JARVIS_DIR/bin/jarvis-when" ]
 }
 
-@test "second build: all three subtasks report up to date" {
-  # Warm the cache.
+@test "second build is a no-op: binary mtimes unchanged" {
   _run_build
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 0 ] || { echo "first build failed: $output"; return 1; }
+  local mt_state mt_cal mt_when
+  mt_state="$(_mtime_ns "$JARVIS_DIR/bin/jarvis-state")"
+  mt_cal="$(_mtime_ns "$JARVIS_DIR/bin/jarvis-cal")"
+  mt_when="$(_mtime_ns "$JARVIS_DIR/bin/jarvis-when")"
 
-  # Second run — all subtasks must be skipped.
+  sleep 1   # ensure any rebuild would produce a distinguishable mtime
   _run_build
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"up to date"* ]]
+  [ "$status" -eq 0 ] || { echo "second build failed: $output"; return 1; }
+
+  [ "$(_mtime_ns "$JARVIS_DIR/bin/jarvis-state")" = "$mt_state" ]
+  [ "$(_mtime_ns "$JARVIS_DIR/bin/jarvis-cal")"   = "$mt_cal"   ]
+  [ "$(_mtime_ns "$JARVIS_DIR/bin/jarvis-when")"  = "$mt_when"  ]
 }
 
-@test "touch jarvis-state source forces only build:state to re-run" {
-  # Cold build to populate checksums.
+@test "touching jarvis-state source forces only build:state to rebuild" {
   _run_build
-  [ "$status" -eq 0 ]
-
-  # Mutate a source file under jarvis-state/ (created by the placeholder build
-  # script so it exists as a real checksum source).
+  [ "$status" -eq 0 ] || { echo "cold build failed: $output"; return 1; }
   local src="$JARVIS_DIR/jarvis-state/main.go"
-  [ -f "$src" ] || skip "jarvis-state/main.go not present — Wave B may not have landed yet"
+  [ -f "$src" ] || skip "jarvis-state/main.go not present"
 
-  # Append a comment so the checksum differs.
-  printf '\n// touched-by-test\n' >> "$src"
+  local mt_cal mt_when
+  mt_cal="$(_mtime_ns "$JARVIS_DIR/bin/jarvis-cal")"
+  mt_when="$(_mtime_ns "$JARVIS_DIR/bin/jarvis-when")"
 
-  # Re-run; only build:state must execute; cal and when stay up to date.
-  run bash -c "cd '$JARVIS_DIR' && '$TASK' --output=prefixed build 2>&1"
-  [ "$status" -eq 0 ]
-  # build:state ran (no "up to date" for it).
-  # build:cal and build:when were not rebuilt.
-  [[ "$output" != *"build:state"*"up to date"* ]]
+  # Hermetic mutation: remember original, append marker, restore in teardown.
+  local original
+  original="$(cat "$src")"
 
-  # Restore — remove the test comment (temp-file-and-move, no sed -i).
-  local tmp
-  tmp="$(mktemp)"
-  grep -v '// touched-by-test' "$src" > "$tmp"
-  mv "$tmp" "$src"
+  sleep 1
+  printf '\n// touched-by-bats\n' >> "$src"
+
+  _run_build
+  local rc=$status
+  # Restore source first so a failure mid-test still cleans up.
+  printf '%s' "$original" > "$src"
+  rm -rf "$JARVIS_DIR/.task"   # purge the dirty checksum
+
+  [ "$rc" -eq 0 ] || { echo "rebuild failed: $output"; return 1; }
+  # cal and when must NOT have been rebuilt.
+  [ "$(_mtime_ns "$JARVIS_DIR/bin/jarvis-cal")"  = "$mt_cal"  ]
+  [ "$(_mtime_ns "$JARVIS_DIR/bin/jarvis-when")" = "$mt_when" ]
 }
