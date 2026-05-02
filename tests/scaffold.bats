@@ -52,6 +52,37 @@ teardown() {
   [[ "$output" == *"command names"* ]]
 }
 
+@test "new:cmd accepts dashed name (build-dev)" {
+  bash "$FRAMEWORK_DIR/lib/scaffold/scaffold.sh" "build-dev" "Build dev" "$TEST_DIR" "$FRAMEWORK_DIR"
+  [ -f "$TEST_DIR/cmds/build-dev/Taskfile.yaml" ]
+  [ -x "$TEST_DIR/cmds/build-dev/build-dev.sh" ]
+}
+
+@test "new:cmd accepts dotted name (run.tests)" {
+  bash "$FRAMEWORK_DIR/lib/scaffold/scaffold.sh" "run.tests" "Run tests" "$TEST_DIR" "$FRAMEWORK_DIR"
+  [ -f "$TEST_DIR/cmds/run.tests/Taskfile.yaml" ]
+  [ -x "$TEST_DIR/cmds/run.tests/run.tests.sh" ]
+}
+
+@test "new:cmd accepts colon-segmented name (db:migrate)" {
+  bash "$FRAMEWORK_DIR/lib/scaffold/scaffold.sh" "db" "Database tasks" "$TEST_DIR" "$FRAMEWORK_DIR"
+  bash "$FRAMEWORK_DIR/lib/scaffold/scaffold.sh" "db:migrate" "Run migrations" "$TEST_DIR" "$FRAMEWORK_DIR"
+  [ -f "$TEST_DIR/cmds/db/Taskfile.yaml" ]
+  [ -f "$TEST_DIR/cmds/db/db.migrate.sh" ]
+}
+
+@test "new:cmd rejects whitespace in name" {
+  run bash "$FRAMEWORK_DIR/lib/scaffold/scaffold.sh" "foo bar" "x" "$TEST_DIR" "$FRAMEWORK_DIR"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"command names"* ]]
+}
+
+@test "new:cmd rejects shell-unsafe name (semicolon)" {
+  run bash "$FRAMEWORK_DIR/lib/scaffold/scaffold.sh" "foo;bar" "x" "$TEST_DIR" "$FRAMEWORK_DIR"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"command names"* ]]
+}
+
 @test "new:subcmd creates separate script file per subcommand" {
   bash "$FRAMEWORK_DIR/lib/scaffold/scaffold.sh" "deploy" "Deploy" "$TEST_DIR" "$FRAMEWORK_DIR"
   bash "$FRAMEWORK_DIR/lib/scaffold/scaffold.sh" "deploy:prod" "Deploy to prod" "$TEST_DIR" "$FRAMEWORK_DIR"

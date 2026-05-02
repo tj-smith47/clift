@@ -87,6 +87,16 @@ _clift_help_list_default() {
     }
   fi
 
+  # Read `framework_namespace` from `.clift.yaml` (if present). When set, the
+  # framework's built-ins live under that namespace via the aggregator include
+  # in `lib/_framework_aggregate.yaml` — the help listing collapses them into
+  # a single `<ns>:*` row instead of repeating each framework command.
+  local framework_ns=""
+  if [[ -f "${cli_dir}/.clift.yaml" ]]; then
+    framework_ns="$(yq '.framework_namespace // ""' "${cli_dir}/.clift.yaml" 2>/dev/null || echo "")"
+    [[ "$framework_ns" == "null" ]] && framework_ns=""
+  fi
+
   # Load hidden-command map from index.json so we can filter commands marked
   # with `vars.HIDDEN: true`. Missing index is treated as "nothing hidden".
   local hidden_map='{}'
@@ -155,7 +165,9 @@ _clift_help_list_default() {
   local all_entries
   all_entries=$(echo "$json" | jq -r \
       --argjson hidden "$hidden_map" \
-      --argjson aliases "$aliases_map" '
+      --argjson aliases "$aliases_map" \
+      --arg framework_ns "$framework_ns" \
+      --arg cli_name "$CLI_NAME" '
     # A command is hidden if EITHER its bare name OR its "<name>:default" key is
     # marked hidden:true in index.json. Root-level single tasks use the bare key;
     # namespaced groups with a default subtask use "<ns>:default".
@@ -198,17 +210,26 @@ _clift_help_list_default() {
       | .key as $ns
       | select(is_hidden($ns) | not)
       | (
-          [ (.value.tasks // [])[]
-            | select(.name | test(":[_]") | not)
-          ] as $all
-          | ($all | map(select(.name == ($ns + ":default"))) | first) as $def
-          | ($all | map(select(.name != ($ns + ":default"))) | first) as $fallback
-          | ($def // $fallback) as $pick
-          | if $pick == null then empty
-            else
-              (($pick.desc // "") | if . == "" then "(group)" else . end) as $desc
-              | "Commands\t\(with_aliases($ns))\t\($desc)"
-            end
+          # framework_namespace mode: collapse the entire framework namespace
+          # into a single `<ns>:*` row pointing users at `<cli> <ns>` for the
+          # full framework command list. The aggregator include re-exports
+          # config/version/update/... under <ns> — listing each would clutter
+          # the top-level view of user commands.
+          if ($framework_ns != "" and $ns == $framework_ns) then
+            "Commands\t\($ns):*\tFramework commands (run `\($cli_name) \($ns)` to list)"
+          else
+            [ (.value.tasks // [])[]
+              | select(.name | test(":[_]") | not)
+            ] as $all
+            | ($all | map(select(.name == ($ns + ":default"))) | first) as $def
+            | ($all | map(select(.name != ($ns + ":default"))) | first) as $fallback
+            | ($def // $fallback) as $pick
+            | if $pick == null then empty
+              else
+                (($pick.desc // "") | if . == "" then "(group)" else . end) as $desc
+                | "Commands\t\(with_aliases($ns))\t\($desc)"
+              end
+          end
         )
     )
   ')

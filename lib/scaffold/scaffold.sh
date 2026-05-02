@@ -20,9 +20,10 @@ source "${FRAMEWORK_DIR}/lib/flags/name_rules.sh"
 
 trap 'rm -f "${_tmp:-}"' EXIT
 
-# Validate command name: lowercase, starts with letter, colons for subcommands, no dashes
+# Validate command name (regex from lib/flags/name_rules.sh): alphanumeric
+# start, then any of [A-Za-z0-9._:-]. Colons namespace subcommands.
 if [[ ! "$CMD_NAME" =~ $CLIFT_CMD_NAME_RE ]]; then
-  log_error "Invalid: command names must be lowercase alphanumeric, use colons for subcommands (no dashes)"
+  log_error "Invalid: command names must start with an alphanumeric and contain only [A-Za-z0-9._:-]"
   exit 1
 fi
 

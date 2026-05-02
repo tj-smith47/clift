@@ -1,16 +1,15 @@
 version: '3'
 
+# Deprecation stub — `clift import` was retired in favor of
+# `clift init <name> --from PATH`. The default task here just dispatches
+# to redirect.sh which prints a one-line stderr message and exits 2.
+# Hidden from --help (vars.HIDDEN: true) so it doesn't surface as a real
+# command, but still discoverable when typed so the user gets the redirect.
+
+vars:
+  HIDDEN: true
+
 tasks:
   default:
-    desc: "Import go-task tasks as clift commands"
-    summary: |
-      Wrap existing go-task tasks as clift commands without rewriting them.
-      Each task gets a generated cmds/<name>/ directory and a thin wrapper
-      that execs the original task via go-task — all task semantics (deps,
-      sources, status, generates) are preserved.
-
-      Examples:
-        {{.CLI_NAME}} import                      # from Taskfile.user.yaml if present
-        {{.CLI_NAME}} import --from ./tasks.yaml
-        {{.CLI_NAME}} import --dry-run
-    cmd: "'{{.FRAMEWORK_DIR}}/lib/import/import.sh' '{{.CLI_DIR}}' '{{.FRAMEWORK_DIR}}' {{.CLI_ARGS}}"
+    desc: "(removed — use 'clift init --from PATH')"
+    cmd: "'{{.FRAMEWORK_DIR}}/lib/import/redirect.sh'"

@@ -32,6 +32,22 @@ tasks:
         msg: "Usage: task setup:cli -- <directory>"
     cmd: "{{.FRAMEWORK_DIR}}/lib/setup/setup.sh '{{._CLI_DIR}}' '{{.FRAMEWORK_DIR}}' '{{._CLI_NAME}}' '{{._CLI_VERSION}}' '{{._LOG_THEME}}' '{{.CLIFT_MODE | default \"task\"}}'"
 
+  init:from:
+    desc: "Bootstrap a CLI from an existing Taskfile"
+    summary: |
+      Convert an existing go-task Taskfile into a brand-new clift CLI.
+      Usage:
+        task init:from -- <dir> --from PATH [--prefix STR]
+                                            [--rename SRC=DST]...
+                                            [--framework-namespace NS]
+    vars:
+      _ARGS:
+        sh: echo "{{.CLI_ARGS}}"
+    preconditions:
+      - sh: '[[ -n "{{.CLI_ARGS}}" ]]'
+        msg: "Usage: task init:from -- <dir> --from PATH [--prefix STR] [--rename SRC=DST]... [--framework-namespace NS]"
+    cmd: "{{.FRAMEWORK_DIR}}/lib/setup/init_from.sh {{._ARGS}}"
+
   setup:versioning:
     desc: "Add cfgd versioning to an existing CLI"
     vars:

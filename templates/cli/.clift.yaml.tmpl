@@ -2,6 +2,12 @@ name: %%CLI_NAME%%
 version: %%CLI_VERSION%%
 description: ""
 
+# Move framework built-ins (config, version, update, completion, new, …)
+# under a single namespace so the top level stays free for your own
+# commands. Setting this to e.g. `clift` makes `mycli config` available
+# as `mycli clift:config` and frees `mycli config` for a user command.
+# framework_namespace: clift
+
 # List dependencies here so teammates know what to install.
 # These are informational — not automatically checked or installed.
 dependencies:

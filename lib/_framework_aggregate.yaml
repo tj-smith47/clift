@@ -1,0 +1,44 @@
+version: '3'
+
+# Aggregator: re-exports clift's framework commands as a single include
+# point so a CLI can mount them under one namespace (typically `clift`).
+#
+# Usage in a CLI's root Taskfile.yaml when `framework_namespace: clift`
+# is set in `.clift.yaml`:
+#
+#   includes:
+#     clift:
+#       taskfile: '{{.FRAMEWORK_DIR}}/lib/_framework_aggregate.yaml'
+#
+# A user invocation `mycli clift:config show` then resolves to this
+# file's `config:show` task, which in turn delegates to the framework's
+# `lib/config/Taskfile.yaml`.
+#
+# go-task supports nested namespace via includes-in-includes
+# (verified against go-task v3.50.0): a top-level `clift:` include of
+# this file plus this file's `config:` include of `./config` resolves
+# tasks as `clift:config:show`, `clift:config:default`, etc.
+#
+# This aggregator only mounts user-facing framework commands. Private
+# infrastructure (`_help`, `_log`, flags, router, prompt, etc.) stays
+# at the root level so wrapper dispatch — which calls `_help:list`
+# directly — keeps working unchanged.
+
+includes:
+  config:
+    taskfile: ./config
+  version:
+    taskfile: ./version
+  update:
+    taskfile: ./update
+  completion:
+    taskfile: ./completion
+  new:
+    taskfile: ./scaffold
+
+tasks:
+  default:
+    desc: "Framework commands (clift built-ins)"
+    silent: true
+    cmds:
+      - 'echo "Use {{.CLI_NAME}} <ns>:<command> — try config, version, update, new, completion"'
