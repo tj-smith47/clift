@@ -91,10 +91,10 @@ YAML
   [[ "$output" == *"env=staging"* ]]
 
   # Optional bool absent → go-task source default applies (dry=false).
-  # Note: with `--dry-run` flag, go-task's task-level vars: defaults are
-  # NOT overridable from the CLI (see lib/setup/var_inference.sh header) —
-  # this test only asserts the source default fires when the flag is
-  # absent, which is the case the framework can guarantee.
+  # Note: `--dry-run` is inert because go-task drops CLI assignments to
+  # task-scoped vars (see lib/setup/var_inference.sh header). The init
+  # output lists this in its `==> Caveats` block; this test only asserts
+  # the source default fires when the flag is absent.
   run -0 "$TEST_DIR/mycli/bin/mycli" deploy --env=staging
   [[ "$output" == *"dry=false"* ]]
 }
@@ -428,4 +428,94 @@ YAML
 
   run -0 "$TEST_DIR/mycli/bin/mycli" greet
   [[ "$output" == *"greet ran"* ]]
+}
+
+# --- 14. Caveats summary -----------------------------------------------
+
+@test "caveats: task-scoped vars: produce a Caveats block listing each inert flag" {
+  cat > "$TEST_DIR/source.yaml" <<'YAML'
+version: '3'
+tasks:
+  deploy:
+    vars: {DRY_RUN: false}
+    cmd: 'echo dry={{.DRY_RUN}}'
+  build:
+    vars: {RELEASE: true, TARGET: "x86"}
+    cmd: 'echo release={{.RELEASE}} target={{.TARGET}}'
+  ship:
+    cmd: 'echo ship'
+YAML
+  _run_init_from "$TEST_DIR/mycli" --from "$TEST_DIR/source.yaml"
+  [ "$status" -eq 0 ]
+
+  # Header + count + per-flag rows.
+  [[ "$output" == *"==> Caveats"* ]]
+  [[ "$output" == *"3 inferred flags will not honor CLI overrides"* ]]
+  [[ "$output" == *"mycli deploy --dry-run"* ]]
+  [[ "$output" == *"mycli build --release"* ]]
+  [[ "$output" == *"mycli build --target"* ]]
+  [[ "$output" == *"vars.DRY_RUN in tasks.deploy"* ]]
+  [[ "$output" == *"vars.RELEASE in tasks.build"* ]]
+
+  # Remediation block.
+  [[ "$output" == *'$CLIFT_FLAG_<NAME>'* ]]
+  [[ "$output" == *'taskfile.dev/usage/#variables'* ]]
+
+  # ship is passthrough — no caveat row for it.
+  [[ "$output" != *"vars.SHIP"* ]]
+  [[ "$output" != *"mycli ship --"* ]]
+}
+
+@test "caveats: mixed wildcard + parsed → wildcard task is excluded" {
+  cat > "$TEST_DIR/source.yaml" <<'YAML'
+version: '3'
+tasks:
+  release:*:
+    desc: Release a target
+    cmd: 'echo released'
+  build:
+    vars: {RELEASE: false}
+    cmd: 'echo build {{.RELEASE}}'
+YAML
+  _run_init_from "$TEST_DIR/mycli" --from "$TEST_DIR/source.yaml"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"==> Caveats"* ]]
+  # Singular grammar at count=1.
+  [[ "$output" == *"1 inferred flag will not honor"* ]]
+  [[ "$output" == *"mycli build --release"* ]]
+  # Wildcard task is router-passthrough; should not appear.
+  [[ "$output" != *"mycli release"* ]]
+  [[ "$output" != *"vars.RELEASE in tasks.release"* ]]
+}
+
+@test "caveats: single-task Taskfile renders correctly" {
+  cat > "$TEST_DIR/source.yaml" <<'YAML'
+version: '3'
+tasks:
+  only:
+    vars: {SUPER_LONG_NAME_HERE: "x"}
+    cmd: 'echo {{.SUPER_LONG_NAME_HERE}}'
+YAML
+  _run_init_from "$TEST_DIR/mycli" --from "$TEST_DIR/source.yaml"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"1 inferred flag will not honor"* ]]
+  # Underscore → dash conversion mirrors var_inference._vi_to_flag_name.
+  [[ "$output" == *"mycli only --super-long-name-here"* ]]
+  [[ "$output" == *"vars.SUPER_LONG_NAME_HERE in tasks.only"* ]]
+}
+
+@test "caveats: requires.vars only → no Caveats block (those flags work)" {
+  cat > "$TEST_DIR/source.yaml" <<'YAML'
+version: '3'
+tasks:
+  foo:
+    cmd: echo foo
+  bar:
+    requires:
+      vars: [ENV]
+    cmd: 'echo {{.ENV}}'
+YAML
+  _run_init_from "$TEST_DIR/mycli" --from "$TEST_DIR/source.yaml"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"Caveats"* ]]
 }

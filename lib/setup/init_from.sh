@@ -336,6 +336,84 @@ _detect_collisions() {
   return 0
 }
 
+# _emit_caveats <rewritten-doc> <basename>
+# Prints a homebrew-style `==> Caveats` block listing every task-scoped
+# `vars: {K: V}` entry that got inferred into a clift flag. go-task drops
+# CLI assignments to task-scoped vars (they are constants in go-task's
+# variable model — only top-level `vars:` are CLI-overridable), so the
+# generated `--<flag>` parses but the value never reaches the task `cmd`.
+#
+# Surfacing this as a consolidated post-init block — rather than a noisy
+# per-flag warning during conversion — gives the user one actionable
+# punch list of what is broken and how to fix it. Mirrors the way `brew
+# install <foo>` summarizes follow-up steps at the end of an install.
+#
+# Emits nothing when no task-scoped vars exist to caveat. Skips wildcard
+# and passthrough tasks (those omit FLAGS entirely — see wrapper_writer).
+# Skips `requires_vars` (those ARE satisfiable from the CLI; the parser
+# enforces presence and the wrapper assigns them as top-level vars).
+_emit_caveats() {
+  local doc="$1"
+  local basename="$2"
+
+  # Project to {task, var, flag} tuples — flag-name conversion mirrors
+  # var_inference._vi_to_flag_name (lowercase + underscores → dashes).
+  local caveats_json
+  caveats_json="$(jq -c '
+    [ .tasks[]
+      | select((.passthrough != true) and (.wildcard != true))
+      | select((.vars | length) > 0)
+      | .name as $task
+      | .vars
+      | to_entries[]
+      | {
+          task: $task,
+          var:  .key,
+          flag: (.key | ascii_downcase | gsub("_"; "-"))
+        }
+    ]
+  ' <<< "$doc")"
+
+  local count
+  count="$(jq -r 'length' <<< "$caveats_json")"
+  if [[ "$count" -eq 0 ]]; then
+    return 0
+  fi
+
+  local plural="flags"
+  if [[ "$count" -eq 1 ]]; then
+    plural="flag"
+  fi
+
+  echo
+  echo "==> Caveats"
+  echo
+  printf '%s inferred %s will not honor CLI overrides:\n\n' "$count" "$plural"
+  # Column-align the source-info parens so the rows scan cleanly when flag
+  # widths vary (e.g., `--env` next to `--super-long-name-here`). Width is
+  # computed off the rendered "  <base> <task> --<flag>" prefix.
+  jq -r --arg base "$basename" '
+    def prefix: "  " + $base + " " + .task + " --" + .flag;
+    . as $rows
+    | (($rows | map(prefix | length) | max) // 0) as $w
+    | $rows[]
+    | (prefix | . + (" " * ($w - length)))
+      + "    (vars." + .var + " in tasks." + .task + ")"
+  ' <<< "$caveats_json"
+  cat <<'CAVEATS'
+
+go-task task-scoped vars: are constants — `task <name> KEY=value` is
+silently dropped. Top-level vars: ARE CLI-overridable.
+
+To make the flags above functional, either:
+  1. Edit cmds/<top>/<task>.sh to read $CLIFT_FLAG_<NAME> directly, or
+  2. Rewrite the source Taskfile to use {{.X | default "v"}} templates
+     and re-run `clift init --from`.
+
+See: https://taskfile.dev/usage/#variables
+CAVEATS
+}
+
 # _splice_user_includes <root-taskfile> <tops-list...>
 # Replaces the user-includes sentinel line with one include row per top-
 # level command (deduped, in input order). Temp-file-and-move per project
@@ -626,6 +704,10 @@ main() {
   echo "Try it:"
   echo "  cd ${dest_abs}"
   echo "  ./bin/${dest_basename} --help"
+
+  # Caveats — task-scoped vars: that go-task drops on the floor. No-op
+  # when the source has no such declarations.
+  _emit_caveats "$rewritten_doc" "$dest_basename"
 }
 
 # Direct invocation only — sourcing this file is unsupported.

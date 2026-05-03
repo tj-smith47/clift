@@ -29,22 +29,25 @@
 # `KEY=value` assignment to go-task only when CLIFT_FLAG_<KEY> is set —
 # absence forwards nothing.
 #
-# Caveats from go-task semantics (not fixable here):
+# Caveats from go-task semantics:
 #
 #   * Task-level `vars: {K: V}` defaults are NOT overridable from the
 #     command line. go-task treats them as task-scoped constants. The
 #     generated wrapper still surfaces `--dry-run` as a clift flag, but
 #     when the source Taskfile writes `vars: {DRY_RUN: false}` (a literal
-#     scalar), `task ... DRY_RUN=true` has no effect. Users who want CLI
-#     overrides should rewrite the source as `{{.DRY_RUN | default "false"}}`
-#     so go-task picks up the assignment, or hoist the var to top-level
-#     `vars:` (which IS overridable). See:
-#     https://taskfile.dev/usage/#variables
+#     scalar), `task ... DRY_RUN=true` has no effect.
+#
+#     `init_from.sh::_emit_caveats` collects every such flag and prints a
+#     consolidated `==> Caveats` block after init so users see one
+#     actionable punch list of what is inert and how to fix it (edit the
+#     command script to read `$CLIFT_FLAG_<NAME>` directly, or rewrite
+#     the source as `{{.X | default "v"}}`).
+#     See: https://taskfile.dev/usage/#variables
 #
 #   * `requires.vars: [X]` IS satisfiable from the command line. The
 #     wrapper emits `X=${CLIFT_FLAG_X}` when --x is provided, and the
 #     parser's `required: true` check guarantees the env var is set
-#     before the wrapper runs.
+#     before the wrapper runs. `_emit_caveats` skips these.
 #
 #   * `vars: {RELEASE: true}` — no `--no-release` flag is generated, so
 #     the user cannot toggle this back off from the CLI even when the
