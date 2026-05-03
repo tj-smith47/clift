@@ -31,7 +31,7 @@ includes:
   _log:
     taskfile: '{{.FRAMEWORK_DIR}}/lib/log'
 
-  # Framework tools (visible)
+  # __FRAMEWORK_TOOLS_BEGIN__
   new:
     taskfile: '{{.FRAMEWORK_DIR}}/lib/scaffold'
   config:
@@ -40,6 +40,7 @@ includes:
     taskfile: '{{.FRAMEWORK_DIR}}/lib/update'
   completion:
     taskfile: '{{.FRAMEWORK_DIR}}/lib/completion'
+  # __FRAMEWORK_TOOLS_END__
 
   # User commands (added by scaffolder)
 

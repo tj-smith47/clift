@@ -327,3 +327,60 @@ SCRIPT
   [ "$status" -eq 0 ]
   [[ "$output" == *"prod-script"* ]]
 }
+
+@test "passthrough subcommand resolves to <top>.<sub>.sh directly" {
+  # Mirrors the parsed-path behaviour above on the passthrough route.
+  # When no FLAGS are declared, the router still tries the sub-named
+  # file before falling back to <top>.sh — so init_from.sh's emitted
+  # `lint:eslint` task lands at `cmds/lint/lint.eslint.sh` without a
+  # dispatcher shim.
+  rm -rf "$TEST_DIR"/*
+  mkdir -p "$TEST_DIR/cmds/lint"
+  cat > "$TEST_DIR/Taskfile.yaml" <<'YAML'
+version: '3'
+dotenv: ['.env']
+includes:
+  lint:
+    taskfile: ./cmds/lint
+tasks:
+  default:
+    cmd: echo root
+YAML
+  cat > "$TEST_DIR/.env" <<ENV
+CLI_NAME=testcli
+CLI_VERSION=1.0.0
+CLI_DIR=$TEST_DIR
+FRAMEWORK_DIR=$FRAMEWORK_DIR
+ENV
+  cat > "$TEST_DIR/cmds/lint/Taskfile.yaml" <<'YAML'
+version: '3'
+tasks:
+  default:
+    cmd: echo lint-default
+  eslint:
+    cmd: echo lint-eslint
+YAML
+  cat > "$TEST_DIR/cmds/lint/lint.sh" << 'SCRIPT'
+#!/usr/bin/env bash
+echo "default-script"
+SCRIPT
+  cat > "$TEST_DIR/cmds/lint/lint.eslint.sh" << 'SCRIPT'
+#!/usr/bin/env bash
+echo "eslint-script"
+SCRIPT
+  chmod +x "$TEST_DIR/cmds/lint/lint.sh" "$TEST_DIR/cmds/lint/lint.eslint.sh"
+
+  bash "$FRAMEWORK_DIR/lib/flags/compile.sh" "$TEST_DIR"
+
+  # Bare top falls back to <top>.sh (no <top>.default.sh exists).
+  CLIFT_ARG_COUNT=0 CLI_DIR="$TEST_DIR" \
+  run bash "$FRAMEWORK_DIR/lib/router/router.sh" "lint:default"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"default-script"* ]]
+
+  # Sub-segment goes directly to <top>.<sub>.sh.
+  CLIFT_ARG_COUNT=0 CLI_DIR="$TEST_DIR" \
+  run bash "$FRAMEWORK_DIR/lib/router/router.sh" "lint:eslint"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"eslint-script"* ]]
+}

@@ -347,3 +347,65 @@ SH
   [ "$status" -eq 0 ]
   [[ "$output" != *"Shell completion for"* ]]
 }
+
+# ---- CLIFT_FRAMEWORK_NAMESPACE on blank init ---------------------------
+
+@test "setup.sh: CLIFT_FRAMEWORK_NAMESPACE swaps Taskfile includes for aggregator" {
+  CLIFT_FRAMEWORK_NAMESPACE=clift bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
+    "$TEST_DIR/fwns1" "$FRAMEWORK_DIR" "fwns1" "1.0.0" "minimal" "task"
+  [ -f "$TEST_DIR/fwns1/Taskfile.yaml" ]
+
+  # The aggregator row replaces the per-command framework rows.
+  run grep -F "_framework_aggregate.yaml" "$TEST_DIR/fwns1/Taskfile.yaml"
+  [ "$status" -eq 0 ]
+  run grep -F "lib/scaffold" "$TEST_DIR/fwns1/Taskfile.yaml"
+  [ "$status" -ne 0 ]
+  run grep -F "lib/config" "$TEST_DIR/fwns1/Taskfile.yaml"
+  [ "$status" -ne 0 ]
+
+  # _help and _log stay at the top level (used by the wrapper directly).
+  run grep -F "lib/help" "$TEST_DIR/fwns1/Taskfile.yaml"
+  [ "$status" -eq 0 ]
+  run grep -F "lib/log" "$TEST_DIR/fwns1/Taskfile.yaml"
+  [ "$status" -eq 0 ]
+}
+
+@test "setup.sh: CLIFT_FRAMEWORK_NAMESPACE writes framework_namespace to .clift.yaml" {
+  CLIFT_FRAMEWORK_NAMESPACE=clift bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
+    "$TEST_DIR/fwns2" "$FRAMEWORK_DIR" "fwns2" "1.0.0" "minimal" "task"
+  [ -f "$TEST_DIR/fwns2/.clift.yaml" ]
+
+  ns="$(yq '.framework_namespace' "$TEST_DIR/fwns2/.clift.yaml")"
+  [ "$ns" = "clift" ]
+}
+
+@test "setup.sh: CLIFT_FRAMEWORK_NAMESPACE honors arbitrary namespace name" {
+  CLIFT_FRAMEWORK_NAMESPACE=tools bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
+    "$TEST_DIR/fwns3" "$FRAMEWORK_DIR" "fwns3" "1.0.0" "minimal" "task"
+  ns="$(yq '.framework_namespace' "$TEST_DIR/fwns3/.clift.yaml")"
+  [ "$ns" = "tools" ]
+  run grep -F "  tools:" "$TEST_DIR/fwns3/Taskfile.yaml"
+  [ "$status" -eq 0 ]
+}
+
+@test "setup.sh: blank CLIFT_FRAMEWORK_NAMESPACE keeps default per-command includes" {
+  bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
+    "$TEST_DIR/fwns4" "$FRAMEWORK_DIR" "fwns4" "1.0.0" "minimal" "task"
+
+  # All per-command framework rows present.
+  for lib in scaffold config update completion; do
+    run grep -F "lib/${lib}" "$TEST_DIR/fwns4/Taskfile.yaml"
+    [ "$status" -eq 0 ]
+  done
+
+  # framework_namespace field absent (template ships it commented).
+  has_ns="$(yq 'has("framework_namespace")' "$TEST_DIR/fwns4/.clift.yaml")"
+  [ "$has_ns" = "false" ]
+}
+
+@test "setup.sh: invalid CLIFT_FRAMEWORK_NAMESPACE rejected with clear error" {
+  run bash -c "CLIFT_FRAMEWORK_NAMESPACE='Bad NS' bash '$FRAMEWORK_DIR/lib/setup/setup.sh' \
+    '$TEST_DIR/fwns5' '$FRAMEWORK_DIR' fwns5 1.0.0 minimal task"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"CLIFT_FRAMEWORK_NAMESPACE must be lowercase alphanumeric"* ]]
+}

@@ -11,9 +11,23 @@ CLI_VERSION="${4:-0.1.0}"
 LOG_THEME="${5:-icons-color}"
 CLIFT_MODE="${6:-}"
 
+# Optional env var: when non-empty, the rendered Taskfile.yaml's framework
+# include rows are replaced with the namespace aggregator, and .clift.yaml
+# gets a `framework_namespace: <ns>` field. Mirrors the behaviour of
+# `clift init --from --framework-namespace=<ns>` so a blank init can opt
+# into the same layout without editing files post-bootstrap.
+FRAMEWORK_NAMESPACE="${CLIFT_FRAMEWORK_NAMESPACE:-}"
+
 if [[ -z "$TARGET" || -z "$FRAMEWORK_DIR" ]]; then
   echo "error: setup.sh requires TARGET_DIR and FRAMEWORK_DIR" >&2
   exit 1
+fi
+
+if [[ -n "$FRAMEWORK_NAMESPACE" ]]; then
+  if [[ ! "$FRAMEWORK_NAMESPACE" =~ ^[a-z][a-z0-9_-]*$ ]]; then
+    echo "error: CLIFT_FRAMEWORK_NAMESPACE must be lowercase alphanumeric (got '${FRAMEWORK_NAMESPACE}')" >&2
+    exit 1
+  fi
 fi
 
 source "${FRAMEWORK_DIR}/lib/log/log.sh"
@@ -131,16 +145,91 @@ else
   mv "$_tmp" "$ENV_FILE"
 fi
 
+# Replace the framework-tools include block (between the
+# `__FRAMEWORK_TOOLS_BEGIN__` / `__FRAMEWORK_TOOLS_END__` sentinels) with
+# a single aggregator row mounted under <ns>. Mirrors the layout
+# write_cli_skeleton emits for `clift init --from --framework-namespace`.
+# Temp-file-and-move per project convention — no sed -i.
+_apply_framework_namespace_to_taskfile() {
+  local taskfile="$1" ns="$2"
+  local tmp
+  tmp="$(mktemp "${taskfile}.XXXXXX")"
+  local in_block=0
+  local replaced=0
+  local _line
+  while IFS= read -r _line || [[ -n "$_line" ]]; do
+    if [[ "$_line" == *"# __FRAMEWORK_TOOLS_BEGIN__"* ]]; then
+      in_block=1
+      printf '  %s:\n' "$ns"
+      printf "    taskfile: '{{.FRAMEWORK_DIR}}/lib/_framework_aggregate.yaml'\n"
+      replaced=1
+      continue
+    fi
+    if [[ "$_line" == *"# __FRAMEWORK_TOOLS_END__"* ]]; then
+      in_block=0
+      continue
+    fi
+    if [[ "$in_block" -eq 1 ]]; then
+      continue
+    fi
+    printf '%s\n' "$_line"
+  done < "$taskfile" > "$tmp"
+
+  if [[ "$replaced" -eq 0 ]]; then
+    rm -f "$tmp"
+    log_error "framework-tools sentinel not found in ${taskfile}"
+    return 1
+  fi
+
+  mv "$tmp" "$taskfile"
+}
+
+# Set the `framework_namespace:` field in .clift.yaml. The template ships
+# the field commented out (`# framework_namespace: clift`); when present
+# we replace that comment line with the live setting. If absent (custom
+# .clift.yaml without the schema comment) we insert after `description:`
+# instead. Exactly one line is added.
+_apply_framework_namespace_to_clift_yaml() {
+  local clift_yaml="$1" ns="$2"
+  local has_comment=0
+  if grep -q '^# framework_namespace:' "$clift_yaml"; then
+    has_comment=1
+  fi
+
+  local tmp
+  tmp="$(mktemp "${clift_yaml}.XXXXXX")"
+  local _line
+  while IFS= read -r _line || [[ -n "$_line" ]]; do
+    if [[ "$has_comment" -eq 1 && "$_line" == "# framework_namespace:"* ]]; then
+      printf 'framework_namespace: %s\n' "$ns"
+      continue
+    fi
+    printf '%s\n' "$_line"
+    if [[ "$has_comment" -eq 0 && "$_line" == 'description:'* ]]; then
+      printf 'framework_namespace: %s\n' "$ns"
+      has_comment=1  # block any future inserts in the same pass
+    fi
+  done < "$clift_yaml" > "$tmp"
+
+  mv "$tmp" "$clift_yaml"
+}
+
 # Render .clift.yaml (only if not exists)
 METADATA="${TARGET}/.clift.yaml"
 if [[ ! -f "$METADATA" ]]; then
   _render_template "${FRAMEWORK_DIR}/templates/cli/.clift.yaml.tmpl" "$METADATA"
+  if [[ -n "$FRAMEWORK_NAMESPACE" ]]; then
+    _apply_framework_namespace_to_clift_yaml "$METADATA" "$FRAMEWORK_NAMESPACE"
+  fi
 fi
 
 # Render Taskfile.yaml (only if not exists)
 TASKFILE="${TARGET}/Taskfile.yaml"
 if [[ ! -f "$TASKFILE" ]]; then
   _render_template "${FRAMEWORK_DIR}/templates/cli/Taskfile.yaml.tmpl" "$TASKFILE"
+  if [[ -n "$FRAMEWORK_NAMESPACE" ]]; then
+    _apply_framework_namespace_to_taskfile "$TASKFILE" "$FRAMEWORK_NAMESPACE"
+  fi
 fi
 
 # Render cfgd module.yaml only when cfgd versioning is requested

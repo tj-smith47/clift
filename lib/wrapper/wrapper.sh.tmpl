@@ -11,7 +11,12 @@ set -euo pipefail
 exec 2> >(stdbuf -oL -eL grep -Ev $'^(\x1b\\[[0-9;]*m)*task: Failed to run task ' >&2)
 
 export FRAMEWORK_DIR="%%FRAMEWORK_DIR%%"
-export CLI_DIR="%%CLI_DIR%%"
+# CLI_DIR self-locates from this script's path so renaming or moving the
+# CLI directory keeps the wrapper working without regenerating bin/.
+# Always derived from $0 — an inherited CLI_DIR from a parent process
+# would point at the wrong CLI, never this one.
+CLI_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export CLI_DIR
 CLI_NAME="%%CLI_NAME%%"
 CLI_VERSION="%%CLI_VERSION%%"
 export CLI_NAME CLI_VERSION

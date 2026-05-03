@@ -146,10 +146,15 @@ _run_writer() {
   [ -f "$TEST_DIR/mycli/bin/mycli" ]
   [ -x "$TEST_DIR/mycli/bin/mycli" ]
 
-  # Sanity: placeholders were substituted, not left raw.
+  # Placeholders were substituted, not left raw.
   run grep -F '%%CLI_NAME%%' "$TEST_DIR/mycli/bin/mycli"
   [ "$status" -ne 0 ]
+  # CLI_DIR is no longer baked: bin/<name> self-locates from $0 so a
+  # `mv` of the whole CLI dir keeps working without re-rendering. The
+  # absolute path under $TEST_DIR/mycli must not appear.
   run grep -F "$TEST_DIR/mycli" "$TEST_DIR/mycli/bin/mycli"
+  [ "$status" -ne 0 ]
+  run grep -F 'BASH_SOURCE' "$TEST_DIR/mycli/bin/mycli"
   [ "$status" -eq 0 ]
 }
 

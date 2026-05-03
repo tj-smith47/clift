@@ -560,12 +560,9 @@ main() {
   # ONE block per task (default for the bare/`:default`, named blocks
   # for sub-segments). Each task still gets its own .sh script.
   #
-  # When multiple tasks share a top, the bare-top wrapper file (`lint.sh`)
-  # is reserved for a dispatcher — the router's passthrough path resolves
-  # every task in the group to `cmds/<top>/<top>.sh` regardless of
-  # sub-segment, so a single physical script must dispatch to the right
-  # per-task wrapper based on CLIFT_TASK. The bare-top task's actual
-  # body moves to `<top>.default.sh`.
+  # The router resolves `<top>:<sub>` to `cmds/<top>/<top>.<sub>.sh`
+  # directly (with a fallback to `<top>.sh`), so each task lands at its
+  # natural filename — no dispatcher shim, no bare-top relocation.
   #
   # We track unique tops in input order so step 9's include-splice keeps
   # the user's task ordering.
@@ -574,9 +571,8 @@ main() {
 
   local -a tops_seen=()
   declare -A tops_set=()
-  declare -A top_count=()
 
-  # First pass: count tasks per top and record unique-top order.
+  # First pass: emit per-task wrappers and record unique-top order.
   local i
   for (( i=0; i<task_count; i++ )); do
     local entry name top
@@ -587,40 +583,16 @@ main() {
     if [[ -z "${tops_set[$top]:-}" ]]; then
       tops_set[$top]=1
       tops_seen+=("$top")
-      top_count[$top]=1
-    else
-      top_count[$top]=$((${top_count[$top]} + 1))
     fi
-  done
-
-  # Second pass: emit per-task wrappers. Bare-top wrappers in a group of
-  # 2+ go to `<top>.default.sh` so the dispatcher script can claim
-  # `<top>.sh`.
-  for (( i=0; i<task_count; i++ )); do
-    local entry name top
-    entry="$(jq -c ".tasks[$i]" <<< "$rewritten_doc")"
-    name="$(jq -r '.name' <<< "$entry")"
-    top="${name%%:*}"
 
     local cmd_dir="$dest_abs/cmds/$top"
     mkdir -p "$cmd_dir"
-
-    if [[ "${top_count[$top]}" -gt 1 && "$name" == "$top" ]]; then
-      # Bare-top in a multi-task group: write at <top>.default.sh so
-      # the dispatcher can take over <top>.sh. The cmds Taskfile keys
-      # this entry as `default`, so go-task → router → script path
-      # resolution reaches the dispatcher first; the dispatcher then
-      # fallbacks to <top>.default.sh when CLIFT_TASK == <top>.
-      write_wrapper_script "$entry" "$cmd_dir" "${top}.default"
-    else
-      write_wrapper_script "$entry" "$cmd_dir"
-    fi
+    write_wrapper_script "$entry" "$cmd_dir"
   done
 
-  # Third pass: one cmds/<top>/Taskfile.yaml per top, populated with
+  # Second pass: one cmds/<top>/Taskfile.yaml per top, populated with
   # every task under that top. The writer keys each block as `default`
-  # (bare top / `<top>:default`) or as the trailing sub-segment. Plus
-  # the dispatcher script for groups with 2+ tasks.
+  # (bare top / `<top>:default`) or as the trailing sub-segment.
   local top
   for top in "${tops_seen[@]}"; do
     local cmd_dir="$dest_abs/cmds/$top"
@@ -631,10 +603,6 @@ main() {
       ]
     ' <<< "$rewritten_doc")"
     write_cmd_taskfile "$group_json" "$cmd_dir"
-
-    if [[ "${top_count[$top]}" -gt 1 ]]; then
-      write_dispatcher_script "$top" "$cmd_dir"
-    fi
   done
 
   # 9. Splice user-includes into the root Taskfile's sentinel slot.

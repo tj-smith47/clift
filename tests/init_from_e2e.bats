@@ -155,11 +155,12 @@ YAML
 # --- 5. Namespace :default + :sub --------------------------------------
 
 @test "namespace :default + :sub: mycli ns runs default, mycli ns sub runs sub" {
-  # init_from.sh now groups tasks by top-level segment and writes ONE
+  # init_from.sh groups tasks by top-level segment and writes ONE
   # cmds/<top>/Taskfile.yaml per top with one block per task (default
   # for the bare/`:default`, named blocks for sub-segments). The router
   # resolves `mycli lint eslint` → task `lint:eslint` → script
-  # `cmds/lint/lint.eslint.sh` (per-task wrapper).
+  # `cmds/lint/lint.eslint.sh` (per-task wrapper) directly, falling
+  # back to `lint.sh` for the bare-top task — no dispatcher shim.
   cat > "$TEST_DIR/source.yaml" <<'YAML'
 version: '3'
 tasks:
@@ -170,6 +171,14 @@ tasks:
 YAML
   _run_init_from "$TEST_DIR/mycli" --from "$TEST_DIR/source.yaml"
   [ "$status" -eq 0 ]
+
+  # Layout: per-task wrapper for the sub, bare-top wrapper for default.
+  # No dispatcher shim, no `<top>.default.sh` indirection.
+  [ -f "$TEST_DIR/mycli/cmds/lint/lint.sh" ]
+  [ -f "$TEST_DIR/mycli/cmds/lint/lint.eslint.sh" ]
+  [ ! -f "$TEST_DIR/mycli/cmds/lint/lint.default.sh" ]
+  run grep -q "Dispatcher for a namespace group" "$TEST_DIR/mycli/cmds/lint/lint.sh"
+  [ "$status" -ne 0 ]
 
   run -0 "$TEST_DIR/mycli/bin/mycli" lint
   [[ "$output" == *"default-lint"* ]]
@@ -334,13 +343,10 @@ YAML
 # --- 10. Path portability ----------------------------------------------
 
 @test "path portability: cmds/ wrappers resolve via \$CLI_DIR (not absolute paths)" {
-  # The portability claim is scoped to the GENERATED cmds/ — the per-task
-  # wrapper scripts and Taskfile.yaml shells reference the source via
-  # ${CLI_DIR}/Taskfile.user.yaml and use no absolute paths to the user's
-  # original tree. The top-level bin/<name> wrapper bakes CLI_DIR at
-  # render time (matching setup.sh's behaviour), so it doesn't survive
-  # `mv` without a CLI_DIR override or re-render — that's a documented
-  # move-and-rename caveat, not a portability bug in this tier.
+  # The portability claim is end-to-end: per-task wrappers reference the
+  # source via ${CLI_DIR}/Taskfile.user.yaml, and bin/<name> self-locates
+  # CLI_DIR from its own script path. So a renamed CLI directory keeps
+  # working without re-rendering anything.
   cat > "$TEST_DIR/source.yaml" <<'YAML'
 version: '3'
 tasks:
@@ -353,17 +359,18 @@ YAML
   # Move the dir to a new location.
   mv "$TEST_DIR/mycli" "$TEST_DIR/elsewhere"
 
-  # The cmds/ wrapper script must work when CLI_DIR is set to the new
-  # location. No hardcoded path to the original /mycli/ should appear.
+  # No hardcoded path to the original /mycli/ should appear in cmds/.
   run grep -F "$TEST_DIR/mycli/" "$TEST_DIR/elsewhere/cmds/build/build.sh"
   [ "$status" -ne 0 ]
   run grep -F '${CLI_DIR}/Taskfile.user.yaml' "$TEST_DIR/elsewhere/cmds/build/build.sh"
   [ "$status" -eq 0 ]
 
-  # End-to-end at the new location, given a re-pointed CLI_DIR. Run the
-  # wrapper script directly because the bin/<name> wrapper bakes the
-  # original path (caveat above).
-  CLI_DIR="$TEST_DIR/elsewhere" run -0 bash "$TEST_DIR/elsewhere/cmds/build/build.sh"
+  # bin/<name> must not bake the original CLI_DIR — it self-locates.
+  run grep -F "$TEST_DIR/mycli" "$TEST_DIR/elsewhere/bin/mycli"
+  [ "$status" -ne 0 ]
+
+  # End-to-end at the new location, with no CLI_DIR override.
+  run -0 "$TEST_DIR/elsewhere/bin/mycli" build
   [[ "$output" == *"build ran"* ]]
 }
 

@@ -18,6 +18,16 @@ tasks:
 
   setup:cli:
     desc: "Bootstrap a new CLI in a target directory"
+    summary: |
+      Bootstrap a new CLI in <directory>.
+      Usage:
+        task setup:cli -- <directory>
+      Optional env vars:
+        CLIFT_MODE                 task | standard (default: task)
+        CLIFT_FRAMEWORK_NAMESPACE  Mount framework built-ins under
+                                   <ns>:* so the top-level is free
+                                   for user commands. Same effect as
+                                   `init:from --framework-namespace`.
     vars:
       _CLI_DIR:
         sh: echo "{{.CLI_ARGS}}" | tr -d "'" | xargs echo -n

@@ -128,7 +128,19 @@ fi
 if [[ "$merged_table" == '"PASSTHROUGH"' ]] || [[ "$merged_table" == "PASSTHROUGH" ]]; then
   source "${FRAMEWORK_DIR}/lib/log/log.sh"
   local_namespace="${TASK_NAME%%:*}"
-  script_path="${CLI_DIR}/cmds/${local_namespace}/${local_namespace}.sh"
+  # Mirror the parsed path's resolution: prefer the sub-named file
+  # (`deploy:prod` → `deploy.prod.sh`), then fall back to the bare-top
+  # script. Direct sub dispatch removes the need for a per-namespace
+  # dispatcher shim that init_from.sh used to emit.
+  if [[ "$TASK_NAME" == *:* ]]; then
+    script_name="${TASK_NAME//:/.}"
+  else
+    script_name="$TASK_NAME"
+  fi
+  script_path="${CLI_DIR}/cmds/${local_namespace}/${script_name}.sh"
+  if [[ ! -f "$script_path" ]]; then
+    script_path="${CLI_DIR}/cmds/${local_namespace}/${local_namespace}.sh"
+  fi
   if [[ ! -f "$script_path" ]]; then
     log_error "Unknown command: ${local_namespace}"
     exit "$EXIT_NOT_FOUND"
