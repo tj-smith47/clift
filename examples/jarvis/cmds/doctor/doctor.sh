@@ -263,6 +263,8 @@ source "${CLI_DIR}/lib/calendar/none.sh"
 source "${CLI_DIR}/lib/calendar/gcalcli.sh"
 # shellcheck source=/dev/null
 source "${CLI_DIR}/lib/calendar/ics.sh"
+# shellcheck source=/dev/null
+source "${CLI_DIR}/lib/calendar/applescript.sh"
 
 # _doctor_calendar_raw — dasel probe that distinguishes "key absent" from
 # "key explicitly set to 'none'". config_get collapses both to "none", which
@@ -347,6 +349,8 @@ if [[ "$live_flag" == "true" ]]; then
     source "${CLI_DIR}/lib/calendar/gcalcli.sh"
     # shellcheck source=/dev/null
     source "${CLI_DIR}/lib/calendar/ics.sh"
+    # shellcheck source=/dev/null
+    source "${CLI_DIR}/lib/calendar/applescript.sh"
 
     now_iso="${JARVIS_FAKE_NOW:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
     today_date="${now_iso%T*}"

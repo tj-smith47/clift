@@ -79,6 +79,8 @@ source "${CLI_DIR}/lib/calendar/ics.sh"
 # shellcheck source=/dev/null
 source "${CLI_DIR}/lib/calendar/gcalcli.sh"
 # shellcheck source=/dev/null
+source "${CLI_DIR}/lib/calendar/applescript.sh"
+# shellcheck source=/dev/null
 source "${CLI_DIR}/lib/calendar/meeting_url.sh"
 
 profile_dir="$(state_profile_dir)"
