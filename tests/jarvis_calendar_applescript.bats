@@ -191,6 +191,94 @@ teardown() {
   grep -qE 'argv: \[[^]]*applescript\.scpt\]\[2026-04-30T20:00:00\]\[2026-05-01T20:00:00\]\[\]' "$log"
 }
 
+# --- AS-S4 — calendars filter parse failure warning -------------------------
+
+@test "AS-S4: calendars set but dasel returns empty -> stderr warn" {
+  printf '[calendar]\nprovider = "applescript"\n[calendar.applescript]\ncalendars = ["Work"]\n' \
+    > "$JARVIS_HOME/test/config.toml"
+  # Shim dasel to produce no output, simulating either dasel-missing or a
+  # parse failure on a key the user clearly intended to set.
+  shim_install dasel 'exit 0'
+  shim_install osascript 'exit 0'
+  run --separate-stderr calendar_applescript_events \
+    "2026-05-01T00:00:00Z" "2026-05-02T00:00:00Z" test
+  [ "$status" -eq 0 ]
+  [[ "$stderr" == *"calendars"* ]]
+  [[ "$stderr" == *"showing all calendars"* ]]
+}
+
+@test "AS-S4: warning is one-shot per process across repeat calls" {
+  printf '[calendar]\nprovider = "applescript"\n[calendar.applescript]\ncalendars = ["Work"]\n' \
+    > "$JARVIS_HOME/test/config.toml"
+  shim_install dasel 'exit 0'
+  shim_install osascript 'exit 0'
+  local stderr_acc n
+  stderr_acc="$(
+    { calendar_applescript_events "2026-05-01T00:00:00Z" "2026-05-02T00:00:00Z" test
+      calendar_applescript_events "2026-05-01T00:00:00Z" "2026-05-02T00:00:00Z" test
+    } 2>&1 1>/dev/null
+  )"
+  n="$(printf '%s\n' "$stderr_acc" | grep -c 'showing all calendars' || true)"
+  [ "$n" -eq 1 ]
+}
+
+@test "AS-S4: no warning when calendars key absent from config" {
+  printf '[calendar]\nprovider = "applescript"\n' > "$JARVIS_HOME/test/config.toml"
+  shim_install dasel 'exit 0'
+  shim_install osascript 'exit 0'
+  run --separate-stderr calendar_applescript_events \
+    "2026-05-01T00:00:00Z" "2026-05-02T00:00:00Z" test
+  [ "$status" -eq 0 ]
+  [[ "$stderr" != *"showing all calendars"* ]]
+}
+
+@test "AS-S4: no warning when dasel parses the array successfully" {
+  printf '[calendar]\nprovider = "applescript"\n[calendar.applescript]\ncalendars = ["Work"]\n' \
+    > "$JARVIS_HOME/test/config.toml"
+  shim_install osascript 'exit 0'   # real dasel + jq parse the array
+  run --separate-stderr calendar_applescript_events \
+    "2026-05-01T00:00:00Z" "2026-05-02T00:00:00Z" test
+  [ "$status" -eq 0 ]
+  [[ "$stderr" != *"showing all calendars"* ]]
+}
+
+# --- AS-S5 — unknown extract_url_from token warning -------------------------
+
+@test "AS-S5: unknown extract_url_from token -> stderr warn" {
+  printf '[calendar]\nprovider = "applescript"\n[calendar.applescript]\nextract_url_from = "url,locaton"\n' \
+    > "$JARVIS_HOME/test/config.toml"
+  shim_install osascript 'printf "2026-05-01T10:00:00\t2026-05-01T10:30:00\tplanning\thttps://meet/x\thttps://zoom/y\n"; exit 0'
+  run --separate-stderr calendar_applescript_events \
+    "2026-05-01T00:00:00Z" "2026-05-02T00:00:00Z" test
+  [ "$status" -eq 0 ]
+  [[ "$stderr" == *"locaton"* ]]
+  [[ "$stderr" == *"not recognized"* ]]
+}
+
+@test "AS-S5: known tokens only -> no warn" {
+  printf '[calendar]\nprovider = "applescript"\n[calendar.applescript]\nextract_url_from = "url,location"\n' \
+    > "$JARVIS_HOME/test/config.toml"
+  shim_install osascript 'printf "2026-05-01T10:00:00\t2026-05-01T10:30:00\tplanning\thttps://meet/x\t\n"; exit 0'
+  run --separate-stderr calendar_applescript_events \
+    "2026-05-01T00:00:00Z" "2026-05-02T00:00:00Z" test
+  [ "$status" -eq 0 ]
+  [[ "$stderr" != *"not recognized"* ]]
+}
+
+@test "AS-S5: same unknown token across repeat calls warns once" {
+  printf '[calendar]\nprovider = "applescript"\n[calendar.applescript]\nextract_url_from = "locaton"\n' \
+    > "$JARVIS_HOME/test/config.toml"
+  shim_install osascript 'printf "2026-05-01T10:00:00\t2026-05-01T10:30:00\tx\thttps://a\thttps://b\n"; exit 0'
+  local stderr_acc n
+  stderr_acc="$(
+    { calendar_applescript_events "2026-05-01T00:00:00Z" "2026-05-02T00:00:00Z" test
+      calendar_applescript_events "2026-05-01T00:00:00Z" "2026-05-02T00:00:00Z" test
+    } 2>&1 1>/dev/null
+  )"
+  n="$(printf '%s\n' "$stderr_acc" | grep -c 'locaton' || true)"
+  [ "$n" -eq 1 ]
+}
+
 # --- end-to-end (Mac only) --------------------------------------------------
 
 @test "end-to-end: osascript fetches against Calendar.app (Mac only)" {

@@ -69,6 +69,20 @@ if [[ -n "${_JARVIS_CALENDAR_APPLESCRIPT_LOADED:-}" ]]; then
 fi
 _JARVIS_CALENDAR_APPLESCRIPT_LOADED=1
 
+# _calendar_applescript_warn_once — emit <msg> on stderr the first time a given
+# <key> is seen in this process; subsequent calls with the same key are silent.
+# Used by AS-S4 (calendars-filter parse failure) and AS-S5 (unknown
+# extract_url_from token) so brief/standup hot paths don't spam.
+_calendar_applescript_warn_once() {
+  local key="$1" msg="$2"
+  local var="_JARVIS_AS_WARNED_${key//[^A-Za-z0-9]/_}"
+  [[ -n "${!var:-}" ]] && return 0
+  # `declare -g` forces global scope; plain `printf -v` would scope to this
+  # function and the sentinel would die with the call frame.
+  declare -g "$var=1"
+  printf '%s\n' "$msg" >&2
+}
+
 # _calendar_applescript_calendars_csv — read calendars array from per-profile
 # config.toml and return a comma-joined string for the AppleScript ARGV. Empty
 # string when unset or dasel/file missing (provider treats empty as "all").
@@ -103,6 +117,24 @@ _calendar_applescript_calendars_csv() {
   jq -r 'if type == "array" then map(tostring) | join(",") else "" end' <<<"$arr_json" 2>/dev/null || true
 }
 
+# _calendar_applescript_has_calendars_key — true iff config.toml for <profile>
+# declares a `calendars =` line inside the `[calendar.applescript]` section.
+# Cheap regex scan; used by AS-S4 to distinguish "user didn't set it" (silent)
+# from "user set it but we couldn't read it" (warn). Doesn't need dasel/jq.
+_calendar_applescript_has_calendars_key() {
+  local profile="$1"
+  local home cfg
+  home="${JARVIS_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/jarvis}"
+  cfg="$home/$profile/config.toml"
+  [[ -f "$cfg" ]] || return 1
+  awk '
+    /^[[:space:]]*\[calendar\.applescript\][[:space:]]*$/{flag=1; next}
+    /^[[:space:]]*\[/{flag=0}
+    flag && /^[[:space:]]*calendars[[:space:]]*=/{found=1; exit}
+    END{exit !found}
+  ' "$cfg" 2>/dev/null
+}
+
 calendar_applescript_events() {
   local since="$1" until="$2" profile="${3:-${JARVIS_PROFILE:-default}}"
 
@@ -122,6 +154,35 @@ calendar_applescript_events() {
   extract_from="$(config_get calendar.applescript.extract_url_from "url" "$profile")"
   since_local="$(_calendar_applescript_utc_to_local "$since")"
   until_local="$(_calendar_applescript_utc_to_local "$until")"
+
+  # AS-S4: silent-widen-to-all is mystifying when the user explicitly set
+  # `calendars = [...]`. If we got nothing back but the key is in config,
+  # surface a one-shot warning so they know the filter wasn't applied.
+  # Done here in the parent rather than inside _calendar_applescript_calendars_csv
+  # because the helper runs in a $(...) subshell and any sentinel set there
+  # dies with the subshell.
+  if [[ -z "$cal_csv" ]] && _calendar_applescript_has_calendars_key "$profile"; then
+    _calendar_applescript_warn_once calendars-filter \
+      'applescript: could not parse [calendar.applescript].calendars (need dasel + jq); showing all calendars'
+  fi
+
+  # AS-S5: warn (one-shot per token) on tokens other than url/location so a
+  # config typo like `extract_url_from = "locaton"` surfaces instead of
+  # silently producing empty url fields downstream.
+  local _ef_tok
+  local _ef_old_ifs="$IFS"
+  IFS=','
+  for _ef_tok in $extract_from; do
+    _ef_tok="${_ef_tok# }"; _ef_tok="${_ef_tok% }"
+    case "$_ef_tok" in
+      url|location|"") ;;
+      *)
+        _calendar_applescript_warn_once "ef-${_ef_tok}" \
+          "applescript: extract_url_from token '${_ef_tok}' not recognized (supported: url, location); ignoring"
+        ;;
+    esac
+  done
+  IFS="$_ef_old_ifs"
 
   local err_tmp tsv rc=0
   err_tmp="$(mktemp)"
