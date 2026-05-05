@@ -20,6 +20,43 @@ tasks:
         {{.CLI_NAME}} version setup
     cmd: "'{{.FRAMEWORK_DIR}}/lib/version/setup.sh' '{{.CLI_DIR}}' '{{.FRAMEWORK_DIR}}'"
 
+  bump:
+    desc: "Cut a new release (patch/minor/major)"
+    summary: |
+      Bump CLI version, write .clift.yaml + .env (+ module.yaml when present)
+      atomically, commit, and tag. Tag is `vX.Y.Z` for standalone CLIs and
+      `<cli-name>/vX.Y.Z` when this CLI is a module inside a parent cfgd repo.
+
+      Examples:
+        {{.CLI_NAME}} version bump                # patch (default)
+        {{.CLI_NAME}} version bump minor --push
+        {{.CLI_NAME}} version bump major --dry-run
+    cmd: "'{{.FRAMEWORK_DIR}}/lib/version/bump.sh' '{{.CLI_DIR}}' '{{.FRAMEWORK_DIR}}'"
+
+  check:
+    desc: "Check whether a newer version is available"
+    summary: |
+      Compare the installed version against the latest available — via
+      `cfgd module list --json` when cfgd-managed, otherwise via local git
+      tags. Prints `up to date (vX.Y.Z)` or `vX.Y.Z → vA.B.C available`.
+
+      Examples:
+        {{.CLI_NAME}} version check
+        {{.CLI_NAME}} version check --json
+        {{.CLI_NAME}} version check -q   # silent when up to date
+    cmd: "'{{.FRAMEWORK_DIR}}/lib/version/check.sh' '{{.CLI_DIR}}' '{{.FRAMEWORK_DIR}}'"
+
+  sync:
+    desc: "Regenerate module.yaml from .clift.yaml"
+    summary: |
+      Refresh metadata in module.yaml so it matches .clift.yaml. Idempotent.
+      Prints a diff when it changes anything.
+
+      Examples:
+        {{.CLI_NAME}} version sync
+        {{.CLI_NAME}} version sync --dry-run
+    cmd: "'{{.FRAMEWORK_DIR}}/lib/version/sync.sh' '{{.CLI_DIR}}' '{{.FRAMEWORK_DIR}}'"
+
   upgrade:
     desc: "Upgrade to latest version via cfgd"
     aliases: [update]

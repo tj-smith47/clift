@@ -40,6 +40,8 @@ includes:
     taskfile: '{{.FRAMEWORK_DIR}}/lib/update'
   completion:
     taskfile: '{{.FRAMEWORK_DIR}}/lib/completion'
+  version:
+    taskfile: '{{.FRAMEWORK_DIR}}/lib/version'
   # __FRAMEWORK_TOOLS_END__
 
   # User commands (added by scaffolder)
@@ -49,7 +51,3 @@ tasks:
     desc: "Show help"
     cmd:
       task: _help:list
-
-  version:
-    desc: "Print version"
-    cmd: echo "%%CLI_NAME%% version %%CLI_VERSION%%"
