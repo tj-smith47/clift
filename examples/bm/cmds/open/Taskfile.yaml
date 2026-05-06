@@ -1,0 +1,17 @@
+version: '3'
+
+tasks:
+  default:
+    desc: "Open a bookmark in the browser"
+    summary: |
+      Resolves <name> against the active profile's store and opens its URL.
+      --browser overrides the default ($BROWSER → xdg-open → open).
+
+      Examples:
+        bm open task
+        bm open task --browser firefox
+    vars:
+      FLAGS:
+        - {name: browser, type: string,
+           desc: "Browser command (default: $BROWSER, else xdg-open / open)"}
+    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"

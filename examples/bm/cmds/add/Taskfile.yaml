@@ -1,0 +1,19 @@
+version: '3'
+
+tasks:
+  default:
+    desc: "Add a bookmark"
+    summary: |
+      Add a bookmark by URL. The URL must match ^https?://. --name defaults
+      to the URL host if omitted; --tag is repeatable; --description is free
+      text.
+
+      Examples:
+        bm add https://taskfile.dev --name task --tag build --tag rust
+        bm add https://example.org --description "for later"
+    vars:
+      FLAGS:
+        - {name: name, short: n, type: string, desc: "Bookmark name (default: URL host)"}
+        - {name: tag, type: list, desc: "Tag (repeatable)"}
+        - {name: description, type: string, desc: "Free-text description"}
+    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"

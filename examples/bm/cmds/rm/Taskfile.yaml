@@ -1,0 +1,16 @@
+version: '3'
+
+tasks:
+  default:
+    desc: "Remove a bookmark"
+    summary: |
+      Removes a bookmark by name. Without --force, prompts for confirmation
+      on a tty and refuses on a non-tty.
+
+      Examples:
+        bm rm task --force
+        bm rm task
+    vars:
+      FLAGS:
+        - {name: force, short: f, type: bool, desc: "Skip confirmation prompt"}
+    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"

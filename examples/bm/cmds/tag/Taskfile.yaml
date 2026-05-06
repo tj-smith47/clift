@@ -1,0 +1,19 @@
+version: '3'
+
+tasks:
+  default:
+    desc: "Add or remove tags on a bookmark"
+    summary: |
+      Mutate a bookmark's tags. --add and --remove are repeatable list flags
+      and mutually exclusive (use one per invocation).
+
+      Examples:
+        bm tag task --add cli --add bash
+        bm tag task --remove rust
+    vars:
+      FLAGS:
+        - {name: add, type: list, desc: "Tag to add (repeatable)",
+           group: mutation, exclusive: true}
+        - {name: remove, type: list, desc: "Tag to remove (repeatable)",
+           group: mutation, exclusive: true}
+    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"

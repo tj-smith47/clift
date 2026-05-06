@@ -1,0 +1,22 @@
+version: '3'
+
+tasks:
+  default:
+    desc: "List bookmarks"
+    aliases: [ls]
+    summary: |
+      List bookmarks in the active profile. --tag filters (OR semantics);
+      --format selects table/json/yaml; --limit caps row count.
+
+      Examples:
+        bm list
+        bm ls --tag rust
+        bm list --format json --limit 5
+    vars:
+      FLAGS:
+        - {name: tag, type: list, desc: "Filter by tag (repeatable; OR)"}
+        - {name: format, type: string, default: table,
+           desc: "Output format",
+           choices: [table, json, yaml]}
+        - {name: limit, type: int, desc: "Max rows to emit"}
+    cmd: "CLI_ARGS='{{.CLI_ARGS}}' '{{.FRAMEWORK_DIR}}/lib/router/router.sh' '{{.TASK}}'"

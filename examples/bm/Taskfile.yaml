@@ -1,0 +1,50 @@
+version: '3'
+
+silent: true
+output:
+  group:
+    begin: ''
+    end: ''
+set: [errexit, pipefail]
+dotenv: ['.env']
+
+vars:
+  FLAGS:
+    - {name: help,     short: h, type: bool, desc: "Show help"}
+    - {name: verbose,  short: v, type: bool, desc: "Verbose output"}
+    - {name: quiet,    short: q, type: bool, desc: "Suppress info/success output"}
+    - {name: no-color,           type: bool, desc: "Disable color output"}
+    - {name: version,  short: V, type: bool, desc: "Show version"}
+
+  # Persistent flag — accepted before or after the command token.
+  # Resolves to BM_PROFILE in env; lib/store.sh segregates per-profile data.
+  PERSISTENT_FLAGS:
+    - {name: profile, short: p, type: string, default: default,
+       desc: "Storage profile (default | work | home)",
+       choices: [default, work, home]}
+
+includes:
+  _help:
+    taskfile: '{{.FRAMEWORK_DIR}}/lib/help'
+  completion:
+    taskfile: '{{.FRAMEWORK_DIR}}/lib/completion'
+    vars: {TASKFILE_PATH: '{{.CLI_DIR}}/Taskfile.yaml', CLI_NAME: '{{.CLI_NAME}}'}
+  version:
+    taskfile: '{{.FRAMEWORK_DIR}}/lib/version'
+
+  # User commands
+  add:
+    taskfile: ./cmds/add
+  list:
+    taskfile: ./cmds/list
+  open:
+    taskfile: ./cmds/open
+  rm:
+    taskfile: ./cmds/rm
+  tag:
+    taskfile: ./cmds/tag
+
+tasks:
+  default:
+    cmd:
+      task: _help:list

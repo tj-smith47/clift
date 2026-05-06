@@ -1,0 +1,7 @@
+name: bm
+version: 0.1.0
+description: A tiny bookmark manager — clift example demonstrating the primary feature surface in ~300 lines of bash.
+
+dependencies:
+  required:
+    - jq
