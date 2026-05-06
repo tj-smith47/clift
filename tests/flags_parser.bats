@@ -4,9 +4,7 @@ bats_require_minimum_version 1.5.0
 load test_helper
 
 setup() {
-  TEST_DIR="$(mktemp -d)"
-  export HOME="$TEST_DIR"
-  export FRAMEWORK_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
+  common_setup
 
   # A flag table fixture with one of each type
   cat > "$TEST_DIR/flags.json" <<'JSON'
@@ -22,7 +20,7 @@ JSON
 }
 
 teardown() {
-  rm -rf "$TEST_DIR"
+  common_teardown
 }
 
 @test "parses long bool flag" {

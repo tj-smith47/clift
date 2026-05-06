@@ -7,13 +7,7 @@ setup() {
   if ! command -v task &>/dev/null; then
     skip "task not installed"
   fi
-  TEST_DIR="$(mktemp -d)"
-  export HOME="$TEST_DIR"
-  export FRAMEWORK_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
-  export CLI_DIR="$TEST_DIR"
-  export CLI_NAME="testcli"
-  export CLI_VERSION="1.0.0"
-  export LOG_THEME="minimal"
+  common_setup
 
   # Create a minimal Taskfile for completion to read
   cat > "$TEST_DIR/Taskfile.yaml" << 'EOF'
@@ -29,7 +23,7 @@ EOF
 }
 
 teardown() {
-  rm -rf "$TEST_DIR"
+  common_teardown
 }
 
 @test "bash format outputs complete -F line" {

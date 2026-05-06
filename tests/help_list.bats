@@ -4,17 +4,13 @@ bats_require_minimum_version 1.5.0
 load test_helper
 
 setup() {
-  TEST_DIR="$(mktemp -d)"
-  export HOME="$TEST_DIR"
-  export FRAMEWORK_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
-  export CLI_DIR="$TEST_DIR"
-  export CLI_NAME="testcli"
+  common_setup
   export CLI_VERSION="2.0.0"
   export CLIFT_MODE="standard"
 }
 
 teardown() {
-  rm -rf "$TEST_DIR"
+  common_teardown
 }
 
 # Helper: create a CLI with commands and precompile cache

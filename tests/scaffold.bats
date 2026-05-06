@@ -4,11 +4,7 @@ bats_require_minimum_version 1.5.0
 load test_helper
 
 setup() {
-  TEST_DIR="$(mktemp -d)"
-  export HOME="$TEST_DIR"
-  export FRAMEWORK_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
-  export CLI_DIR="$TEST_DIR"
-  export CLI_NAME="testcli"
+  common_setup
 
   cat > "$TEST_DIR/Taskfile.yaml" <<'YAML'
 version: '3'
@@ -35,7 +31,7 @@ EOF
 }
 
 teardown() {
-  rm -rf "$TEST_DIR"
+  common_teardown
 }
 
 @test "new:cmd creates Taskfile and script with FLAGS stub" {

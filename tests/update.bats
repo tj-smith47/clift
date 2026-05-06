@@ -4,17 +4,16 @@ bats_require_minimum_version 1.5.0
 load test_helper
 
 setup() {
-  TEST_DIR="$(mktemp -d)"
-  export HOME="$TEST_DIR"
+  common_setup
   # Real framework for log.sh sourcing, but mirrored into a fixture dir we can mutate
-  export FRAMEWORK_SRC="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
+  export FRAMEWORK_SRC="$FRAMEWORK_DIR"
   export FIXTURE_DIR="$TEST_DIR/framework"
   mkdir -p "$FIXTURE_DIR/lib/log"
   cp "$FRAMEWORK_SRC/lib/log/log.sh" "$FIXTURE_DIR/lib/log/log.sh"
 }
 
 teardown() {
-  rm -rf "$TEST_DIR"
+  common_teardown
 }
 
 @test "update errors when FRAMEWORK_DIR arg is missing" {

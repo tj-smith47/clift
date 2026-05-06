@@ -4,12 +4,7 @@ bats_require_minimum_version 1.5.0
 load test_helper
 
 setup() {
-  TEST_DIR="$(mktemp -d)"
-  export HOME="$TEST_DIR"
-  export FRAMEWORK_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
-  export CLI_DIR="$TEST_DIR"
-  export CLI_NAME="testcli"
-  export CLI_VERSION="1.0.0"
+  common_setup
 
   # Minimal CLI with two commands, one with a subcommand
   cat > "$TEST_DIR/Taskfile.yaml" <<'YAML'
@@ -74,7 +69,7 @@ YAML
 }
 
 teardown() {
-  rm -rf "$TEST_DIR"
+  common_teardown
 }
 
 @test "zero args dispatches to root default" {

@@ -4,13 +4,16 @@ bats_require_minimum_version 1.5.0
 load test_helper
 
 setup() {
-  TEST_DIR="$(mktemp -d)"
-  export HOME="$TEST_DIR"
-  export FRAMEWORK_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
+  common_setup
+  # prompt.sh is sensitive to PROMPT env var (PROMPT=false short-circuits to
+  # default-or-error). common_setup exports PROMPT=false; unset it so each
+  # @test can choose the value it needs (most tests set PROMPT=true/false
+  # via `bash -c 'export PROMPT=...; ...'`).
+  unset PROMPT
 }
 
 teardown() {
-  rm -rf "$TEST_DIR"
+  common_teardown
 }
 
 @test "prompt input returns existing env var without prompting" {

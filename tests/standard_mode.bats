@@ -4,17 +4,11 @@ bats_require_minimum_version 1.5.0
 load test_helper
 
 setup() {
-  TEST_DIR="$(mktemp -d)"
-  export HOME="$TEST_DIR"
-  export FRAMEWORK_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
-  touch "$HOME/.bashrc"
-  export CLIFT_RC_FILE="$HOME/.bashrc"
-  export SHELL=/bin/bash
-  export PROMPT=false
+  common_setup
 }
 
 teardown() {
-  rm -rf "$TEST_DIR"
+  common_teardown
 }
 
 @test "end-to-end: setup, scaffold command, run, get flag values" {

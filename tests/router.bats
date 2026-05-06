@@ -4,13 +4,7 @@ bats_require_minimum_version 1.5.0
 load test_helper
 
 setup() {
-  TEST_DIR="$(mktemp -d)"
-  export HOME="$TEST_DIR"
-  export FRAMEWORK_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
-  export CLI_DIR="$TEST_DIR"
-  export CLI_NAME="testcli"
-  export CLI_VERSION="1.0.0"
-  export LOG_THEME="minimal"
+  common_setup
 
   # Create a root Taskfile with standard framework-global flags so the parser
   # path fires for the existing tests (--version, --verbose, --quiet, --no-color).
@@ -61,7 +55,7 @@ SCRIPT
 }
 
 teardown() {
-  rm -rf "$TEST_DIR"
+  common_teardown
 }
 
 @test "--version flag prints version" {
