@@ -10,8 +10,8 @@
 #   - HOME is redirected to a tempdir for the duration of recording, so VHS's
 #     spawned bash sources a stub ~/.bashrc (neutral prompt, no aliases, no
 #     hostname, no history) rather than the developer's real one.
-#   - The jarvis example is hermetic (no network, no cluster) — demos are
-#     reproducible anywhere.
+#   - The bm example is hermetic (pure bash, single jq dep, no network) —
+#     demos are reproducible anywhere.
 #   - Original HOME is restored on EXIT/INT/TERM.
 
 set -euo pipefail
@@ -51,16 +51,21 @@ export CLIFT_RC_FILE="$DEMO_DIR/.bashrc"
 export PROMPT=false
 export RECONFIGURE_YES=1
 
-# Copy only the command sources, not build artifacts
-mkdir -p "$DEMO_DIR/jarvis/cmds"
-cp "$FRAMEWORK_DIR/examples/jarvis/Taskfile.yaml" "$FRAMEWORK_DIR/examples/jarvis/.env" "$DEMO_DIR/jarvis/"
-cp -r "$FRAMEWORK_DIR/examples/jarvis/cmds/"* "$DEMO_DIR/jarvis/cmds/"
+# Copy only the command sources + lib helpers, not build artifacts
+mkdir -p "$DEMO_DIR/bm/cmds" "$DEMO_DIR/bm/lib"
+cp "$FRAMEWORK_DIR/examples/bm/Taskfile.yaml" "$FRAMEWORK_DIR/examples/bm/.env" "$DEMO_DIR/bm/"
+cp -r "$FRAMEWORK_DIR/examples/bm/cmds/"* "$DEMO_DIR/bm/cmds/"
+cp -r "$FRAMEWORK_DIR/examples/bm/lib/"* "$DEMO_DIR/bm/lib/"
 
-echo "Setting up jarvis example for recording..."
+# Hermetic per-recording bookmark store, separate from the developer's.
+export BM_HOME="$DEMO_DIR/bm-store"
+mkdir -p "$BM_HOME"
+
+echo "Setting up bm example for recording..."
 bash "$FRAMEWORK_DIR/lib/setup/setup.sh" \
-  "$DEMO_DIR/jarvis" "$FRAMEWORK_DIR" "jarvis" "1.0.0" "icons-color" "standard"
+  "$DEMO_DIR/bm" "$FRAMEWORK_DIR" "bm" "0.1.0" "icons-color" "standard"
 
-export PATH="$DEMO_DIR/jarvis/bin:$FRAMEWORK_DIR/bin:$PATH"
+export PATH="$DEMO_DIR/bm/bin:$FRAMEWORK_DIR/bin:$PATH"
 
 # Purge stale GIFs BEFORE recording so renamed/deleted tapes don't leave
 # orphans committed. Invariant: after a successful run, the set of gifs in

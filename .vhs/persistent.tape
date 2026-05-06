@@ -1,5 +1,6 @@
-# jarvis persistent flags — --profile declared on the root Taskfile, accepted
-# either before OR after any command. Cuts across every command.
+# bm persistent flags — --profile is declared on the root Taskfile, accepted
+# either before OR after any command. Cuts across every command, segregating
+# the bookmark store per-profile.
 # Run standalone: vhs .vhs/persistent.tape
 
 Output .vhs/gifs/persistent.gif
@@ -11,17 +12,17 @@ Set Height 700
 Set Padding 20
 Set TypingSpeed 75ms
 
-# Default profile (work) — briefing shows work-oriented content.
-Type "jarvis brief --short"
+# Persistent flag BEFORE the command — wrapper binds it early.
+Type "bm --profile work add https://taskfile.dev --name task"
 Enter
 Sleep 2s
 
-# Persistent flag BEFORE the command — the wrapper binds it early.
-Type "jarvis --profile home brief --short"
+# Same persistent flag AFTER the command — equally valid.
+Type "bm add https://example.com --name example --profile home"
 Enter
 Sleep 2s
 
-# Identical result, flag AFTER the command.
-Type "jarvis brief --profile home --short"
+# Each profile sees only its own store.
+Type "bm --profile work list && bm --profile home list"
 Enter
 Sleep 3s

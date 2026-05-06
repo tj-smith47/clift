@@ -1,6 +1,7 @@
-# jarvis flag groups — mutex (exclusive) and required-together (requires: all).
-# `remind --in` / `--at` are in the `when` mutex group.
-# `note --encrypt` / `--passphrase` are in the `enc` requires-all group.
+# bm flag groups — mutex (exclusive). `tag --add` and `tag --remove` are in the
+# `mutation` exclusive group; pick one per invocation.
+# (For a requires-all group example, see tj-smith47/jarvis where
+# `note --encrypt` requires --passphrase; that demo lives in the jarvis repo.)
 # Run standalone: vhs .vhs/groups.tape
 
 Output .vhs/gifs/groups.gif
@@ -12,17 +13,22 @@ Set Height 700
 Set Padding 20
 Set TypingSpeed 75ms
 
-# Mutex violation: --in and --at can't both be set
-Type "jarvis remind 'x' --in 10m --at 13:00"
+# Seed a bookmark to mutate.
+Type "bm add https://taskfile.dev --name task --tag rust"
 Enter
 Sleep 2s
 
-# Requires-all violation: --encrypt without its partner --passphrase
-Type "jarvis note 'secrets' --encrypt"
+# Mutex violation: --add and --remove cannot both be set
+Type "bm tag task --add cli --remove rust"
 Enter
 Sleep 2s
 
-# Both satisfied — groups pass, note is saved encrypted
-Type "jarvis note 'secrets' --encrypt --passphrase=hunter2 --tag private"
+# Group satisfied — adding tags only
+Type "bm tag task --add cli --add bash"
+Enter
+Sleep 2s
+
+# Group satisfied — removing tags only
+Type "bm tag task --remove rust"
 Enter
 Sleep 3s

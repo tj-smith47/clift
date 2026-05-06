@@ -1,4 +1,5 @@
-# jarvis help — rich --help with groups, choices, deprecated markers, aliases.
+# bm help — rich --help with subcommand aliases, choices, mutex groups,
+# persistent flag rendering.
 # Run standalone: vhs .vhs/help.tape
 
 Output .vhs/gifs/help.gif
@@ -10,12 +11,12 @@ Set Height 1000
 Set Padding 20
 Set TypingSpeed 75ms
 
-# Top-level help — commands with aliases (pomodoro, n), persistent --profile.
-Type "jarvis --help"
+# Top-level help — commands with aliases (list, ls), persistent --profile.
+Type "bm --help"
 Enter
 Sleep 3s
 
-# Per-command help — remind has mutex group (when), choices (via), patterns.
-Type "clear && jarvis task add --help"
+# Per-command help — `tag` has a mutex group (mutation), --add and --remove.
+Type "clear && bm tag --help"
 Enter
 Sleep 4s

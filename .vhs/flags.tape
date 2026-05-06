@@ -1,4 +1,4 @@
-# jarvis flag parsing — string, bool, int, list flags in action.
+# bm flag parsing — string, list, choices, int flags in action.
 # Run standalone: vhs .vhs/flags.tape
 
 Output .vhs/gifs/flags.gif
@@ -10,17 +10,17 @@ Set Height 700
 Set Padding 20
 Set TypingSpeed 75ms
 
-# String + int: priority (choice) + custom due date
-Type "jarvis task add 'ship demos' --priority high --due today"
+# String + repeated list flag (--tag) + free-text --description.
+Type "bm add https://taskfile.dev --name task --tag rust --tag build --description 'task runner'"
 Enter
 Sleep 2s
 
-# List flag — repeated --tag — plus bool --pin
-Type "jarvis note 'queue should backoff' --tag arch --tag queue --pin"
+# Choices flag (--format) + int flag (--limit).
+Type "bm list --format json --limit 5"
 Enter
 Sleep 3s
 
-# Short-flag forms + pattern-constrained value
-Type "jarvis remind 'standup' --in 10m --via slack"
+# Short flag form (-n alias for --name) + repeated list flag.
+Type "bm add https://example.org -n example --tag misc"
 Enter
 Sleep 2s

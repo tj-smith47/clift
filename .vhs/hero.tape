@@ -1,5 +1,6 @@
-# jarvis hero — a personal ops concierge CLI built on clift.
-# Morning routine: briefing → coffee (with spinner) → focus session.
+# bm hero — a small bookmark manager built on clift. Three commands, six flags,
+# a persistent profile, and dynamic completion — all the framework's primary
+# surface in under 600 lines of bash.
 # Run standalone: vhs .vhs/hero.tape
 
 Output .vhs/gifs/hero.gif
@@ -11,17 +12,17 @@ Set Height 900
 Set Padding 20
 Set TypingSpeed 75ms
 
-# Concierge greeting: themed sections, bold headers, canned data.
-Type "jarvis brief"
+# Add a bookmark with a list flag (--tag, repeatable) and a string flag.
+Type "bm add https://taskfile.dev --name task --tag rust --tag build"
+Enter
+Sleep 2s
+
+# List in JSON — choices flag (--format) drives the renderer.
+Type "bm list --format json"
 Enter
 Sleep 3s
 
-# Gum spinner — brewing takes 3s, themed success with emoji.
-Type "jarvis coffee --size large --milk"
+# Persistent flag — --profile is declared once, accepted on every command.
+Type "bm --profile work add https://example.com --name w"
 Enter
-Sleep 5s
-
-# Focus session with command_pre override announcement + spinner.
-Type "jarvis focus 4s --on 'write tests'"
-Enter
-Sleep 6s
+Sleep 3s

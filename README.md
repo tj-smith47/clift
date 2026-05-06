@@ -498,32 +498,58 @@ If cfgd is not installed, nothing changes:
 
 ## Example
 
-See [`examples/jarvis/`](examples/jarvis/) — a personal ops concierge CLI that exercises the full framework surface:
+See [`examples/bm/`](examples/bm/) — a small bookmark manager (5 commands, ~575 LOC bash) that demonstrates the framework's primary surface end-to-end. It's deliberately small enough to read in one sitting.
 
-- 9 commands including hidden (`debug`) and composed (`task add/list/done`, `note`, `remind`, `standup`, `coffee`, `focus`, `brief`, `status`)
-- Command + flag aliases (`n` → `note`, `--pri` → `--priority`)
-- Subcommand aliases (`ls` → `list`, `new` → `add`)
-- Choices, patterns, mutex + required-together groups, deprecated flags
-- Persistent `--profile work|home` accepted before or after any command
-- Dynamic tag completer for `jarvis note --tag`
-- `command_pre` override hook on `focus`
-- gum spinner integrations on `coffee` and `focus`
+```bash
+$ bm add https://taskfile.dev --name task --tag rust --tag build
+✓ task
 
-Everything is simulated — no network, no cluster, fully reproducible.
+$ bm list --tag rust --format json
+[
+  {
+    "name": "task",
+    "url": "https://taskfile.dev",
+    "description": "",
+    "tags": ["rust", "build"],
+    "added_at": "2026-05-06T13:21:53Z"
+  }
+]
+
+$ bm --profile work add https://example.com --name w
+✓ w
+$ bm --profile home list                # isolated; empty
+NAME  URL  TAGS  AGE
+```
+
+Features exercised:
+- 5 commands (`add`, `list`, `open`, `rm`, `tag`) with subcommand alias (`ls` → `list`)
+- String, bool, int, list, choices, pattern flags
+- Mutex group on `tag --add` vs `--remove`
+- Persistent `--profile` flag (per-profile store isolation)
+- Dynamic completion (`bm open <TAB>` enumerates the active store)
+
+For a full production-grade reference example exercising the entire framework surface — multi-language native helpers (Go, Rust, Python), pluggable integrations (calendar providers, notification channels), profile-aware state, NDJSON contracts — see [`tj-smith47/jarvis`](https://github.com/tj-smith47/jarvis).
 
 ## Error UX
 
 clift provides production-grade error messages out of the box — no code required:
 
 ```
-$ jarvis breif
-error: unknown command 'breif'
-  did you mean 'brief'?
-  run 'jarvis --help' for commands
+$ bm lstt
+error: unknown command 'lstt'
+  did you mean 'list'?
+  run 'bm --help' for commands
 
-$ jarvis task add 'x' --priority bogus
-error: flag '--priority' requires one of: low, med, high, got 'bogus'
+$ bm list --format bogus
+error: flag '--format' requires one of: table, json, yaml, got 'bogus'
 
+$ bm tag mybook --add foo --remove bar
+error: flags '--add', '--remove' in group 'mutation' are mutually exclusive
+```
+
+The full reference example [`tj-smith47/jarvis`](https://github.com/tj-smith47/jarvis) demonstrates more elaborate scenarios — pattern-validated flags, required-together groups, deprecated-flag warnings:
+
+```
 $ jarvis remind 'standup' --in 5
 error: flag '--in' requires value matching pattern '^[0-9]+[smhd]$', got '5'
 
@@ -534,7 +560,7 @@ error: flags '--in', '--at' in group 'when' are mutually exclusive
 ## Development
 
 ```bash
-bats tests/*.bats           # 325 tests
+bats tests/*.bats           # full suite — see CI for current count
 scripts/coverage.sh          # line coverage via kcov (79%+)
 scripts/benchmark.sh         # overhead benchmark (~50ms)
 shellcheck lib/**/*.sh       # lint
