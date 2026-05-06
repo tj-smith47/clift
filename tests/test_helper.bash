@@ -5,8 +5,115 @@
 # config dirs, or caches. Past test runs without this guard polluted the
 # developer's real ~/.bashrc with stray alias entries pointing at /tmp dirs
 # that no longer exist. Never remove the HOME redirect below.
+#
+# TRIPWIRE: HOME redirect is policy; the tripwire is enforcement. Every
+# test snapshots a fixed list of "real-user files that must never change
+# during a test run" at common_setup, then compares at common_teardown.
+# If any drift, the test fails — even if every assertion in the test
+# body passed. The list is real-$HOME paths captured BEFORE HOME is
+# redirected. Tests that need to watch additional real-FS paths (e.g. a
+# bin under /usr/local/bin) call `tripwire_watch <abs-path>` after
+# common_setup. There is no opt-out — if a test legitimately needs to
+# write under real $HOME (it shouldn't), it must be redesigned, not
+# excluded.
+
+# Default watchset — files under the developer's real $HOME that no test
+# may touch. Add to this list when new shell rc / config conventions
+# appear; do not remove entries.
+_TRIPWIRE_DEFAULT_PATHS=(
+  ".bashrc" ".bash_profile" ".bash_login" ".bash_aliases" ".bash_logout"
+  ".profile" ".inputrc"
+  ".zshrc" ".zprofile" ".zlogin" ".zshenv" ".zlogout"
+  ".gitconfig" ".gitconfig.local"
+  ".ssh/config" ".ssh/known_hosts" ".ssh/authorized_keys"
+)
+
+_tripwire_hash() {
+  # Stream-hash a file via stdin so trailing-newline / sparse handling is
+  # consistent with how the rest of the helper compares content. Prints
+  # "MISSING" when the path doesn't exist so the snapshot distinguishes
+  # absent-then-created from changed-content. Returns 0 always.
+  local path="$1"
+  if [[ -e "$path" ]]; then
+    local sha
+    sha="$(sha256sum < "$path" 2>/dev/null | awk '{print $1}')" || sha="UNREADABLE"
+    local size
+    size="$(stat -c '%s' "$path" 2>/dev/null || echo "UNREADABLE")"
+    printf '%s\t%s' "$size" "$sha"
+  else
+    printf 'MISSING\tMISSING'
+  fi
+}
+
+_tripwire_record() {
+  # Append one snapshot line: "<absolute-path>\t<size>\t<sha256>"
+  local path="$1"
+  local rec
+  rec="$(_tripwire_hash "$path")"
+  printf '%s\t%s\n' "$path" "$rec" >> "$TRIPWIRE_SNAPSHOT"
+}
+
+tripwire_watch() {
+  # Public helper — tests call this with an absolute path after
+  # common_setup to extend the watchset for that single test.
+  local path="$1"
+  [[ "$path" = /* ]] || {
+    printf 'tripwire_watch: path must be absolute (got %q)\n' "$path" >&2
+    return 64
+  }
+  _tripwire_record "$path"
+}
+
+_tripwire_init() {
+  # Snapshot every default path under the captured real $HOME, plus any
+  # caller-extended paths (via tripwire_watch). Idempotent — overwrites
+  # the snapshot file referenced by $TRIPWIRE_SNAPSHOT (which the caller
+  # MAY pre-set; common_setup falls back to TEST_DIR-default).
+  TRIPWIRE_SNAPSHOT="${TRIPWIRE_SNAPSHOT:-$TEST_DIR/.tripwire-snapshot}"
+  : > "$TRIPWIRE_SNAPSHOT"
+  local p
+  for p in "${_TRIPWIRE_DEFAULT_PATHS[@]}"; do
+    _tripwire_record "$TRIPWIRE_REAL_HOME/$p"
+  done
+}
+
+_tripwire_check() {
+  # Re-hash every recorded path and fail loudly on drift. Called from
+  # common_teardown. Returns 1 when any path drifted; in BATS 1.5+ a
+  # non-zero return from teardown marks the test failed.
+  [[ -f "${TRIPWIRE_SNAPSHOT:-}" ]] || return 0
+  local violations=()
+  local path before_size before_sha after_rec after_size after_sha
+  while IFS=$'\t' read -r path before_size before_sha; do
+    after_rec="$(_tripwire_hash "$path")"
+    after_size="${after_rec%%$'\t'*}"
+    after_sha="${after_rec##*$'\t'}"
+    if [[ "$before_size" != "$after_size" || "$before_sha" != "$after_sha" ]]; then
+      violations+=("$path: size ${before_size}->${after_size}  sha ${before_sha:0:12}->${after_sha:0:12}")
+    fi
+  done < "$TRIPWIRE_SNAPSHOT"
+  if (( ${#violations[@]} > 0 )); then
+    {
+      printf '\n'
+      printf '!!! FILESYSTEM TRIPWIRE — real-user files mutated by this test !!!\n'
+      printf 'test:  %s\n' "${BATS_TEST_NAME:-unknown}"
+      printf 'file:  %s\n' "${BATS_TEST_FILENAME:-unknown}"
+      printf 'real $HOME: %s\n' "$TRIPWIRE_REAL_HOME"
+      printf 'drift detected:\n'
+      printf '  %s\n' "${violations[@]}"
+      printf 'fix: tests must redirect HOME to TEST_DIR (common_setup does this).\n'
+      printf '     if a child process restores HOME (env -i, sudo -E, etc), pass\n'
+      printf '     HOME="$HOME" explicitly through that boundary.\n'
+    } >&2
+    return 1
+  fi
+  return 0
+}
 
 common_setup() {
+  # Capture real $HOME BEFORE we mutate it — tripwire compares against
+  # this anchor, not the redirected HOME.
+  TRIPWIRE_REAL_HOME="${HOME:?HOME must be set before common_setup}"
   TEST_DIR="$(mktemp -d)"
   export HOME="$TEST_DIR"
   export FRAMEWORK_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
@@ -20,10 +127,18 @@ common_setup() {
   export CLIFT_RC_FILE="$HOME/.bashrc"
   touch "$HOME/.bashrc"
   touch "$HOME/.zshrc"
+  # Per-test snapshot file inside TEST_DIR — explicit so tests that wrap
+  # _tripwire_init for their own canary use can swap to a sibling path
+  # without colliding with the parent snapshot common_teardown checks.
+  TRIPWIRE_SNAPSHOT="$TEST_DIR/.tripwire-snapshot"
+  _tripwire_init
 }
 
 common_teardown() {
+  local tripwire_rc=0
+  _tripwire_check || tripwire_rc=$?
   rm -rf "$TEST_DIR"
+  return "$tripwire_rc"
 }
 
 setup() {
