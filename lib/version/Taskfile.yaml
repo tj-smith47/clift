@@ -33,6 +33,23 @@ tasks:
         {{.CLI_NAME}} version bump major --dry-run
     cmd: "'{{.FRAMEWORK_DIR}}/lib/version/bump.sh' '{{.CLI_DIR}}' '{{.FRAMEWORK_DIR}}'"
 
+  list:
+    desc: "List available versions"
+    summary: |
+      Enumerate published versions for this CLI. Sources, auto-detected:
+      cfgd-managed reads `cfgd module list --json`; standalone walks local
+      and fetched git tags (`vX.Y.Z` and `<cli-name>/vX.Y.Z` forms).
+
+      The row marked `*` is the locally installed version.
+
+      Examples:
+        {{.CLI_NAME}} version list
+        {{.CLI_NAME}} version list --json
+        {{.CLI_NAME}} version list --limit 5
+        {{.CLI_NAME}} version list --since v1.0.0
+        {{.CLI_NAME}} version list -q       # one version per line
+    cmd: "'{{.FRAMEWORK_DIR}}/lib/version/list.sh' '{{.CLI_DIR}}' '{{.FRAMEWORK_DIR}}'"
+
   check:
     desc: "Check whether a newer version is available"
     summary: |
