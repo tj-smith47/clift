@@ -74,9 +74,14 @@ echo "Purging stale gifs..."
 find "$FRAMEWORK_DIR/.vhs/gifs" -maxdepth 1 -type f -name '*.gif' -delete
 
 echo "Recording tapes (HOME=$HOME)..."
+# Each tape gets a fresh bookmark store. Tapes run alphabetically, and several
+# add a bookmark named "task" — without a reset between, the second tape onward
+# would record `bookmark already exists` errors instead of the intended flow.
 for tape in "$FRAMEWORK_DIR"/.vhs/*.tape; do
   name="$(basename "$tape" .tape)"
   echo "  Recording $name..."
+  rm -rf "$BM_HOME"
+  mkdir -p "$BM_HOME"
   vhs "$tape"
 done
 
