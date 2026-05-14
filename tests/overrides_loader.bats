@@ -11,10 +11,16 @@ load test_helper
 # Source overrides.sh in a fresh sub-shell, ensuring the source guard is
 # unset first so the test controls loading. `run` captures stdout from the
 # helper script inside a bash -c subshell.
+#
+# `-u` is intentionally omitted from every `bash -c "..."` driver in this file.
+# kcov instruments via a DEBUG trap that reads `${BASH_SOURCE}` without a
+# default; inside `bash -c` the BASH_SOURCE array is empty, so under `-u` the
+# trap aborts every command. The driver scripts here are thin (source + call);
+# the surface under test (overrides.sh) enforces its own discipline.
 _run_loader() {
   local body="$1"
   run bash -c "
-set -euo pipefail
+set -eo pipefail
 export CLI_DIR='$CLI_DIR'
 source '$FRAMEWORK_DIR/lib/runtime/overrides.sh'
 $body
@@ -120,7 +126,7 @@ clift_call_override help_list _default_help hello
 
 @test "sourcing overrides.sh twice is a no-op (source guard)" {
   run bash -c "
-set -euo pipefail
+set -eo pipefail
 export CLI_DIR='$CLI_DIR'
 source '$FRAMEWORK_DIR/lib/runtime/overrides.sh'
 # Mutate the functions to distinctive sentinels; a second source must NOT
@@ -139,7 +145,7 @@ clift_call_override
 @test "clift_call_override: --task without a value returns 2" {
   # log_error writes to stderr; call in a subshell so `run` captures combined.
   run bash -c "
-set -uo pipefail
+set -o pipefail
 export CLI_DIR='$CLI_DIR'
 source '$FRAMEWORK_DIR/lib/log/log.sh'
 source '$FRAMEWORK_DIR/lib/runtime/overrides.sh'
@@ -159,7 +165,7 @@ echo exit=\$?
   # command substitution failure). `run -127` pins that expectation so bats
   # doesn't emit a BW01 warning about an unexpected non-zero exit.
   run -127 bash -c "
-set -uo pipefail
+set -o pipefail
 unset CLI_DIR
 source '$FRAMEWORK_DIR/lib/log/log.sh'
 source '$FRAMEWORK_DIR/lib/runtime/overrides.sh'
@@ -180,7 +186,7 @@ missing=`unterminated
 SH
 
   run bash -c "
-set -uo pipefail
+set -o pipefail
 export CLI_DIR='$CLI_DIR'
 source '$FRAMEWORK_DIR/lib/log/log.sh'
 source '$FRAMEWORK_DIR/lib/runtime/overrides.sh'
@@ -214,7 +220,7 @@ clift_call_override help_list _default_help a b
 
 @test "_clift_load_override rejects invalid slot names (path-traversal defense)" {
   run bash -c "
-set -uo pipefail
+set -o pipefail
 export CLI_DIR='$CLI_DIR'
 source '$FRAMEWORK_DIR/lib/log/log.sh'
 source '$FRAMEWORK_DIR/lib/runtime/overrides.sh'
@@ -228,7 +234,7 @@ echo exit=\$?
 @test "_clift_load_override rejects uppercase / dash / dot slot names" {
   for bad in "Help_List" "help-list" "help.list" "1help" ""; do
     run bash -c "
-set -uo pipefail
+set -o pipefail
 export CLI_DIR='$CLI_DIR'
 source '$FRAMEWORK_DIR/lib/log/log.sh'
 source '$FRAMEWORK_DIR/lib/runtime/overrides.sh'
